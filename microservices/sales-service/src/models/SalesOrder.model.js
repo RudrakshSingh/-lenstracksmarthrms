@@ -35,7 +35,7 @@ const salesOrderSchema = new mongoose.Schema({
     product_variant_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'ProductVariant',
-      required: true
+      required: false  // Optional for manual entries
     },
     product_name: {
       type: String,

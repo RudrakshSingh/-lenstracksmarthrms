@@ -1,0 +1,1661 @@
+{
+  "info": {
+    "name": "HRMS Complete API Collection",
+    "description": "Complete HRMS API collection with all endpoints - Leave, Payroll, Incentive, F&F, Statutory, Reports, Audit, Webhooks",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "hrms-complete"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3002",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "employeeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "storeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "leaveRequestId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payrollRunId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "incentiveClaimId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "fnfCaseId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Check service health status"
+          }
+        },
+        {
+          "name": "Readiness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["ready"]
+            }
+          }
+        },
+        {
+          "name": "Liveness Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["live"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Employee Management",
+      "item": [
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/employees?page=1&limit=10&status=active",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "employees"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"},
+                {"key": "status", "value": "active", "disabled": true},
+                {"key": "store", "value": "", "disabled": true},
+                {"key": "role", "value": "", "disabled": true},
+                {"key": "search", "value": "", "disabled": true}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('employeeId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": \"EMP001\",\n  \"code\": \"EMP001\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@company.com\",\n  \"password\": \"SecurePass123!\",\n  \"roleName\": \"Employee\",\n  \"phone\": \"+919876543210\",\n  \"jobTitle\": \"Software Developer\",\n  \"department\": \"Engineering\",\n  \"roleFamily\": \"Tech\",\n  \"doj\": \"2024-01-15\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/employees",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "employees"]
+            }
+          }
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/employees/{{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "employees", "{{employeeId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Employee",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John Updated\",\n  \"phone\": \"+919876543211\",\n  \"jobTitle\": \"Senior Software Developer\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/employees/{{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "employees", "{{employeeId}}"]
+            }
+          }
+        },
+        {
+          "name": "Assign Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"roleName\": \"Manager\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/employees/{{employeeId}}/assign-role",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "employees", "{{employeeId}}", "assign-role"]
+            }
+          }
+        },
+        {
+          "name": "Update Employee Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/employees/{{employeeId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "employees", "{{employeeId}}", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Store Management",
+      "item": [
+        {
+          "name": "Get All Stores",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stores",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stores"]
+            }
+          }
+        },
+        {
+          "name": "Create Store",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('storeId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Store\",\n  \"code\": \"STORE-001\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"country\": \"India\",\n    \"zipCode\": \"400001\"\n  },\n  \"coordinates\": {\n    \"latitude\": 19.0760,\n    \"longitude\": 72.8777\n  },\n  \"geofenceRadius\": 100,\n  \"contact\": {\n    \"phone\": \"+911234567890\",\n    \"email\": \"store@company.com\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stores",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stores"]
+            }
+          }
+        },
+        {
+          "name": "Get Store by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stores/{{storeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stores", "{{storeId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Store",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Main Store Updated\",\n  \"contact\": {\n    \"phone\": \"+911234567891\",\n    \"email\": \"store-updated@company.com\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stores/{{storeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stores", "{{storeId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Leave Management",
+      "item": [
+        {
+          "name": "Get Leave Policy",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/policies/leave?employee_id={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "policies", "leave"],
+              "query": [
+                {"key": "employee_id", "value": "{{employeeId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Leave Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('leaveRequestId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_id\": \"{{employeeId}}\",\n  \"leave_type\": \"CL\",\n  \"from_date\": \"2024-02-01\",\n  \"to_date\": \"2024-02-03\",\n  \"reason\": \"Personal work\",\n  \"half_day\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-requests"]
+            }
+          }
+        },
+        {
+          "name": "Get Leave Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-requests?employee_id={{employeeId}}&status=pending&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-requests"],
+              "query": [
+                {"key": "employee_id", "value": "{{employeeId}}"},
+                {"key": "status", "value": "pending"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Leave Request by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-requests/{{leaveRequestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-requests", "{{leaveRequestId}}"]
+            }
+          }
+        },
+        {
+          "name": "Approve Leave Request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": 1,\n  \"comments\": \"Approved\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-requests/{{leaveRequestId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-requests", "{{leaveRequestId}}"]
+            }
+          }
+        },
+        {
+          "name": "Reject Leave Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comments\": \"Cannot approve due to workload\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-requests/{{leaveRequestId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-requests", "{{leaveRequestId}}", "reject"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Leave Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-requests/{{leaveRequestId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-requests", "{{leaveRequestId}}", "cancel"]
+            }
+          }
+        },
+        {
+          "name": "Get Leave Ledger",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-ledger?employee_id={{employeeId}}&year=2024",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-ledger"],
+              "query": [
+                {"key": "employee_id", "value": "{{employeeId}}"},
+                {"key": "year", "value": "2024"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Process Leave Year Close",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/leave-year-close",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "leave-year-close"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payroll Management",
+      "item": [
+        {
+          "name": "Create Payroll Run",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.run_id) {",
+                  "        pm.collectionVariables.set('payrollRunId', response.data.run_id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"month\": 1,\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payroll-runs",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payroll-runs"]
+            }
+          }
+        },
+        {
+          "name": "Process Payroll Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payroll-runs/{{payrollRunId}}/process",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payroll-runs", "{{payrollRunId}}", "process"]
+            }
+          }
+        },
+        {
+          "name": "Lock Payroll Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payroll-runs/{{payrollRunId}}/lock",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payroll-runs", "{{payrollRunId}}", "lock"]
+            }
+          }
+        },
+        {
+          "name": "Post Payroll Run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jv_number\": \"JV-2024-001\",\n  \"jv_date\": \"2024-02-01\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payroll-runs/{{payrollRunId}}/post",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payroll-runs", "{{payrollRunId}}", "post"]
+            }
+          }
+        },
+        {
+          "name": "Get Payroll Runs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payroll-runs?status=locked&month=1&year=2024&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payroll-runs"],
+              "query": [
+                {"key": "status", "value": "locked"},
+                {"key": "month", "value": "1"},
+                {"key": "year", "value": "2024"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payroll Run by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payroll-runs/{{payrollRunId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payroll-runs", "{{payrollRunId}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Payroll Override",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_id\": \"{{employeeId}}\",\n  \"run_id\": \"{{payrollRunId}}\",\n  \"component_code\": \"BONUS\",\n  \"original_amount\": 0,\n  \"override_amount\": 5000,\n  \"reason_code\": \"BONUS\",\n  \"reason\": \"Performance bonus\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payroll-runs/{{payrollRunId}}/override",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payroll-runs", "{{payrollRunId}}", "override"]
+            }
+          }
+        },
+        {
+          "name": "Get Payslips",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/payslips?month=1&year=2024&employee_id={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "payslips"],
+              "query": [
+                {"key": "month", "value": "1"},
+                {"key": "year", "value": "2024"},
+                {"key": "employee_id", "value": "{{employeeId}}"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Incentive & Claw-back",
+      "item": [
+        {
+          "name": "Create Incentive Claim",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('incentiveClaimId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_id\": \"{{employeeId}}\",\n  \"month\": 1,\n  \"year\": 2024,\n  \"store_id\": \"{{storeId}}\",\n  \"target_sales\": 100000,\n  \"actual_sales\": 150000,\n  \"basis_json\": {}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/incentive-claims",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "incentive-claims"]
+            }
+          }
+        },
+        {
+          "name": "Get Incentive Claims",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/incentive-claims?employee_id={{employeeId}}&month=1&year=2024&status=pending&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "incentive-claims"],
+              "query": [
+                {"key": "employee_id", "value": "{{employeeId}}"},
+                {"key": "month", "value": "1"},
+                {"key": "year", "value": "2024"},
+                {"key": "status", "value": "pending"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Incentive Claim",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": 1,\n  \"amount\": 5000,\n  \"comments\": \"Approved by Store Manager\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/incentive-claims/{{incentiveClaimId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "incentive-claims", "{{incentiveClaimId}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Apply Claw-back",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"run_id\": \"{{payrollRunId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/clawback/apply?method=OFFSET_NEXT_MONTH",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "clawback", "apply"],
+              "query": [
+                {"key": "method", "value": "OFFSET_NEXT_MONTH"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "F&F Settlement",
+      "item": [
+        {
+          "name": "Initiate F&F Case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data._id) {",
+                  "        pm.collectionVariables.set('fnfCaseId', response.data._id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_id\": \"{{employeeId}}\",\n  \"lwd\": \"2024-02-28\",\n  \"reason\": \"RESIGNATION\",\n  \"reason_details\": \"Personal reasons\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/fnf",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "fnf"]
+            }
+          }
+        },
+        {
+          "name": "Get F&F Cases",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/fnf?employee_id={{employeeId}}&status=pending&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "fnf"],
+              "query": [
+                {"key": "employee_id", "value": "{{employeeId}}"},
+                {"key": "status", "value": "pending"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get F&F Case by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/fnf/{{fnfCaseId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "fnf", "{{fnfCaseId}}"]
+            }
+          }
+        },
+        {
+          "name": "Approve F&F Case",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": 1,\n  \"comments\": \"Approved by Manager\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/fnf/{{fnfCaseId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "fnf", "{{fnfCaseId}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Process F&F Payout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payout_method\": \"BANK_TRANSFER\",\n  \"bank_details\": {\n    \"account_number\": \"1234567890\",\n    \"ifsc\": \"BANK0001234\",\n    \"bank_name\": \"Bank Name\"\n  },\n  \"payout_ref\": \"TXN-2024-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/fnf/{{fnfCaseId}}/payout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "fnf", "{{fnfCaseId}}", "payout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Statutory Exports",
+      "item": [
+        {
+          "name": "Generate EPF Export",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"month\": 1,\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stat-exports/epf",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stat-exports", "epf"]
+            }
+          }
+        },
+        {
+          "name": "Generate ESIC Export",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"month\": 1,\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stat-exports/esic",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stat-exports", "esic"]
+            }
+          }
+        },
+        {
+          "name": "Generate Form-24Q",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quarter\": 1,\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stat-exports/form24q",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stat-exports", "form24q"]
+            }
+          }
+        },
+        {
+          "name": "Generate Form-16",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_id\": \"{{employeeId}}\",\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stat-exports/form16",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stat-exports", "form16"]
+            }
+          }
+        },
+        {
+          "name": "Get Stat Exports",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stat-exports?type=EPF&period=2024-01&status=completed&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stat-exports"],
+              "query": [
+                {"key": "type", "value": "EPF"},
+                {"key": "period", "value": "2024-01"},
+                {"key": "status", "value": "completed"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Validate Export",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/stat-exports/:id/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "stat-exports", ":id", "validate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports & KPIs",
+      "item": [
+        {
+          "name": "Payroll Cost by Store/Role",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/payroll-cost?month=1&year=2024&store_id={{storeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "payroll-cost"],
+              "query": [
+                {"key": "month", "value": "1"},
+                {"key": "year", "value": "2024"},
+                {"key": "store_id", "value": "{{storeId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Incentive as % of Sales",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/incentive-sales?month=1&year=2024&store_id={{storeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "incentive-sales"],
+              "query": [
+                {"key": "month", "value": "1"},
+                {"key": "year", "value": "2024"},
+                {"key": "store_id", "value": "{{storeId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Claw-back Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/clawback?month=1&year=2024&store_id={{storeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "clawback"],
+              "query": [
+                {"key": "month", "value": "1"},
+                {"key": "year", "value": "2024"},
+                {"key": "store_id", "value": "{{storeId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "LWP Days Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/lwp-days?month=1&year=2024&employee_id={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "lwp-days"],
+              "query": [
+                {"key": "month", "value": "1"},
+                {"key": "year", "value": "2024"},
+                {"key": "employee_id", "value": "{{employeeId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Leave Utilization Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/leave-utilization?year=2024&employee_id={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "leave-utilization"],
+              "query": [
+                {"key": "year", "value": "2024"},
+                {"key": "employee_id", "value": "{{employeeId}}"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Attrition Report",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/attrition?year=2024&department=Engineering",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "attrition"],
+              "query": [
+                {"key": "year", "value": "2024"},
+                {"key": "department", "value": "Engineering"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "F&F Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/fnf-stats?year=2024&status=approved",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "fnf-stats"],
+              "query": [
+                {"key": "year", "value": "2024"},
+                {"key": "status", "value": "approved"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Statutory Filing On-time %",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/reports/statutory-filing?year=2024&type=EPF",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "reports", "statutory-filing"],
+              "query": [
+                {"key": "year", "value": "2024"},
+                {"key": "type", "value": "EPF"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfer Management",
+      "item": [
+        {
+          "name": "Create Transfer Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestedStoreId\": \"{{storeId}}\",\n  \"effectiveDate\": \"2024-03-01\",\n  \"reason\": \"Department transfer\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "Get Transfer Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers?status=pending&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transfers"],
+              "query": [
+                {"key": "status", "value": "pending"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Transfer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/:id/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transfers", ":id", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Reject Transfer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejectionReason\": \"Store capacity full\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/:id/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transfers", ":id", "reject"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "HR Letters",
+      "item": [
+        {
+          "name": "Create HR Letter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"letterType\": \"OFFER\",\n  \"employeeId\": \"{{employeeId}}\",\n  \"language\": \"en-IN\",\n  \"effectiveDate\": \"2024-02-01\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr-letter/letters",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr-letter", "letters"]
+            }
+          }
+        },
+        {
+          "name": "Get HR Letters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr-letter/letters?employeeId={{employeeId}}&status=draft",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr-letter", "letters"],
+              "query": [
+                {"key": "employeeId", "value": "{{employeeId}}"},
+                {"key": "status", "value": "draft"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve HR Letter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stepNumber\": 1,\n  \"comments\": \"Approved\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr-letter/letters/:letterId/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr-letter", "letters", ":letterId", "approve"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit & Controls",
+      "item": [
+        {
+          "name": "Get Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/audit-logs?entity=Employee&entity_id={{employeeId}}&page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "audit-logs"],
+              "query": [
+                {"key": "entity", "value": "Employee"},
+                {"key": "entity_id", "value": "{{employeeId}}"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "50"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify Consistency",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/audit/verify-consistency?entity=Employee&entity_id={{employeeId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "audit", "verify-consistency"],
+              "query": [
+                {"key": "entity", "value": "Employee"},
+                {"key": "entity_id", "value": "{{employeeId}}"}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Sales Closed Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": \"INV-001\",\n  \"employee_id\": \"{{employeeId}}\",\n  \"amount\": 50000,\n  \"sale_date\": \"2024-02-01\",\n  \"store_id\": \"{{storeId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/webhooks/sales/closed",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "webhooks", "sales", "closed"]
+            }
+          }
+        },
+        {
+          "name": "Returns/Remakes Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": \"INV-001\",\n  \"employee_id\": \"{{employeeId}}\",\n  \"type\": \"RETURN\",\n  \"amount\": 5000,\n  \"date\": \"2024-02-15\",\n  \"original_sale_date\": \"2024-02-01\",\n  \"reason\": \"Customer return\",\n  \"policy_window_days\": 30\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/webhooks/returns-remakes",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "webhooks", "returns-remakes"]
+            }
+          }
+        },
+        {
+          "name": "Statutory Filing Status Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Webhook-Secret",
+                "value": "{{webhookSecret}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"export_id\": \"EXP-001\",\n  \"filing_status\": \"FILED\",\n  \"filed_at\": \"2024-02-01T10:00:00Z\",\n  \"filing_ref\": \"REF-123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hr/webhooks/stat/filing-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hr", "webhooks", "stat", "filing-status"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  }
+}
+

@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
+const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
 const {
@@ -27,7 +28,7 @@ const createEmployeeSchema = {
     lastName: Joi.string().required(),
     email: Joi.string().email().required(),
     password: Joi.string().min(8).required(),
-    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee').required(),
+    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee', 'hr', 'admin', 'superadmin', 'manager', 'employee').required(),
     phone: Joi.string().optional(),
     jobTitle: Joi.string().optional(),
     department: Joi.string().optional(),
@@ -79,7 +80,7 @@ const getEmployeesSchema = {
 
 const assignRoleSchema = {
   body: Joi.object({
-    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee').required()
+    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee', 'superadmin', 'admin', 'hr', 'manager', 'employee').required()
   })
 };
 
@@ -142,74 +143,74 @@ router.get('/employees',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:read']),
   validateRequest(getEmployeesSchema),
-  getEmployees
+  asyncHandler(getEmployees)
 );
 
 router.post('/employees',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:create']),
   validateRequest(createEmployeeSchema),
-  createEmployee
+  asyncHandler(createEmployee)
 );
 
 router.put('/employees/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateEmployeeSchema),
-  updateEmployee
+  asyncHandler(updateEmployee)
 );
 
 router.delete('/employees/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:delete']),
-  deleteEmployee
+  asyncHandler(deleteEmployee)
 );
 
 router.post('/employees/:id/assign-role',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['role:assign']),
   validateRequest(assignRoleSchema),
-  assignRole
+  asyncHandler(assignRole)
 );
 
 router.patch('/employees/:id/status',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateStatusSchema),
-  updateEmployeeStatus
+  asyncHandler(updateEmployeeStatus)
 );
 
 // Store routes
 router.get('/stores',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['store:read']),
-  getStores
+  asyncHandler(getStores)
 );
 
 router.post('/stores',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:create']),
   validateRequest(createStoreSchema),
-  createStore
+  asyncHandler(createStore)
 );
 
 router.get('/stores/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['store:read']),
-  getStoreById
+  asyncHandler(getStoreById)
 );
 
 router.put('/stores/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:update']),
   validateRequest(updateStoreSchema),
-  updateStore
+  asyncHandler(updateStore)
 );
 
 router.delete('/stores/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:delete']),
-  deleteStore
+  asyncHandler(deleteStore)
 );
 
 module.exports = router;

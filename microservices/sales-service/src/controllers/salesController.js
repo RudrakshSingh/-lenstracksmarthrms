@@ -315,6 +315,29 @@ const getProductAvailability = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc Create manual sales entry (temporary entry)
+ * @route POST /api/sales/manual-entry
+ * @access Private (Admin, Manager, Sales, Accountant)
+ */
+const createManualSalesEntry = async (req, res, next) => {
+  try {
+    const orderData = req.body;
+    const createdBy = req.user.id;
+    
+    const order = await salesService.createManualSalesEntry(orderData, createdBy);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Manual sales entry created successfully',
+      data: order
+    });
+  } catch (error) {
+    logger.error('Error in createManualSalesEntry controller:', error);
+    next(error);
+  }
+};
+
 module.exports = {
   createOrUpdateCustomer,
   getCustomer,
@@ -326,5 +349,6 @@ module.exports = {
   createPrescription,
   getPrescriptions,
   getSalesDashboard,
-  getProductAvailability
+  getProductAvailability,
+  createManualSalesEntry
 };

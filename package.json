@@ -67,6 +67,8 @@
     "connect-mongo": "^5.1.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "@azure/identity": "^4.2.1",
+    "@azure/keyvault-secrets": "^4.7.2",
     "docusign-esign": "^6.3.0",
     "dotenv": "^16.6.1",
     "exceljs": "^4.4.0",

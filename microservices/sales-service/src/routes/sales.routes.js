@@ -89,4 +89,12 @@ router.get(
   salesController.getProductAvailability
 );
 
+// Manual Sales Entry (Temporary Entry)
+router.post(
+  '/manual-entry',
+  requireRole(['admin', 'manager', 'sales', 'accountant']),
+  requirePermission('create_sales_orders'),
+  salesController.createManualSalesEntry
+);
+
 module.exports = router;

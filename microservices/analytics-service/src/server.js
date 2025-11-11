@@ -144,6 +144,35 @@ app.get('/api/analytics/metrics', (req, res) => {
   });
 });});
 
+
+// Enhanced 404 handler with route information
+app.use((req, res) => {
+  // Try to get route information if available
+  const routesInfo = [];
+  
+  // Common routes that should exist
+  routesInfo.push('GET /health');
+  routesInfo.push(`GET /api/analytics/status`);
+  routesInfo.push(`GET /api/analytics/health`);
+  
+  res.status(404).json({
+    success: false,
+    message: 'Route not found - The requested endpoint does not exist or may require authentication',
+    path: req.path,
+    method: req.method,
+    service: 'analytics-service',
+    port: 3014,
+    hint: 'Most routes require authentication. Include Authorization header with Bearer token.',
+    availableEndpoints: routesInfo,
+    timestamp: new Date().toISOString(),
+    troubleshooting: {
+      authentication: 'Add header: Authorization: Bearer <token>',
+      dynamicRoutes: 'Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)',
+      basePath: `All routes are under /api/analytics/`
+    }
+  });
+});
+
 // Error handling
 app.use((err, req, res, next) => {
   logger.error('analytics-service Error', {

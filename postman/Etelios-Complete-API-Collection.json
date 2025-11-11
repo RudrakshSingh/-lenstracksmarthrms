@@ -1,0 +1,1184 @@
+{
+  "info": {
+    "name": "Etelios Complete API Collection",
+    "description": "Complete API collection for all Etelios microservices - Ready for Postman testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "etelios-api-collection",
+    "_postman_id": "etelios-complete-v1"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth Service (Port 3001)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3001/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3001",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employee_id\": \"EMP001\",\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"phone\": \"+1234567890\",\n  \"password\": \"password123\",\n  \"role\": \"employee\",\n  \"department\": \"Sales\",\n  \"designation\": \"Sales Executive\",\n  \"joining_date\": \"2024-01-15\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3001/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "port": "3001",
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailOrEmployeeId\": \"john@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3001/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "port": "3001",
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": ["if (pm.response.code === 200) {", "  var jsonData = pm.response.json();", "  if (jsonData.token) {", "    pm.collectionVariables.set('authToken', jsonData.token);", "  }", "}"],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3001/api/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "port": "3001",
+              "path": ["api", "auth", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"your_refresh_token_here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3001/api/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "port": "3001",
+              "path": ["api", "auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "url": {
+              "raw": "{{baseUrl}}:3001/api/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "port": "3001",
+              "path": ["api", "auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. HR Service (Port 3002)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3002/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3002",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Employees",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3002/api/hr/employees",
+              "host": ["{{baseUrl}}"],
+              "port": "3002",
+              "path": ["api", "hr", "employees"]
+            }
+          }
+        },
+        {
+          "name": "Create Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": \"EMP002\",\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Smith\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"password123\",\n  \"roleName\": \"Employee\",\n  \"department\": \"HR\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3002/api/hr/employees",
+              "host": ["{{baseUrl}}"],
+              "port": "3002",
+              "path": ["api", "hr", "employees"]
+            }
+          }
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3002/api/hr/employees/:id",
+              "host": ["{{baseUrl}}"],
+              "port": "3002",
+              "path": ["api", "hr", "employees", ":id"],
+              "variable": [{"key": "id", "value": "employee_id_here"}]
+            }
+          }
+        },
+        {
+          "name": "Get Stores",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3002/api/hr/stores",
+              "host": ["{{baseUrl}}"],
+              "port": "3002",
+              "path": ["api", "hr", "stores"]
+            }
+          }
+        },
+        {
+          "name": "Get Transfers",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3002/api/hr/transfers",
+              "host": ["{{baseUrl}}"],
+              "port": "3002",
+              "path": ["api", "hr", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "Get HR Letters",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3002/api/hr/letters",
+              "host": ["{{baseUrl}}"],
+              "port": "3002",
+              "path": ["api", "hr", "letters"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Attendance Service (Port 3003)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3003/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3003",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Check In",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 28.6139,\n  \"longitude\": 77.2090,\n  \"storeId\": \"store_id_here\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3003/api/attendance/checkin",
+              "host": ["{{baseUrl}}"],
+              "port": "3003",
+              "path": ["api", "attendance", "checkin"]
+            }
+          }
+        },
+        {
+          "name": "Check Out",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 28.6139,\n  \"longitude\": 77.2090\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3003/api/attendance/checkout",
+              "host": ["{{baseUrl}}"],
+              "port": "3003",
+              "path": ["api", "attendance", "checkout"]
+            }
+          }
+        },
+        {
+          "name": "Get Attendance Records",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3003/api/attendance/records?startDate=2024-01-01&endDate=2024-01-31",
+              "host": ["{{baseUrl}}"],
+              "port": "3003",
+              "path": ["api", "attendance", "records"],
+              "query": [
+                {"key": "startDate", "value": "2024-01-01"},
+                {"key": "endDate", "value": "2024-01-31"}
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Geofencing",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3003/api/attendance/geofencing",
+              "host": ["{{baseUrl}}"],
+              "port": "3003",
+              "path": ["api", "attendance", "geofencing"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Payroll Service (Port 3004)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3004/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3004",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Salaries",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3004/api/payroll/salaries",
+              "host": ["{{baseUrl}}"],
+              "port": "3004",
+              "path": ["api", "payroll", "salaries"]
+            }
+          }
+        },
+        {
+          "name": "Process Payroll",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"month\": \"2024-01\",\n  \"year\": 2024\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3004/api/payroll/process",
+              "host": ["{{baseUrl}}"],
+              "port": "3004",
+              "path": ["api", "payroll", "process"]
+            }
+          }
+        },
+        {
+          "name": "Get Unified Payroll",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3004/api/payroll/unified",
+              "host": ["{{baseUrl}}"],
+              "port": "3004",
+              "path": ["api", "payroll", "unified"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. CRM Service (Port 3005)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3005/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3005",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Customers",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3005/api/crm/customers",
+              "host": ["{{baseUrl}}"],
+              "port": "3005",
+              "path": ["api", "crm", "customers"]
+            }
+          }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Corp\",\n  \"email\": \"contact@acme.com\",\n  \"phone\": \"+1234567890\",\n  \"address\": {\n    \"street\": \"123 Main St\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"pincode\": \"400001\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3005/api/crm/customers",
+              "host": ["{{baseUrl}}"],
+              "port": "3005",
+              "path": ["api", "crm", "customers"]
+            }
+          }
+        },
+        {
+          "name": "Get Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3005/api/crm/campaigns",
+              "host": ["{{baseUrl}}"],
+              "port": "3005",
+              "path": ["api", "crm", "campaigns"]
+            }
+          }
+        },
+        {
+          "name": "Get Engagement Analytics",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3005/api/crm/engagement/analytics",
+              "host": ["{{baseUrl}}"],
+              "port": "3005",
+              "path": ["api", "crm", "engagement", "analytics"]
+            }
+          }
+        },
+        {
+          "name": "Get Incentives",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3005/api/crm/incentives",
+              "host": ["{{baseUrl}}"],
+              "port": "3005",
+              "path": ["api", "crm", "incentives"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Inventory Service (Port 3006)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3006/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3006",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Products",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3006/api/inventory/products",
+              "host": ["{{baseUrl}}"],
+              "port": "3006",
+              "path": ["api", "inventory", "products"]
+            }
+          }
+        },
+        {
+          "name": "Get Stock",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3006/api/inventory/stock",
+              "host": ["{{baseUrl}}"],
+              "port": "3006",
+              "path": ["api", "inventory", "stock"]
+            }
+          }
+        },
+        {
+          "name": "Get ERP Data",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3006/api/inventory/erp",
+              "host": ["{{baseUrl}}"],
+              "port": "3006",
+              "path": ["api", "inventory", "erp"]
+            }
+          }
+        },
+        {
+          "name": "Get Assets",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3006/api/inventory/assets",
+              "host": ["{{baseUrl}}"],
+              "port": "3006",
+              "path": ["api", "inventory", "assets"]
+            }
+          }
+        },
+        {
+          "name": "Get Asset Register",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3006/api/inventory/asset-register",
+              "host": ["{{baseUrl}}"],
+              "port": "3006",
+              "path": ["api", "inventory", "asset-register"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Sales Service (Port 3007)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3007/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3007",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Orders",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3007/api/sales/orders",
+              "host": ["{{baseUrl}}"],
+              "port": "3007",
+              "path": ["api", "sales", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": \"customer_id_here\",\n  \"items\": [\n    {\n      \"productId\": \"product_id_here\",\n      \"quantity\": 2,\n      \"price\": 1000\n    }\n  ],\n  \"totalAmount\": 2000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3007/api/sales/orders",
+              "host": ["{{baseUrl}}"],
+              "port": "3007",
+              "path": ["api", "sales", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get POS Data",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3007/api/sales/pos",
+              "host": ["{{baseUrl}}"],
+              "port": "3007",
+              "path": ["api", "sales", "pos"]
+            }
+          }
+        },
+        {
+          "name": "Get Discounts",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3007/api/sales/discounts",
+              "host": ["{{baseUrl}}"],
+              "port": "3007",
+              "path": ["api", "sales", "discounts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Purchase Service (Port 3008)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3008/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3008",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Purchase Orders",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3008/api/purchase/orders",
+              "host": ["{{baseUrl}}"],
+              "port": "3008",
+              "path": ["api", "purchase", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Purchase Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendorId\": \"vendor_id_here\",\n  \"items\": [\n    {\n      \"productId\": \"product_id_here\",\n      \"quantity\": 10,\n      \"unitPrice\": 100\n    }\n  ],\n  \"totalAmount\": 1000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3008/api/purchase/orders",
+              "host": ["{{baseUrl}}"],
+              "port": "3008",
+              "path": ["api", "purchase", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Vendors",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3008/api/purchase/vendors",
+              "host": ["{{baseUrl}}"],
+              "port": "3008",
+              "path": ["api", "purchase", "vendors"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Financial Service (Port 3009)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3009/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3009",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Ledger",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3009/api/financial/ledger",
+              "host": ["{{baseUrl}}"],
+              "port": "3009",
+              "path": ["api", "financial", "ledger"]
+            }
+          }
+        },
+        {
+          "name": "Get Reports",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3009/api/financial/reports",
+              "host": ["{{baseUrl}}"],
+              "port": "3009",
+              "path": ["api", "financial", "reports"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Document Service (Port 3010)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3010/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3010",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Documents",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3010/api/documents",
+              "host": ["{{baseUrl}}"],
+              "port": "3010",
+              "path": ["api", "documents"]
+            }
+          }
+        },
+        {
+          "name": "Get Document Types",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3010/api/documents/types",
+              "host": ["{{baseUrl}}"],
+              "port": "3010",
+              "path": ["api", "documents", "types"]
+            }
+          }
+        },
+        {
+          "name": "Get Contracts Vault",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3010/api/documents/contracts-vault",
+              "host": ["{{baseUrl}}"],
+              "port": "3010",
+              "path": ["api", "documents", "contracts-vault"]
+            }
+          }
+        },
+        {
+          "name": "Get E-Sign Status",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3010/api/documents/esign",
+              "host": ["{{baseUrl}}"],
+              "port": "3010",
+              "path": ["api", "documents", "esign"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Service Management (Port 3011)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3011/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3011",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Tickets",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3011/api/service/tickets",
+              "host": ["{{baseUrl}}"],
+              "port": "3011",
+              "path": ["api", "service", "tickets"]
+            }
+          }
+        },
+        {
+          "name": "Get SLA",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3011/api/service/sla",
+              "host": ["{{baseUrl}}"],
+              "port": "3011",
+              "path": ["api", "service", "sla"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. CPP Service (Port 3012)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3012/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3012",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Policies",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3012/api/cpp/policies",
+              "host": ["{{baseUrl}}"],
+              "port": "3012",
+              "path": ["api", "cpp", "policies"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Prescription Service (Port 3013)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3013/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3013",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Prescriptions",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3013/api/prescription/records",
+              "host": ["{{baseUrl}}"],
+              "port": "3013",
+              "path": ["api", "prescription", "records"]
+            }
+          }
+        },
+        {
+          "name": "Manual Registration",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3013/api/prescription/manual-register",
+              "host": ["{{baseUrl}}"],
+              "port": "3013",
+              "path": ["api", "prescription", "manual-register"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Analytics Service (Port 3014)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3014/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3014",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get HR Analytics",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3014/api/analytics/hr-analytics",
+              "host": ["{{baseUrl}}"],
+              "port": "3014",
+              "path": ["api", "analytics", "hr-analytics"]
+            }
+          }
+        },
+        {
+          "name": "Get Employee Stats",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3014/api/analytics/employee-stats",
+              "host": ["{{baseUrl}}"],
+              "port": "3014",
+              "path": ["api", "analytics", "employee-stats"]
+            }
+          }
+        },
+        {
+          "name": "Get Attendance Analytics",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3014/api/analytics/attendance-analytics",
+              "host": ["{{baseUrl}}"],
+              "port": "3014",
+              "path": ["api", "analytics", "attendance-analytics"]
+            }
+          }
+        },
+        {
+          "name": "Get Expiry Reports",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3014/api/analytics/expiry-reports/near-expiry",
+              "host": ["{{baseUrl}}"],
+              "port": "3014",
+              "path": ["api", "analytics", "expiry-reports", "near-expiry"]
+            }
+          }
+        },
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3014/api/dashboard",
+              "host": ["{{baseUrl}}"],
+              "port": "3014",
+              "path": ["api", "dashboard"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. Notification Service (Port 3015)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3015/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3015",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3015/api/notification",
+              "host": ["{{baseUrl}}"],
+              "port": "3015",
+              "path": ["api", "notification"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. Monitoring Service (Port 3016)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3016/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3016",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get System Metrics",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3016/api/monitoring/metrics",
+              "host": ["{{baseUrl}}"],
+              "port": "3016",
+              "path": ["api", "monitoring", "metrics"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. Tenant Registry Service (Port 3020)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3020/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3020",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get Tenants",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{authToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}:3020/api/tenants",
+              "host": ["{{baseUrl}}"],
+              "port": "3020",
+              "path": ["api", "tenants"]
+            }
+          }
+        },
+        {
+          "name": "Create Tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{authToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenantName\": \"Test Company\",\n  \"domain\": \"test.etelios.com\",\n  \"subdomain\": \"test\",\n  \"plan\": \"professional\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}:3020/api/tenants",
+              "host": ["{{baseUrl}}"],
+              "port": "3020",
+              "path": ["api", "tenants"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "18. Realtime Service (Port 3021)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3021/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3021",
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "19. API Gateway (Port 3000)",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3000/health",
+              "host": ["{{baseUrl}}"],
+              "port": "3000",
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Get API Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}:3000/api",
+              "host": ["{{baseUrl}}"],
+              "port": "3000",
+              "path": ["api"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+

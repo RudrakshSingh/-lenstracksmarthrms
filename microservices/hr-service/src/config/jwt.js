@@ -11,10 +11,11 @@ if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) {
   console.warn('Using fallback JWT secrets. Please set JWT_SECRET and JWT_REFRESH_SECRET in production!');
 }
 
-const generateAccessToken = (payload) => {
+const generateAccessToken = (payload, customExpiry = null) => {
   try {
+    const expiry = customExpiry || JWT_EXPIRY;
     return jwt.sign(payload, JWT_SECRET, { 
-      expiresIn: JWT_EXPIRY,
+      expiresIn: expiry,
       issuer: 'hrms-backend',
       audience: 'hrms-frontend'
     });
@@ -24,10 +25,11 @@ const generateAccessToken = (payload) => {
   }
 };
 
-const generateRefreshToken = (payload) => {
+const generateRefreshToken = (payload, customExpiry = null) => {
   try {
+    const expiry = customExpiry || JWT_REFRESH_EXPIRY;
     return jwt.sign(payload, JWT_REFRESH_SECRET, { 
-      expiresIn: JWT_REFRESH_EXPIRY,
+      expiresIn: expiry,
       issuer: 'hrms-backend',
       audience: 'hrms-frontend'
     });

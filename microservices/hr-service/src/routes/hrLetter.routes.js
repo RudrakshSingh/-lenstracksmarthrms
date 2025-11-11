@@ -3,6 +3,7 @@ const router = express.Router();
 const hrLetterController = require('../controllers/hrLetterController');
 const { requireRole, requirePermission } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
+const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
 // Validation schemas
@@ -70,65 +71,65 @@ router.post('/letters',
   requireRole(['hr', 'admin']),
   requirePermission('hr.letters.create'),
   validateRequest(createLetterSchema),
-  hrLetterController.createLetter
+  asyncHandler(hrLetterController.createLetter)
 );
 
 router.get('/letters',
   requireRole(['hr', 'admin', 'manager']),
   requirePermission('hr.letters.read'),
-  hrLetterController.getLetters
+  asyncHandler(hrLetterController.getLetters)
 );
 
 router.get('/letters/:letterId',
   requireRole(['hr', 'admin', 'manager']),
   requirePermission('hr.letters.read'),
-  hrLetterController.getLetterById
+  asyncHandler(hrLetterController.getLetterById)
 );
 
 router.put('/letters/:letterId',
   requireRole(['hr', 'admin']),
   requirePermission('hr.letters.update'),
   validateRequest(updateLetterSchema),
-  hrLetterController.updateLetter
+  asyncHandler(hrLetterController.updateLetter)
 );
 
 router.post('/letters/:letterId/submit',
   requireRole(['hr', 'admin']),
   requirePermission('hr.letters.submit'),
-  hrLetterController.submitForApproval
+  asyncHandler(hrLetterController.submitForApproval)
 );
 
 router.post('/letters/:letterId/approve',
   requireRole(['hr', 'admin', 'manager']),
   requirePermission('hr.letters.approve'),
   validateRequest(approveLetterSchema),
-  hrLetterController.approveLetter
+  asyncHandler(hrLetterController.approveLetter)
 );
 
 router.post('/letters/:letterId/reject',
   requireRole(['hr', 'admin', 'manager']),
   requirePermission('hr.letters.approve'),
   validateRequest(rejectLetterSchema),
-  hrLetterController.rejectLetter
+  asyncHandler(hrLetterController.rejectLetter)
 );
 
 router.get('/letters/:letterId/preview',
   requireRole(['hr', 'admin', 'manager']),
   requirePermission('hr.letters.read'),
-  hrLetterController.generatePreview
+  asyncHandler(hrLetterController.generatePreview)
 );
 
 router.post('/helpers/compute-comp',
   requireRole(['hr', 'admin']),
   requirePermission('hr.letters.create'),
   validateRequest(computeCompensationSchema),
-  hrLetterController.computeCompensation
+  asyncHandler(hrLetterController.computeCompensation)
 );
 
 router.get('/stats',
   requireRole(['hr', 'admin']),
   requirePermission('hr.letters.read'),
-  hrLetterController.getLetterStats
+  asyncHandler(hrLetterController.getLetterStats)
 );
 
 module.exports = router;

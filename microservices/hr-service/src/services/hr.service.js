@@ -3,7 +3,9 @@ const Role = require('../models/Role.model');
 const Store = require('../models/Store.model');
 const { hashPassword } = require('../utils/hashUtils');
 const logger = require('../config/logger');
-const { recordAuditLog } = require('../utils/audit');
+const auditUtils = require('../utils/audit');
+const ApiError = require('../utils/ApiError');
+const httpStatus = require('http-status');
 
 /**
  * Creates a new employee
@@ -18,17 +20,19 @@ const createEmployee = async (employeeData, createdBy) => {
     // Check if email already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      const error = new Error('User with this email already exists');
-      error.statusCode = 409;
-      throw error;
+      throw new ApiError(httpStatus.CONFLICT, 'User with this email already exists');
     }
 
-    // Find role
-    const role = await Role.findOne({ name: roleName });
+    // Find role (case-insensitive)
+    const role = await Role.findOne({ 
+      $or: [
+        { name: roleName },
+        { name: roleName.toLowerCase() },
+        { name: roleName.charAt(0).toUpperCase() + roleName.slice(1).toLowerCase() }
+      ]
+    });
     if (!role) {
-      const error = new Error('Specified role not found');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, `Specified role not found: ${roleName}`);
     }
 
     // Find store if provided
@@ -36,9 +40,7 @@ const createEmployee = async (employeeData, createdBy) => {
     if (storeId) {
       store = await Store.findById(storeId);
       if (!store) {
-        const error = new Error('Specified store not found');
-        error.statusCode = 400;
-        throw error;
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Specified store not found');
       }
     }
 
@@ -52,11 +54,18 @@ const createEmployee = async (employeeData, createdBy) => {
     });
 
     await employee.save();
-    await recordAuditLog(createdBy, 'EMPLOYEE_CREATED', { 
-      employeeId: employee._id, 
-      email: employee.email,
-      role: role.name 
-    });
+    
+    // Record audit log
+    try {
+      if (auditUtils.logUserManagementEvent) {
+        auditUtils.logUserManagementEvent('create', createdBy, employee._id.toString(), {
+          email: employee.email,
+          role: role.name
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
 
     logger.info('Employee created successfully', { 
       employeeId: employee._id, 
@@ -149,18 +158,14 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
 
     const employee = await User.findById(employeeId);
     if (!employee) {
-      const error = new Error('Employee not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
     // Update role if provided
     if (roleName) {
       const role = await Role.findOne({ name: roleName });
       if (!role) {
-        const error = new Error('Specified role not found');
-        error.statusCode = 400;
-        throw error;
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Specified role not found');
       }
       rest.role = role._id;
     }
@@ -169,9 +174,7 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
     if (storeId) {
       const store = await Store.findById(storeId);
       if (!store) {
-        const error = new Error('Specified store not found');
-        error.statusCode = 400;
-        throw error;
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Specified store not found');
       }
       rest.store = store._id;
     }
@@ -182,10 +185,16 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       { new: true, runValidators: true }
     ).populate('role', 'name permissions').populate('store', 'name address');
 
-    await recordAuditLog(updatedBy, 'EMPLOYEE_UPDATED', { 
-      employeeId, 
-      changes: Object.keys(rest) 
-    });
+    // Record audit log
+    try {
+      if (auditUtils.logUserManagementEvent) {
+        auditUtils.logUserManagementEvent('update', updatedBy, employeeId, {
+          changes: Object.keys(rest)
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
 
     logger.info('Employee updated successfully', { 
       employeeId, 
@@ -210,9 +219,7 @@ const deleteEmployee = async (employeeId, deletedBy) => {
   try {
     const employee = await User.findById(employeeId);
     if (!employee) {
-      const error = new Error('Employee not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
     // Soft delete
@@ -220,10 +227,16 @@ const deleteEmployee = async (employeeId, deletedBy) => {
     employee.status = 'terminated';
     await employee.save();
 
-    await recordAuditLog(deletedBy, 'EMPLOYEE_DELETED', { 
-      employeeId, 
-      email: employee.email 
-    });
+    // Record audit log
+    try {
+      if (auditUtils.logUserManagementEvent) {
+        auditUtils.logUserManagementEvent('delete', deletedBy, employeeId, {
+          email: employee.email
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
 
     logger.info('Employee deleted successfully', { 
       employeeId, 
@@ -248,26 +261,35 @@ const assignRole = async (employeeId, roleName, assignedBy) => {
   try {
     const employee = await User.findById(employeeId);
     if (!employee) {
-      const error = new Error('Employee not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
-    const role = await Role.findOne({ name: roleName });
+    // Find role (case-insensitive)
+    const role = await Role.findOne({ 
+      $or: [
+        { name: roleName },
+        { name: roleName.toLowerCase() },
+        { name: roleName.charAt(0).toUpperCase() + roleName.slice(1).toLowerCase() }
+      ]
+    });
     if (!role) {
-      const error = new Error('Specified role not found');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, `Specified role not found: ${roleName}`);
     }
 
     employee.role = role._id;
     await employee.save();
 
-    await recordAuditLog(assignedBy, 'ROLE_ASSIGNED', { 
-      employeeId, 
-      newRole: roleName,
-      previousRole: employee.role 
-    });
+    // Record audit log
+    try {
+      if (auditUtils.logRoleEvent) {
+        auditUtils.logRoleEvent('assign', assignedBy, employeeId, {
+          newRole: roleName,
+          previousRole: employee.role
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
 
     logger.info('Role assigned successfully', { 
       employeeId, 
@@ -293,27 +315,29 @@ const updateEmployeeStatus = async (employeeId, status, updatedBy) => {
   try {
     const employee = await User.findById(employeeId);
     if (!employee) {
-      const error = new Error('Employee not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
     const validStatuses = ['active', 'on_leave', 'terminated', 'pending'];
     if (!validStatuses.includes(status)) {
-      const error = new Error('Invalid status');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid status');
     }
 
     const previousStatus = employee.status;
     employee.status = status;
     await employee.save();
 
-    await recordAuditLog(updatedBy, 'EMPLOYEE_STATUS_UPDATED', { 
-      employeeId, 
-      previousStatus,
-      newStatus: status 
-    });
+    // Record audit log
+    try {
+      if (auditUtils.logUserManagementEvent) {
+        auditUtils.logUserManagementEvent('update', updatedBy, employeeId, {
+          previousStatus,
+          newStatus: status
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
 
     logger.info('Employee status updated successfully', { 
       employeeId, 
@@ -390,9 +414,7 @@ const createStore = async (storeData, createdBy) => {
     // Check if store code already exists
     const existingStore = await Store.findOne({ code });
     if (existingStore) {
-      const error = new Error('Store with this code already exists');
-      error.statusCode = 409;
-      throw error;
+      throw new ApiError(httpStatus.CONFLICT, 'Store with this code already exists');
     }
 
     const store = new Store({
@@ -403,14 +425,18 @@ const createStore = async (storeData, createdBy) => {
 
     await store.save();
 
-    // Record audit log
-    await recordAuditLog({
-      action: 'create',
-      resource: 'store',
-      resourceId: store._id,
-      userId: createdBy,
-      details: { storeCode: code, storeName: storeData.name }
-    });
+    // Record audit log (if function exists)
+    try {
+      const auditUtils = require('../utils/audit');
+      if (auditUtils.logUserManagementEvent) {
+        auditUtils.logUserManagementEvent('create', createdBy, store._id.toString(), {
+          storeCode: code,
+          storeName: storeData.name
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
 
     logger.info('Store created successfully', { storeId: store._id, code, createdBy });
     return store;
@@ -431,9 +457,7 @@ const getStoreById = async (storeId) => {
       .populate('manager', 'name email employee_id');
 
     if (!store) {
-      const error = new Error('Store not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
     return store;
@@ -455,18 +479,14 @@ const updateStore = async (storeId, updateData, updatedBy) => {
     const store = await Store.findOne({ _id: storeId, isDeleted: false });
 
     if (!store) {
-      const error = new Error('Store not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
     // Check if code is being updated and if it already exists
     if (updateData.code && updateData.code !== store.code) {
       const existingStore = await Store.findOne({ code: updateData.code, _id: { $ne: storeId } });
       if (existingStore) {
-        const error = new Error('Store with this code already exists');
-        error.statusCode = 409;
-        throw error;
+        throw new ApiError(httpStatus.CONFLICT, 'Store with this code already exists');
       }
     }
 
@@ -506,17 +526,13 @@ const deleteStore = async (storeId, deletedBy) => {
     const store = await Store.findOne({ _id: storeId, isDeleted: false });
 
     if (!store) {
-      const error = new Error('Store not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
     // Check if store has employees
     const employeeCount = await User.countDocuments({ store: storeId, isDeleted: false });
     if (employeeCount > 0) {
-      const error = new Error('Cannot delete store with assigned employees');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot delete store with assigned employees');
     }
 
     store.isDeleted = true;

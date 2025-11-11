@@ -468,6 +468,132 @@ class SalesService {
       throw error;
     }
   }
+
+  /**
+   * Create manual sales entry (temporary entry without strict inventory validation)
+   * This is for temporary sales entries that may not have full product/inventory integration
+   */
+  async createManualSalesEntry(orderData, createdBy) {
+    try {
+      const {
+        customer_name,
+        customer_phone,
+        customer_email,
+        items,
+        store_id,
+        payment_method = 'CASH',
+        payment_status = 'PAID',
+        notes,
+        special_instructions
+      } = orderData;
+
+      // Validate required fields
+      if (!customer_name) {
+        throw new Error('Customer name is required');
+      }
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        throw new Error('At least one item is required');
+      }
+      if (!store_id) {
+        throw new Error('Store ID is required');
+      }
+
+      // Process items - allow manual entry without strict product validation
+      const processedItems = items.map(item => {
+        const {
+          product_name,
+          sku,
+          quantity,
+          unit_price,
+          discount_percentage = 0,
+          tax_rate = 0
+        } = item;
+
+        if (!product_name || !quantity || !unit_price) {
+          throw new Error('Item must have product_name, quantity, and unit_price');
+        }
+
+        const discountAmount = (unit_price * quantity * discount_percentage) / 100;
+        const taxableAmount = (unit_price * quantity) - discountAmount;
+        const taxAmount = (taxableAmount * tax_rate) / 100;
+        const lineTotal = taxableAmount + taxAmount;
+
+        return {
+          product_name,
+          sku: sku || `MANUAL-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          quantity,
+          unit_price,
+          discount_percentage,
+          discount_amount: discountAmount,
+          tax_rate,
+          tax_amount: taxAmount,
+          line_total: lineTotal
+        };
+      });
+
+      // Calculate totals
+      const subtotal = processedItems.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+      const total_discount = processedItems.reduce((sum, item) => sum + item.discount_amount, 0);
+      const total_tax = processedItems.reduce((sum, item) => sum + item.tax_amount, 0);
+      const shipping_charges = orderData.shipping_charges || 0;
+      const total_amount = subtotal - total_discount + total_tax + shipping_charges;
+
+      // Create or find customer (simplified - just use name/phone)
+      let customer = null;
+      if (customer_phone) {
+        customer = await Customer.findOne({ phone: customer_phone });
+      }
+      
+      if (!customer) {
+        // Create a simple customer record for manual entry
+        customer = new Customer({
+          full_name: customer_name,
+          phone: customer_phone || `MANUAL-PHONE-${Date.now()}`,
+          email: customer_email,
+          customer_id: `MANUAL-${Date.now()}`,
+          is_active: true,
+          created_by: createdBy
+        });
+        await customer.save();
+      }
+
+      // Create sales order with manual entry flag
+      // Note: customer is always created above, so customer._id should always exist
+      const salesOrder = new SalesOrder({
+        order_date: orderData.order_date || new Date(),
+        store_id: store_id,
+        customer_id: customer._id,
+        customer_name: customer_name,
+        customer_phone: customer_phone,
+        customer_email: customer_email,
+        items: processedItems,
+        subtotal,
+        total_discount,
+        total_tax,
+        shipping_charges,
+        total_amount,
+        payment_method,
+        payment_status,
+        payment_reference: orderData.payment_reference,
+        payment_date: payment_status === 'PAID' ? (orderData.payment_date || new Date()) : null,
+        status: 'CONFIRMED',
+        delivery_type: orderData.delivery_type || 'PICKUP',
+        delivery_address: orderData.delivery_address,
+        special_instructions,
+        notes: notes || 'Manual sales entry - temporary',
+        sales_person_id: createdBy,
+        sales_person_name: orderData.sales_person_name || 'Manual Entry'
+      });
+
+      await salesOrder.save();
+
+      logger.info(`Manual sales entry created: ${salesOrder.order_number}`);
+      return salesOrder;
+    } catch (error) {
+      logger.error('Error creating manual sales entry:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new SalesService();

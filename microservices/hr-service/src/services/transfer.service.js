@@ -6,6 +6,8 @@ const { recordAuditLog } = require('../utils/audit');
 const { sendTransferNotificationEmail } = require('../jobs/emailJobs');
 const TransferWorkflows = require('../jobs/transferWorkflows');
 const { addJob } = require('../utils/queueUtils');
+const ApiError = require('../utils/ApiError');
+const httpStatus = require('http-status');
 
 /**
  * Creates a transfer request
@@ -20,30 +22,22 @@ const createTransferRequest = async (employeeId, transferData) => {
     // Verify employee exists and get current store
     const employee = await User.findById(employeeId).populate('store');
     if (!employee) {
-      const error = new Error('Employee not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
     if (!employee.store) {
-      const error = new Error('Employee not assigned to any store');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Employee not assigned to any store');
     }
 
     // Verify requested store exists
     const requestedStore = await Store.findById(requestedStoreId);
     if (!requestedStore) {
-      const error = new Error('Requested store not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Requested store not found');
     }
 
     // Check if employee is already at the requested store
     if (employee.store._id.toString() === requestedStoreId) {
-      const error = new Error('Employee is already at the requested store');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Employee is already at the requested store');
     }
 
     // Check for existing pending transfer request
@@ -53,9 +47,7 @@ const createTransferRequest = async (employeeId, transferData) => {
     });
 
     if (existingTransfer) {
-      const error = new Error('Employee already has a pending transfer request');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Employee already has a pending transfer request');
     }
 
     const transfer = new Transfer({
@@ -260,15 +252,11 @@ const cancelTransferRequest = async (transferId, cancelledBy) => {
     const transfer = await Transfer.findById(transferId);
 
     if (!transfer) {
-      const error = new Error('Transfer request not found');
-      error.statusCode = 404;
-      throw error;
+      throw new ApiError(httpStatus.NOT_FOUND, 'Transfer request not found');
     }
 
     if (transfer.status !== 'pending') {
-      const error = new Error('Only pending transfer requests can be cancelled');
-      error.statusCode = 400;
-      throw error;
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Only pending transfer requests can be cancelled');
     }
 
     // Update transfer status

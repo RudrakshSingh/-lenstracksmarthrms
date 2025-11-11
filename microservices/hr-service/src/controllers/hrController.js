@@ -34,7 +34,14 @@ const getEmployees = async (req, res, next) => {
 const createEmployee = async (req, res, next) => {
   try {
     const employeeData = req.body;
-    const createdBy = req.user._id;
+    const createdBy = req.user?._id || req.user?.id;
+
+    if (!createdBy) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
 
     const employee = await HRService.createEmployee(employeeData, createdBy);
 
@@ -44,7 +51,7 @@ const createEmployee = async (req, res, next) => {
       data: employee
     });
   } catch (error) {
-    logger.error('Error in createEmployee controller', { error: error.message, userId: req.user?._id });
+    logger.error('Error in createEmployee controller', { error: error.message, userId: req.user?._id || req.user?.id });
     next(error);
   }
 };
@@ -162,10 +169,15 @@ const getStores = async (req, res, next) => {
 
     const result = await HRService.getStores(filters, parseInt(page), parseInt(limit));
 
+    // Ensure result has stores array
+    const stores = result.stores || result || [];
+    const pagination = result.pagination || { current: 1, pages: 1, total: stores.length };
+
     res.status(200).json({
       success: true,
       message: 'Stores retrieved successfully',
-      data: result
+      data: Array.isArray(stores) ? stores : [stores],
+      pagination
     });
   } catch (error) {
     logger.error('Error in getStores controller', { error: error.message, userId: req.user?._id });
@@ -179,7 +191,14 @@ const getStores = async (req, res, next) => {
 const createStore = async (req, res, next) => {
   try {
     const storeData = req.body;
-    const createdBy = req.user._id;
+    const createdBy = req.user?._id || req.user?.id;
+
+    if (!createdBy) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
 
     const store = await HRService.createStore(storeData, createdBy);
 
@@ -189,7 +208,7 @@ const createStore = async (req, res, next) => {
       data: store
     });
   } catch (error) {
-    logger.error('Error in createStore controller', { error: error.message, userId: req.user?._id });
+    logger.error('Error in createStore controller', { error: error.message, userId: req.user?._id || req.user?.id });
     next(error);
   }
 };

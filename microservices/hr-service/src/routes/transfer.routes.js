@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
+const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
 const {
@@ -43,33 +44,33 @@ router.post('/',
   authenticate,
   requireRole([], ['transfer:request']),
   validateRequest(createTransferRequestSchema),
-  createTransferRequest
+  asyncHandler(createTransferRequest)
 );
 
 router.get('/',
   authenticate,
   requireRole([], ['transfer:read']),
   validateRequest(getTransferRequestsSchema),
-  getTransferRequests
+  asyncHandler(getTransferRequests)
 );
 
 router.post('/:id/approve',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['transfer:approve']),
-  approveTransferRequest
+  asyncHandler(approveTransferRequest)
 );
 
 router.post('/:id/reject',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['transfer:approve']),
   validateRequest(rejectTransferRequestSchema),
-  rejectTransferRequest
+  asyncHandler(rejectTransferRequest)
 );
 
 router.post('/:id/cancel',
   authenticate,
   requireRole([], ['transfer:request']),
-  cancelTransferRequest
+  asyncHandler(cancelTransferRequest)
 );
 
 module.exports = router;

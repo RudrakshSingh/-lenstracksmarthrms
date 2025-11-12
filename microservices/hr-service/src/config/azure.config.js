@@ -56,6 +56,18 @@ module.exports = {
     blockedIPs: process.env.BLOCKED_IPS ? process.env.BLOCKED_IPS.split(',').map(ip => ip.trim()) : []
   },
   
+  // Redis Configuration
+  redis: {
+    connectionString: process.env.REDIS_URI || 
+                     process.env.REDIS_CONNECTION_STRING || 
+                     process.env.REDIS_PRIMARY_CONNECTION_STRING || '',
+    host: process.env.REDIS_HOST || '',
+    port: parseInt(process.env.REDIS_PORT) || 6380,
+    password: process.env.REDIS_PASSWORD || '',
+    ssl: process.env.REDIS_TLS === 'true' || process.env.REDIS_TLS === '1' || false,
+    db: parseInt(process.env.REDIS_DB) || 0
+  },
+  
   // Environment
   environment: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',

@@ -3,6 +3,45 @@ const logger = require('./logger');
 
 let redis = null;
 
+/**
+ * Parse Azure Redis connection string
+ * Format: <hostname>:<port>,password=<password>,ssl=True,abortConnect=False
+ * Or: :<port>,password=<password>,ssl=True,abortConnect=False (hostname missing)
+ */
+const parseRedisConnectionString = (connectionString) => {
+  if (!connectionString) return null;
+
+  const config = {};
+  const parts = connectionString.split(',');
+
+  // Parse host:port from first part
+  const firstPart = parts[0].trim();
+  if (firstPart.includes(':')) {
+    const [host, port] = firstPart.split(':');
+    if (host) config.host = host;
+    if (port) config.port = parseInt(port);
+  } else if (firstPart.startsWith(':')) {
+    // Handle case where only port is provided
+    config.port = parseInt(firstPart.substring(1));
+  }
+
+  // Parse other parameters
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i].trim();
+    if (part.startsWith('password=')) {
+      config.password = part.substring('password='.length);
+    } else if (part.startsWith('ssl=')) {
+      config.ssl = part.substring('ssl='.length).toLowerCase() === 'true';
+    } else if (part.startsWith('abortConnect=')) {
+      config.abortConnect = part.substring('abortConnect='.length).toLowerCase() === 'true';
+    } else if (part.startsWith('host=')) {
+      config.host = part.substring('host='.length);
+    }
+  }
+
+  return config;
+};
+
 const connectRedis = () => {
   if (redis) return redis;
 
@@ -12,9 +51,7 @@ const connectRedis = () => {
     return createInMemoryRedis();
   }
 
-  const options = {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT) || 6379,
+  let options = {
     db: parseInt(process.env.REDIS_DB) || 0,
     retryStrategy: (times) => {
       const delay = Math.min(times * 50, 2000);
@@ -28,17 +65,47 @@ const connectRedis = () => {
     commandTimeout: 5000,
   };
 
-  // Add authentication if provided
-  if (process.env.REDIS_USERNAME) {
-    options.username = process.env.REDIS_USERNAME;
-  }
-  if (process.env.REDIS_PASSWORD) {
-    options.password = process.env.REDIS_PASSWORD;
-  }
+  // Check for Azure Redis connection string (REDIS_URI or REDIS_CONNECTION_STRING)
+  const connectionString = process.env.REDIS_URI || 
+                          process.env.REDIS_CONNECTION_STRING || 
+                          process.env.REDIS_PRIMARY_CONNECTION_STRING;
+  
+  if (connectionString) {
+    const parsed = parseRedisConnectionString(connectionString);
+    if (parsed) {
+      if (parsed.host) options.host = parsed.host;
+      if (parsed.port) options.port = parsed.port;
+      if (parsed.password) options.password = parsed.password;
+      if (parsed.ssl) {
+        options.tls = {
+          rejectUnauthorized: false // Azure Redis requires this
+        };
+      }
+      logger.info('Using Azure Redis connection string', {
+        host: parsed.host || 'from connection string',
+        port: parsed.port,
+        ssl: parsed.ssl
+      });
+    }
+  } else {
+    // Fallback to individual environment variables
+    options.host = process.env.REDIS_HOST || 'localhost';
+    options.port = parseInt(process.env.REDIS_PORT) || 6379;
 
-  // Add TLS if enabled
-  if (process.env.REDIS_TLS === '1') {
-    options.tls = {};
+    // Add authentication if provided
+    if (process.env.REDIS_USERNAME) {
+      options.username = process.env.REDIS_USERNAME;
+    }
+    if (process.env.REDIS_PASSWORD) {
+      options.password = process.env.REDIS_PASSWORD;
+    }
+
+    // Add TLS if enabled
+    if (process.env.REDIS_TLS === '1' || process.env.REDIS_TLS === 'true') {
+      options.tls = {
+        rejectUnauthorized: false
+      };
+    }
   }
 
   redis = new Redis(options);

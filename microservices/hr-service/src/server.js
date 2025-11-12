@@ -13,6 +13,7 @@ const app = express();
 // Set ALLOWED_IPS from azureConfig if not already set
 if (!process.env.ALLOWED_IPS && azureConfig.ipWhitelist.allowedIPs.length > 0) {
   process.env.ALLOWED_IPS = azureConfig.ipWhitelist.allowedIPs.join(',');
+  logger.info('IP whitelist configured from azureConfig', { allowedIPs: azureConfig.ipWhitelist.allowedIPs });
 }
 
 // Security middleware
@@ -22,10 +23,12 @@ app.use(cors({
   credentials: azureConfig.cors.credentials
 }));
 
-// IP whitelist middleware (only if enabled or if ALLOWED_IPS is set)
-if (azureConfig.ipWhitelist.enabled || process.env.ALLOWED_IPS) {
+// IP whitelist middleware - apply if ALLOWED_IPS is set or if whitelist is enabled
+if (process.env.ALLOWED_IPS || azureConfig.ipWhitelist.enabled) {
   app.use(ipFilter);
-  logger.info('IP whitelist enabled', { allowedIPs: azureConfig.ipWhitelist.allowedIPs });
+  logger.info('IP whitelist middleware enabled', { 
+    allowedIPs: process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',') : azureConfig.ipWhitelist.allowedIPs 
+  });
 }
 
 // Rate limiting

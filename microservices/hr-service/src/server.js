@@ -6,8 +6,14 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 const azureConfig = require('./config/azure.config');
+const { ipFilter } = require('./middleware/security.middleware');
 
 const app = express();
+
+// Set ALLOWED_IPS from azureConfig if not already set
+if (!process.env.ALLOWED_IPS && azureConfig.ipWhitelist.allowedIPs.length > 0) {
+  process.env.ALLOWED_IPS = azureConfig.ipWhitelist.allowedIPs.join(',');
+}
 
 // Security middleware
 app.use(helmet());
@@ -15,6 +21,12 @@ app.use(cors({
   origin: azureConfig.cors.origin,
   credentials: azureConfig.cors.credentials
 }));
+
+// IP whitelist middleware (only if enabled or if ALLOWED_IPS is set)
+if (azureConfig.ipWhitelist.enabled || process.env.ALLOWED_IPS) {
+  app.use(ipFilter);
+  logger.info('IP whitelist enabled', { allowedIPs: azureConfig.ipWhitelist.allowedIPs });
+}
 
 // Rate limiting
 const apiRateLimit = rateLimit({

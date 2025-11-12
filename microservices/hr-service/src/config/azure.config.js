@@ -47,6 +47,13 @@ module.exports = {
     credentials: true
   },
   
+  // IP Whitelist Configuration
+  ipWhitelist: {
+    enabled: process.env.IP_WHITELIST_ENABLED === 'true',
+    allowedIPs: process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',').map(ip => ip.trim()) : ['20.192.170.10'],
+    blockedIPs: process.env.BLOCKED_IPS ? process.env.BLOCKED_IPS.split(',').map(ip => ip.trim()) : []
+  },
+  
   // Environment
   environment: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',

@@ -46,23 +46,25 @@ const validateRequest = (schema) => {
       }
     }
 
-    if (Object.keys(errors).length > 0) {
-      const ApiError = require('../utils/ApiError');
-      const httpStatus = require('http-status');
-      
-      const errorMessages = Object.values(errors).flat().join(', ');
-      const validationError = new ApiError(httpStatus.BAD_REQUEST, `Validation failed: ${errorMessages}`);
-      validationError.errors = errors;
-      
-      logger.warn('Request validation failed', { 
-        errors, 
-        path: req.originalUrl, 
-        method: req.method,
-        userId: req.user?.id
-      });
-      
-      return next(validationError);
-    }
+      if (Object.keys(errors).length > 0) {
+        const ApiError = require('../utils/ApiError');
+        const httpStatus = require('http-status');
+
+        const errorMessages = Object.values(errors).flat().join(', ');
+        const validationError = new ApiError(httpStatus.BAD_REQUEST, `Validation failed: ${errorMessages}`);
+        validationError.errors = errors;
+        validationError.statusCode = httpStatus.BAD_REQUEST; // Ensure statusCode is set
+        validationError.errorCode = 'VALIDATION_ERROR'; // Add error code
+
+        logger.warn('Request validation failed', {
+          errors,
+          path: req.originalUrl,
+          method: req.method,
+          userId: req.user?.id
+        });
+
+        return next(validationError);
+      }
 
     next();
   };

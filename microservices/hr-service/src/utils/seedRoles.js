@@ -39,10 +39,54 @@ const defaultRoles = [
     display_name: 'HR',
     description: 'HR Manager with HR-related permissions',
     permissions: [
-      'read_users', 'write_users', 'create_users', 'update_users',
-      'read_hr', 'write_hr', 'create_hr', 'update_hr',
+      // User Management (matching route requirements)
+      'read_users', 'write_users', 'create_users', 'update_users', 'delete_users',
+      'user:read', 'user:create', 'user:update', 'user:delete',
+      
+      // Role Management
+      'read_roles', 'write_roles', 'create_roles', 'update_roles',
+      'role:assign', 'role:read', 'role:update',
+      
+      // HR Management
+      'read_hr', 'write_hr', 'create_hr', 'update_hr', 'delete_hr',
+      
+      // Leave Management
       'read_leave', 'write_leave', 'create_leave', 'update_leave', 'approve_leave',
-      'read_payroll', 'write_payroll', 'read_stores', 'read_reports', 'export_reports'
+      'hr.leave.read', 'hr.leave.create', 'hr.leave.update', 'hr.leave.approve',
+      'hr.leave.yearclose',
+      
+      // Payroll Management
+      'read_payroll', 'write_payroll', 'create_payroll', 'update_payroll', 'process_payroll',
+      'hr.payroll.read', 'hr.payroll.create', 'hr.payroll.update', 'hr.payroll.process',
+      'hr.payroll.lock', 'hr.payroll.post', 'hr.payroll.override',
+      
+      // Store Management
+      'read_stores', 'write_stores', 'create_stores', 'update_stores', 'delete_stores',
+      'store:read', 'store:create', 'store:update', 'store:delete',
+      
+      // Transfer Management
+      'transfer:read', 'transfer:create', 'transfer:update', 'transfer:approve', 'transfer:request',
+      
+      // Reports
+      'read_reports', 'write_reports', 'export_reports',
+      'hr.reports.read',
+      
+      // Audit
+      'read_audit', 'view_audit_logs', 'hr.audit.read', 'hr.audit.verify',
+      
+      // F&F Settlement
+      'hr.fnf.read', 'hr.fnf.create', 'hr.fnf.update', 'hr.fnf.approve', 'hr.fnf.payout',
+      
+      // Incentive & Claw-back
+      'hr.incentive.read', 'hr.incentive.create', 'hr.incentive.approve',
+      'hr.clawback.apply',
+      
+      // Statutory
+      'hr.statutory.read', 'hr.statutory.export', 'hr.statutory.validate',
+      
+      // HR Letters
+      'hr.letters.create', 'hr.letters.read', 'hr.letters.update', 'hr.letters.submit',
+      'hr.letters.approve'
     ]
   },
   {

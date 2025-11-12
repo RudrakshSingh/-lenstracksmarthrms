@@ -177,11 +177,24 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
       }
     }
 
-    // Validate reporting manager
+    // Validate reporting manager (optional - can be employeeId or ObjectId)
     if (reporting_manager_id) {
-      const manager = await User.findOne({ employeeId: reporting_manager_id });
+      const mongoose = require('mongoose');
+      let manager = null;
+      
+      // Try to find by ObjectId first
+      if (mongoose.Types.ObjectId.isValid(reporting_manager_id)) {
+        manager = await User.findById(reporting_manager_id);
+      }
+      
+      // If not found, try by employeeId
       if (!manager) {
-        throw new ApiError(httpStatus.NOT_FOUND, 'MANAGER_NOT_FOUND', 'Reporting manager not found');
+        manager = await User.findOne({ employeeId: reporting_manager_id });
+      }
+      
+      // If still not found, log warning but don't fail (manager might be added later)
+      if (!manager) {
+        logger.warn('Reporting manager not found, proceeding without manager assignment', { reporting_manager_id });
       }
     }
 
@@ -200,56 +213,91 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
 
     // Save additional work details in a separate field or create compensation profile
     if (base_salary || target_sales || pf_applicable !== undefined || esic_applicable !== undefined || joining_date) {
-      let compensationProfile = await CompensationProfile.findOne({ employee: user._id });
+      // Ensure employeeId is always set - use employeeId from user or fallback to _id
+      const employeeIdStr = user.employeeId || user._id.toString();
       
-      if (!compensationProfile) {
-        compensationProfile = new CompensationProfile({
-          employee: user._id,
-          employeeId: user.employeeId || user._id.toString(), // Ensure employeeId is set
-          baseSalary: base_salary,
-          targetSales: target_sales,
-          pfApplicable: pf_applicable,
-          esicApplicable: esic_applicable,
-          ptApplicable: pt_applicable,
-          tdsApplicable: tds_applicable,
-          panNumber: pan_number,
-          taxState: tax_state,
-          joiningDate: joining_date ? new Date(joining_date) : undefined,
-          confirmationDate: confirmation_date,
-          roleFamily: role_family,
-          leaveEntitlements: leave_entitlements,
-          incentiveSlabs: incentive_slabs,
-          createdBy: createdBy
-        });
-      } else {
-        compensationProfile.baseSalary = base_salary !== undefined ? base_salary : compensationProfile.baseSalary;
-        compensationProfile.targetSales = target_sales !== undefined ? target_sales : compensationProfile.targetSales;
-        compensationProfile.pfApplicable = pf_applicable !== undefined ? pf_applicable : compensationProfile.pfApplicable;
-        compensationProfile.esicApplicable = esic_applicable !== undefined ? esic_applicable : compensationProfile.esicApplicable;
-        compensationProfile.ptApplicable = pt_applicable !== undefined ? pt_applicable : compensationProfile.ptApplicable;
-        compensationProfile.tdsApplicable = tds_applicable !== undefined ? tds_applicable : compensationProfile.tdsApplicable;
-        compensationProfile.panNumber = pan_number || compensationProfile.panNumber;
-        compensationProfile.taxState = tax_state || compensationProfile.taxState;
-        compensationProfile.roleFamily = role_family || compensationProfile.roleFamily;
-        compensationProfile.leaveEntitlements = leave_entitlements || compensationProfile.leaveEntitlements;
-        compensationProfile.incentiveSlabs = incentive_slabs || compensationProfile.incentiveSlabs;
-        compensationProfile.updatedBy = createdBy;
-        // Ensure employeeId is set
-        if (!compensationProfile.employeeId) {
-          compensationProfile.employeeId = user.employeeId || user._id.toString();
-        }
+      if (!employeeIdStr) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'EMPLOYEE_ID_REQUIRED', 'Employee ID is required');
       }
-
+      
+      // Build update data - ensure employeeId is always set
+      const updateData = {
+        employeeId: employeeIdStr,
+        updatedBy: createdBy
+      };
+      
+      if (base_salary !== undefined) updateData.baseSalary = base_salary;
+      if (target_sales !== undefined) updateData.targetSales = target_sales;
+      if (pf_applicable !== undefined) updateData.pfApplicable = pf_applicable;
+      if (esic_applicable !== undefined) updateData.esicApplicable = esic_applicable;
+      if (pt_applicable !== undefined) updateData.ptApplicable = pt_applicable;
+      if (tds_applicable !== undefined) updateData.tdsApplicable = tds_applicable;
+      if (pan_number) updateData.panNumber = pan_number;
+      if (tax_state) updateData.taxState = tax_state;
+      if (role_family) updateData.roleFamily = role_family;
+      if (leave_entitlements) updateData.leaveEntitlements = leave_entitlements;
+      if (incentive_slabs) updateData.incentiveSlabs = incentive_slabs;
+      if (joining_date) updateData.joiningDate = new Date(joining_date);
+      if (confirmation_date) updateData.confirmationDate = confirmation_date;
+      
+      // Delete ALL existing profiles for this employee to avoid duplicate key errors
+      // This ensures we start fresh and don't have conflicts with null employeeId values
+      const deleteResult = await CompensationProfile.deleteMany({ 
+        $or: [
+          { employee: user._id },
+          { employeeId: employeeIdStr }
+        ]
+      });
+      
+      logger.info('Deleted existing compensation profiles', {
+        employeeId: employeeIdStr,
+        deletedCount: deleteResult.deletedCount
+      });
+      
+      // Also delete any profiles with null employeeId for this employee (cleanup)
+      await CompensationProfile.deleteMany({ 
+        employee: user._id,
+        employeeId: null 
+      });
+      
+      // Create new profile with all the data - employeeId is guaranteed to be set
+      // IMPORTANT: Set employeeId explicitly AFTER spreading updateData to ensure it's never null
+      const existingProfile = new CompensationProfile({
+        ...updateData,
+        employee: user._id,
+        employeeId: employeeIdStr, // Explicitly set AFTER spread to ensure it's never null
+        createdBy: createdBy
+      });
+      
+      // Double-check that employeeId is set
+      if (!existingProfile.employeeId) {
+        existingProfile.employeeId = employeeIdStr;
+      }
+      
       try {
-        await compensationProfile.save();
+        await existingProfile.save();
       } catch (saveError) {
-        // If duplicate key error, try to find and update existing profile
-        if (saveError.code === 11000 || saveError.message.includes('duplicate key')) {
-          const existingProfile = await CompensationProfile.findOne({ employeeId: user.employeeId || user._id.toString() });
-          if (existingProfile) {
-            Object.assign(existingProfile, compensationProfile.toObject());
-            delete existingProfile._id;
-            await existingProfile.save();
+        // If still getting duplicate key error, try to find and update existing
+        if (saveError.code === 11000) {
+          logger.warn('Duplicate key error on save, attempting to find and update existing profile', {
+            employeeId: employeeIdStr,
+            error: saveError.message
+          });
+          
+          const existing = await CompensationProfile.findOne({ 
+            $or: [
+              { employee: user._id },
+              { employeeId: employeeIdStr }
+            ]
+          });
+          
+          if (existing) {
+            Object.keys(updateData).forEach(key => {
+              existing[key] = updateData[key];
+            });
+            existing.employee = user._id;
+            existing.employeeId = employeeIdStr;
+            await existing.save();
           } else {
             throw saveError;
           }
@@ -319,52 +367,77 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
       }
     }
 
-    // Get or create compensation profile
-    let compensationProfile = await CompensationProfile.findOne({ employee: user._id });
+    // Get or create compensation profile - handle duplicates properly
+    const employeeIdStr = user.employeeId || user._id.toString();
     
-    if (!compensationProfile) {
-      // Also check by employeeId to avoid duplicates
-      compensationProfile = await CompensationProfile.findOne({ employeeId: user.employeeId || user._id.toString() });
-    }
+    // Build update data
+    const updateData = {
+      employeeId: employeeIdStr,
+      updatedBy: updatedBy
+    };
     
-    if (!compensationProfile) {
-      compensationProfile = new CompensationProfile({
-        employee: user._id,
-        employeeId: user.employeeId || user._id.toString(), // Ensure employeeId is set
-        createdBy: updatedBy
-      });
-    } else {
-      // Ensure employeeId is set
-      if (!compensationProfile.employeeId) {
-        compensationProfile.employeeId = user.employeeId || user._id.toString();
-      }
-    }
-
-    // Update statutory information
     if (bankAccount) {
-      compensationProfile.bankAccount = {
+      updateData.bankAccount = {
         accountNumber: bankAccount.account_number,
         ifscCode: bankAccount.ifsc_code?.toUpperCase(),
         bankName: bankAccount.bank_name,
         accountType: bankAccount.account_type
       };
     }
-
-    if (uan) compensationProfile.uan = uan;
-    if (esiNo) compensationProfile.esiNo = esiNo;
-    if (panNumber) compensationProfile.panNumber = panNumber.toUpperCase();
+    
+    if (uan) updateData.uan = uan;
+    if (esiNo) updateData.esiNo = esiNo;
+    if (panNumber) updateData.panNumber = panNumber.toUpperCase();
     
     if (previousEmployment) {
-      compensationProfile.previousEmployment = {
+      updateData.previousEmployment = {
         hasPreviousEmployment: previousEmployment.has_previous_employment,
         employerName: previousEmployment.employer_name,
         fromDate: previousEmployment.from_date ? new Date(previousEmployment.from_date) : undefined,
         toDate: previousEmployment.to_date ? new Date(previousEmployment.to_date) : undefined
       };
     }
-
-    compensationProfile.updatedBy = updatedBy;
-    await compensationProfile.save();
+    
+    // Try to find existing profile first
+    let existingProfile = await CompensationProfile.findOne({ employee: user._id });
+    
+    if (!existingProfile) {
+      // Check by employeeId as well
+      existingProfile = await CompensationProfile.findOne({ employeeId: employeeIdStr });
+    }
+    
+    if (existingProfile) {
+      // Update existing profile - merge with existing data
+      Object.keys(updateData).forEach(key => {
+        if (updateData[key] !== undefined) {
+          existingProfile[key] = updateData[key];
+        }
+      });
+      existingProfile.employee = user._id; // Ensure employee reference is set
+      existingProfile.employeeId = employeeIdStr; // Ensure employeeId is set
+      existingProfile.updatedBy = updatedBy;
+      
+      // If profile doesn't have createdBy, set it
+      if (!existingProfile.createdBy) {
+        existingProfile.createdBy = updatedBy;
+      }
+      
+      await existingProfile.save();
+    } else {
+      // Delete any profiles with null employeeId for this employee to avoid conflicts
+      await CompensationProfile.deleteMany({ 
+        employee: user._id,
+        employeeId: null 
+      });
+      
+      // Create new profile
+      existingProfile = new CompensationProfile({
+        employee: user._id,
+        ...updateData,
+        createdBy: updatedBy
+      });
+      await existingProfile.save();
+    }
 
     logger.info('Statutory info added', {
       employeeId: user.employeeId

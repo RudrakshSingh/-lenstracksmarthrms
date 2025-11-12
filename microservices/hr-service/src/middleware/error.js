@@ -7,29 +7,47 @@ const errorConverter = (err, req, res, next) => {
   
   // If error is not an ApiError instance, convert it
   if (!(error instanceof ApiError)) {
-    // Extract status code from various possible sources
-    let statusCode = error.statusCode || error.status || error.code;
-    
-    // Convert HTTP status code strings to numbers
-    if (typeof statusCode === 'string') {
-      const statusNum = parseInt(statusCode, 10);
-      if (!isNaN(statusNum) && statusNum >= 100 && statusNum < 600) {
-        statusCode = statusNum;
-      } else {
+    // Handle MongoDB duplicate key errors
+    if (error.code === 11000 || error.name === 'MongoServerError') {
+      const message = error.message || 'Duplicate key error';
+      error = new ApiError(httpStatus.CONFLICT, message, true, err.stack, 'DUPLICATE_KEY');
+    }
+    // Handle Mongoose validation errors
+    else if (error.name === 'ValidationError') {
+      const message = error.message || 'Validation error';
+      error = new ApiError(httpStatus.BAD_REQUEST, message, true, err.stack, 'VALIDATION_ERROR');
+    }
+    // Handle Mongoose Cast errors (invalid ObjectId, etc.)
+    else if (error.name === 'CastError') {
+      const message = `Invalid ${error.path || 'field'}: ${error.value || 'value'}`;
+      error = new ApiError(httpStatus.BAD_REQUEST, message, true, err.stack, 'INVALID_INPUT');
+    }
+    // Handle generic errors
+    else {
+      // Extract status code from various possible sources
+      let statusCode = error.statusCode || error.status || error.code;
+      
+      // Convert HTTP status code strings to numbers
+      if (typeof statusCode === 'string') {
+        const statusNum = parseInt(statusCode, 10);
+        if (!isNaN(statusNum) && statusNum >= 100 && statusNum < 600) {
+          statusCode = statusNum;
+        } else {
+          statusCode = httpStatus.INTERNAL_SERVER_ERROR;
+        }
+      }
+      
+      // Ensure statusCode is a valid number
+      if (!statusCode || typeof statusCode !== 'number' || statusCode < 100 || statusCode >= 600) {
         statusCode = httpStatus.INTERNAL_SERVER_ERROR;
       }
+      
+      // Get error message
+      const message = error.message || httpStatus[statusCode] || 'Internal Server Error';
+      
+      // Create ApiError instance
+      error = new ApiError(statusCode, message, false, err.stack);
     }
-    
-    // Ensure statusCode is a valid number
-    if (!statusCode || typeof statusCode !== 'number' || statusCode < 100 || statusCode >= 600) {
-      statusCode = httpStatus.INTERNAL_SERVER_ERROR;
-    }
-    
-    // Get error message
-    const message = error.message || httpStatus[statusCode] || 'Internal Server Error';
-    
-    // Create ApiError instance
-    error = new ApiError(statusCode, message, false, err.stack);
   }
   
   // Ensure the error has a valid statusCode - double check

@@ -37,11 +37,11 @@ const workDetailsSchema = {
     email: Joi.string().email().optional(),
     jobTitle: Joi.string().required(),
     department: Joi.string().required(),
-    storeId: Joi.string().required(),
+    storeId: Joi.string().allow(null, '').optional(), // Make storeId optional
     designation: Joi.string().required(),
     role_family: Joi.string().required(),
     joining_date: Joi.date().required(),
-    reporting_manager_id: Joi.string().required(),
+    reporting_manager_id: Joi.string().allow(null, '').optional(), // Make reporting_manager_id optional
     employee_status: Joi.string().valid('ACTIVE', 'PENDING', 'INACTIVE').default('ACTIVE'),
     base_salary: Joi.number().min(0).optional(),
     target_sales: Joi.number().min(0).optional(),

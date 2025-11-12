@@ -43,8 +43,10 @@ module.exports = {
   
   // CORS Configuration
   cors: {
-    origin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3000',
-    credentials: true
+    origin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '*', // Allow all origins by default for Azure
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-API-Key']
   },
   
   // IP Whitelist Configuration

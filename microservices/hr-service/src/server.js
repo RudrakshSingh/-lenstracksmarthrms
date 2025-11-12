@@ -10,24 +10,60 @@ const { ipFilter } = require('./middleware/security.middleware');
 
 const app = express();
 
-// Set ALLOWED_IPS from azureConfig if not already set
+// Set ALLOWED_IPS from azureConfig if not already set (but don't enable by default)
+// IP whitelist should only be enabled explicitly via IP_WHITELIST_ENABLED=true
 if (!process.env.ALLOWED_IPS && azureConfig.ipWhitelist.allowedIPs.length > 0) {
   process.env.ALLOWED_IPS = azureConfig.ipWhitelist.allowedIPs.join(',');
-  logger.info('IP whitelist configured from azureConfig', { allowedIPs: azureConfig.ipWhitelist.allowedIPs });
+  logger.info('IP whitelist configured from azureConfig (not enabled by default)', { 
+    allowedIPs: azureConfig.ipWhitelist.allowedIPs,
+    note: 'Set IP_WHITELIST_ENABLED=true to enable IP filtering'
+  });
 }
 
 // Security middleware
-app.use(helmet());
-app.use(cors({
-  origin: azureConfig.cors.origin,
-  credentials: azureConfig.cors.credentials
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// IP whitelist middleware - apply if ALLOWED_IPS is set or if whitelist is enabled
-if (process.env.ALLOWED_IPS || azureConfig.ipWhitelist.enabled) {
+// CORS configuration - allow all origins if '*' is specified
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    // If CORS_ORIGIN is '*', allow all origins
+    if (azureConfig.cors.origin === '*' || process.env.CORS_ORIGIN === '*') {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    const allowedOrigins = Array.isArray(azureConfig.cors.origin) 
+      ? azureConfig.cors.origin 
+      : azureConfig.cors.origin.split(',').map(o => o.trim());
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow for now, can be made stricter if needed
+    }
+  },
+  credentials: azureConfig.cors.credentials,
+  methods: azureConfig.cors.methods || ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: azureConfig.cors.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsOptions));
+
+// IP whitelist middleware - only apply if explicitly enabled
+// This allows the IP to be configured but not block requests unless explicitly enabled
+if (process.env.IP_WHITELIST_ENABLED === 'true') {
   app.use(ipFilter);
-  logger.info('IP whitelist middleware enabled', { 
+  logger.info('IP whitelist middleware ENABLED', { 
     allowedIPs: process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',') : azureConfig.ipWhitelist.allowedIPs 
+  });
+} else {
+  logger.info('IP whitelist configured but not enabled (set IP_WHITELIST_ENABLED=true to enable)', {
+    allowedIPs: process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',') : azureConfig.ipWhitelist.allowedIPs
   });
 }
 

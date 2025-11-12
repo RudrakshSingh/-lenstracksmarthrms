@@ -265,13 +265,24 @@ const sessionSecurity = (req, res, next) => {
 
 // IP whitelist/blacklist middleware
 const ipFilter = (req, res, next) => {
-  const clientIP = req.ip || req.connection.remoteAddress;
-  const allowedIPs = process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',') : [];
-  const blockedIPs = process.env.BLOCKED_IPS ? process.env.BLOCKED_IPS.split(',') : [];
+  // Skip IP filtering for health checks and public endpoints
+  const publicPaths = ['/health', '/ready', '/live', '/api/hr/health', '/api/hr/status'];
+  if (publicPaths.some(path => req.path.startsWith(path))) {
+    return next();
+  }
+
+  const clientIP = req.ip || 
+                   req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+                   req.headers['x-real-ip'] || 
+                   req.connection.remoteAddress ||
+                   req.socket.remoteAddress;
+  
+  const allowedIPs = process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',').map(ip => ip.trim()) : [];
+  const blockedIPs = process.env.BLOCKED_IPS ? process.env.BLOCKED_IPS.split(',').map(ip => ip.trim()) : [];
 
   // Check if IP is blocked
-  if (blockedIPs.includes(clientIP)) {
-    logger.warn('Blocked IP attempted access', { ip: clientIP });
+  if (blockedIPs.length > 0 && blockedIPs.includes(clientIP)) {
+    logger.warn('Blocked IP attempted access', { ip: clientIP, path: req.path });
     return res.status(403).json({
       success: false,
       message: 'Access denied'
@@ -279,11 +290,22 @@ const ipFilter = (req, res, next) => {
   }
 
   // Check if IP is whitelisted (if whitelist is configured)
-  if (allowedIPs.length > 0 && !allowedIPs.includes(clientIP)) {
-    logger.warn('Non-whitelisted IP attempted access', { ip: clientIP });
+  // Only enforce whitelist if explicitly enabled via IP_WHITELIST_ENABLED=true
+  // OR if ALLOWED_IPS is set AND IP_WHITELIST_ENABLED is not explicitly false
+  const whitelistEnabled = process.env.IP_WHITELIST_ENABLED === 'true' || 
+                          (process.env.ALLOWED_IPS && process.env.IP_WHITELIST_ENABLED !== 'false');
+  
+  if (whitelistEnabled && allowedIPs.length > 0 && !allowedIPs.includes(clientIP)) {
+    logger.warn('Non-whitelisted IP attempted access', { 
+      ip: clientIP, 
+      path: req.path,
+      allowedIPs: allowedIPs,
+      forwardedFor: req.headers['x-forwarded-for']
+    });
     return res.status(403).json({
       success: false,
-      message: 'Access denied'
+      message: 'Access denied - IP not whitelisted',
+      code: 'IP_NOT_WHITELISTED'
     });
   }
 

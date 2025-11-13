@@ -418,11 +418,12 @@ const startServer = async () => {
     // Handle all errors
     app.use(errorHandler);
     
-    const PORT = process.env.PORT || 3002;
+    // Azure App Service sets PORT automatically, use it or default to 3002
+    const PORT = process.env.PORT || process.env.WEBSITES_PORT || 3002;
     
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       logger.info(`hr-service running on port ${PORT}`);
-      logger.info(`hr-service started on http://localhost:${PORT}`);
+      logger.info(`hr-service started on http://0.0.0.0:${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       
       // Log registered routes for debugging

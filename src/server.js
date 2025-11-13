@@ -64,6 +64,31 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Root route - API information
+app.get('/', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({
+    service: 'Etelios Main API Gateway',
+    version: '1.0.0',
+    status: 'operational',
+    message: 'Welcome to Etelios HRMS & E-commerce API',
+    baseUrl: baseUrl,
+    endpoints: {
+      health: '/health',
+      api: '/api',
+      tenants: '/api/tenants',
+      auth: '/api/auth',
+      hr: '/api/hr'
+    },
+    documentation: {
+      swagger: '/api-docs',
+      postman: '/postman/HRMS-API-Collection.json'
+    },
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // API Documentation endpoint
 app.get('/api', (req, res) => {
   res.json({
@@ -135,11 +160,13 @@ app.use('*', (req, res) => {
 });
 
 // Start server
-const server = app.listen(PORT, () => {
-  logger.info(`🚀 Etelios Main Server started on port ${PORT}`);
+// Azure App Service sets PORT automatically, use it or default to 3000
+const SERVER_PORT = process.env.PORT || process.env.WEBSITES_PORT || PORT;
+const server = app.listen(SERVER_PORT, '0.0.0.0', () => {
+  logger.info(`🚀 Etelios Main Server started on port ${SERVER_PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`Health check: http://localhost:${PORT}/health`);
-  logger.info(`API docs: http://localhost:${PORT}/api`);
+  logger.info(`Health check: http://0.0.0.0:${SERVER_PORT}/health`);
+  logger.info(`API docs: http://0.0.0.0:${SERVER_PORT}/api`);
 });
 
 // Graceful shutdown

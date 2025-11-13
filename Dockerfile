@@ -64,9 +64,9 @@ USER nodejs
 # Expose port
 EXPOSE 3000
 
-# Health check
+# Health check - use PORT env var or default to 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:3000/health || exit 1
+    CMD node -e "const port = process.env.PORT || process.env.WEBSITES_PORT || 3000; require('http').get('http://localhost:' + port + '/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

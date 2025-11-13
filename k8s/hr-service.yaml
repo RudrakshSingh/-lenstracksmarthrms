@@ -25,7 +25,7 @@ spec:
         - name: PORT
           value: "3002"
         - name: MONGO_URI
-          value: "mongodb://mongodb:27017/hrms"
+          value: "mongodb+srv://rudrakshsin3006_db_user:rudi@3006@hrms.zbz0wva.mongodb.net/?appName=hrms"
         - name: REDIS_HOST
           value: "redis"
         - name: REDIS_PORT

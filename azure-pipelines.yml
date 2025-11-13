@@ -10,7 +10,7 @@ pool:
 
 variables:
   nodeVersion: '18.x'
-  azureSubscription: 'Azure Service Connection'
+  azureSubscription: 'Azure-Service-Connection'  # Must match existing service connection name
   resourceGroupName: 'etelios-rg'
   dockerRegistryServiceConnection: 'AzureContainerRegistry'  # Service connection name in Azure DevOps
   containerRegistry: 'etelios.azurecr.io'  # Registry URL (for image references)

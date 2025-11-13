@@ -367,6 +367,33 @@ app.get('/api/hr/health', (req, res) => {
   });
 });
 
+// Base /api/hr route - show available endpoints
+app.get('/api/hr', (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  res.json({
+    service: 'hr-service',
+    version: '1.0.0',
+    status: 'operational',
+    message: 'HR Management Service API',
+    baseUrl: baseUrl,
+    endpoints: {
+      health: '/api/hr/health',
+      status: '/api/hr/status',
+      employees: '/api/hr/employees',
+      onboarding: '/api/hr/onboarding',
+      leave: '/api/hr/leave',
+      payroll: '/api/hr/payroll',
+      reports: '/api/hr/reports'
+    },
+    documentation: {
+      note: 'Most endpoints require authentication. Include Authorization header with Bearer token.',
+      example: 'Authorization: Bearer <your-token>'
+    },
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Start server
 const startServer = async () => {
   try {

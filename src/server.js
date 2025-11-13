@@ -67,8 +67,13 @@ app.get('/health', (req, res) => {
 // Root route - API information
 app.get('/', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
-  const hrServiceUrl = process.env.HR_SERVICE_URL || 'http://localhost:3002';
+  // Use environment variables for service URLs, fallback to Azure App Service URLs
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || 
+                        process.env.AUTH_SERVICE_APP_URL || 
+                        'https://etelios-auth-service.azurewebsites.net';
+  const hrServiceUrl = process.env.HR_SERVICE_URL || 
+                      process.env.HR_SERVICE_APP_URL || 
+                      'https://etelios-hr-service.azurewebsites.net';
   
   res.json({
     service: 'Etelios API Gateway - Auth & HR Services',
@@ -99,31 +104,52 @@ app.get('/', (req, res) => {
       postman: '/postman/HRMS-API-Collection.json'
     },
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    note: 'This API Gateway routes to Auth and HR services only. Other services are not available.'
   });
 });
 
 // API Documentation endpoint
 app.get('/api', (req, res) => {
-  const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
-  const hrServiceUrl = process.env.HR_SERVICE_URL || 'http://localhost:3002';
+  // Use environment variables for service URLs, fallback to Azure App Service URLs
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || 
+                        process.env.AUTH_SERVICE_APP_URL || 
+                        'https://etelios-auth-service.azurewebsites.net';
+  const hrServiceUrl = process.env.HR_SERVICE_URL || 
+                      process.env.HR_SERVICE_APP_URL || 
+                      'https://etelios-hr-service.azurewebsites.net';
   
   res.json({
     message: 'Etelios HRMS API Gateway - Auth & HR Services Only',
     version: '1.0.0',
+    gateway: {
+      url: baseUrl,
+      status: 'operational'
+    },
     services: {
-      'auth': authServiceUrl,
-      'hr': hrServiceUrl
+      'auth': {
+        url: authServiceUrl,
+        endpoint: '/api/auth',
+        status: 'active'
+      },
+      'hr': {
+        url: hrServiceUrl,
+        endpoint: '/api/hr',
+        status: 'active'
+      }
     },
     endpoints: {
+      'health': '/health',
+      'api': '/api',
       'auth': '/api/auth',
-      'hr': '/api/hr',
-      'health': '/health'
+      'hr': '/api/hr'
     },
     documentation: {
       'swagger': '/api-docs',
       'postman': '/postman/HRMS-API-Collection.json'
-    }
+    },
+    note: 'This API Gateway routes to Auth and HR services only. Other services are not available.'
   });
 });
 

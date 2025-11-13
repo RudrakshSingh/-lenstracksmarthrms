@@ -67,18 +67,32 @@ app.get('/health', (req, res) => {
 // Root route - API information
 app.get('/', (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+  const hrServiceUrl = process.env.HR_SERVICE_URL || 'http://localhost:3002';
+  
   res.json({
-    service: 'Etelios Main API Gateway',
+    service: 'Etelios API Gateway - Auth & HR Services',
     version: '1.0.0',
     status: 'operational',
-    message: 'Welcome to Etelios HRMS & E-commerce API',
+    message: 'Welcome to Etelios HRMS API - Running Auth and HR Services Only',
     baseUrl: baseUrl,
     endpoints: {
       health: '/health',
       api: '/api',
-      tenants: '/api/tenants',
       auth: '/api/auth',
       hr: '/api/hr'
+    },
+    services: {
+      auth: {
+        url: authServiceUrl,
+        endpoint: '/api/auth',
+        status: 'active'
+      },
+      hr: {
+        url: hrServiceUrl,
+        endpoint: '/api/hr',
+        status: 'active'
+      }
     },
     documentation: {
       swagger: '/api-docs',
@@ -91,29 +105,20 @@ app.get('/', (req, res) => {
 
 // API Documentation endpoint
 app.get('/api', (req, res) => {
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+  const hrServiceUrl = process.env.HR_SERVICE_URL || 'http://localhost:3002';
+  
   res.json({
-    message: 'Etelios HRMS & E-commerce API',
+    message: 'Etelios HRMS API Gateway - Auth & HR Services Only',
     version: '1.0.0',
     services: {
-      'tenant-registry': 'http://localhost:3020',
-      'realtime': 'http://localhost:3021',
-      'auth': 'http://localhost:3001',
-      'hr': 'http://localhost:3002',
-      'attendance': 'http://localhost:3003',
-      'payroll': 'http://localhost:3004',
-      'crm': 'http://localhost:3005',
-      'inventory': 'http://localhost:3006',
-      'sales': 'http://localhost:3007',
-      'purchase': 'http://localhost:3008',
-      'financial': 'http://localhost:3009',
-      'document': 'http://localhost:3010',
-      'service-management': 'http://localhost:3011',
-      'cpp': 'http://localhost:3012',
-      'prescription': 'http://localhost:3013',
-      'analytics': 'http://localhost:3014',
-      'notification': 'http://localhost:3015',
-      'monitoring': 'http://localhost:3016',
-      'ecommerce': 'http://localhost:3000'
+      'auth': authServiceUrl,
+      'hr': hrServiceUrl
+    },
+    endpoints: {
+      'auth': '/api/auth',
+      'hr': '/api/hr',
+      'health': '/health'
     },
     documentation: {
       'swagger': '/api-docs',
@@ -122,17 +127,33 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Service proxy endpoints (optional - for API Gateway functionality)
-app.use('/api/tenants', (req, res) => {
-  res.redirect(302, 'http://localhost:3020/api/tenants');
-});
-
+// Service proxy endpoints - Only Auth and HR Services
 app.use('/api/auth', (req, res) => {
-  res.redirect(302, 'http://localhost:3001/api/auth');
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+  const targetUrl = `${authServiceUrl}${req.originalUrl}`;
+  
+  // Use proxy or redirect based on environment
+  if (process.env.USE_PROXY === 'true') {
+    // For production, you might want to use http-proxy-middleware
+    // For now, redirect to the service
+    res.redirect(302, targetUrl);
+  } else {
+    res.redirect(302, targetUrl);
+  }
 });
 
 app.use('/api/hr', (req, res) => {
-  res.redirect(302, 'http://localhost:3002/api/hr');
+  const hrServiceUrl = process.env.HR_SERVICE_URL || 'http://localhost:3002';
+  const targetUrl = `${hrServiceUrl}${req.originalUrl}`;
+  
+  // Use proxy or redirect based on environment
+  if (process.env.USE_PROXY === 'true') {
+    // For production, you might want to use http-proxy-middleware
+    // For now, redirect to the service
+    res.redirect(302, targetUrl);
+  } else {
+    res.redirect(302, targetUrl);
+  }
 });
 
 // Error handling middleware

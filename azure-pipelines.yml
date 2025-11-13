@@ -12,7 +12,8 @@ variables:
   nodeVersion: '18.x'
   azureSubscription: 'Azure Service Connection'
   resourceGroupName: 'etelios-rg'
-  containerRegistry: 'etelios.azurecr.io'
+  dockerRegistryServiceConnection: 'AzureContainerRegistry'  # Service connection name in Azure DevOps
+  containerRegistry: 'etelios.azurecr.io'  # Registry URL (for image references)
   imageRepository: 'etelios'
   dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
   tag: '$(Build.BuildId)'
@@ -68,7 +69,7 @@ stages:
         command: 'buildAndPush'
         repository: '$(imageRepository)'
         dockerfile: '$(dockerfilePath)'
-        containerRegistry: '$(containerRegistry)'
+        containerRegistry: '$(dockerRegistryServiceConnection)'
         tags: |
           $(tag)
           latest

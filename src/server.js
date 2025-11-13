@@ -171,12 +171,13 @@ app.use('*', (req, res) => {
     error: 'Not Found',
     message: 'The requested resource was not found',
     availableEndpoints: [
+      'GET /',
       'GET /health',
       'GET /api',
-      'GET /api/tenants',
       'GET /api/auth',
       'GET /api/hr'
-    ]
+    ],
+    hint: 'This API Gateway routes to Auth and HR services only. Use /api/auth or /api/hr endpoints.'
   });
 });
 

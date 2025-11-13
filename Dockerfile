@@ -21,6 +21,9 @@ RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; f
 # Copy source code
 COPY . .
 
+# Ensure public directory exists (create if missing)
+RUN mkdir -p public
+
 # Build application (if needed)
 RUN npm run build || echo "No build script found, skipping build step"
 
@@ -46,8 +49,10 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=de
 
 # Copy application code from builder stage
 COPY --from=builder /app/src ./src
-COPY --from=builder /app/public ./public
 COPY --from=builder /app/package*.json ./
+
+# Copy public directory (directory exists in builder stage, even if empty)
+COPY --from=builder /app/public ./public
 
 # Create necessary directories
 RUN mkdir -p logs storage/documents storage/images storage/backups storage/temp \

@@ -12,10 +12,11 @@ RUN apk add --no-cache \
     && adduser -S nodejs -u 1001
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json* ./
 
 # Install all dependencies (including dev dependencies for build)
-RUN npm ci && npm cache clean --force
+# Use npm install as fallback if package-lock.json is missing or incompatible
+RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi && npm cache clean --force
 
 # Copy source code
 COPY . .
@@ -37,10 +38,11 @@ RUN apk add --no-cache \
     && adduser -S nodejs -u 1001
 
 # Copy package files
-COPY package*.json ./
+COPY package.json package-lock.json* ./
 
 # Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Use npm install as fallback if package-lock.json is missing or incompatible
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Copy application code from builder stage
 COPY --from=builder /app/src ./src

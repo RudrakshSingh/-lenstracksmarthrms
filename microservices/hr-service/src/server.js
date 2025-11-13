@@ -377,17 +377,34 @@ app.get('/api/hr', (req, res) => {
     message: 'HR Management Service API',
     baseUrl: baseUrl,
     endpoints: {
-      health: '/api/hr/health',
-      status: '/api/hr/status',
-      employees: '/api/hr/employees',
-      onboarding: '/api/hr/onboarding',
-      leave: '/api/hr/leave',
-      payroll: '/api/hr/payroll',
-      reports: '/api/hr/reports'
+      // Authentication endpoints
+      login: 'POST /api/auth/login',
+      refreshToken: 'POST /api/auth/refresh',
+      logout: 'POST /api/auth/logout',
+      getCurrentUser: 'GET /api/auth/me',
+      // Health & Status
+      health: 'GET /api/hr/health',
+      status: 'GET /api/hr/status',
+      // HR Endpoints (require authentication)
+      employees: 'GET /api/hr/employees',
+      onboarding: 'POST /api/hr/onboarding',
+      leave: 'GET /api/hr/leave',
+      payroll: 'GET /api/hr/payroll',
+      reports: 'GET /api/hr/reports'
     },
-    documentation: {
+    authentication: {
       note: 'Most endpoints require authentication. Include Authorization header with Bearer token.',
-      example: 'Authorization: Bearer <your-token>'
+      example: 'Authorization: Bearer <your-token>',
+      loginEndpoint: `${baseUrl}/api/auth/login`,
+      loginExample: {
+        method: 'POST',
+        url: `${baseUrl}/api/auth/login`,
+        body: {
+          email: 'user@example.com',
+          password: 'your-password',
+          rememberMe: false
+        }
+      }
     },
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'

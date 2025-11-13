@@ -10,7 +10,7 @@ resources:
 
 variables:
   # Container registry service connection - use name instead of GUID for consistency
-  dockerRegistryServiceConnection: 'AzureContainerRegistry'
+  dockerRegistryServiceConnection: 'd7a9318a-07c6-47ee-99cb-5d4571188dc1'
   imageRepository: 'eteliosbackend'
   containerRegistry: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'
   dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'

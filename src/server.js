@@ -155,31 +155,25 @@ app.get('/api', (req, res) => {
 
 // Service proxy endpoints - Only Auth and HR Services
 app.use('/api/auth', (req, res) => {
-  const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+  // Use environment variables, fallback to Azure App Service URLs (not localhost)
+  const authServiceUrl = process.env.AUTH_SERVICE_URL || 
+                        process.env.AUTH_SERVICE_APP_URL || 
+                        'https://etelios-auth-service.azurewebsites.net';
   const targetUrl = `${authServiceUrl}${req.originalUrl}`;
   
-  // Use proxy or redirect based on environment
-  if (process.env.USE_PROXY === 'true') {
-    // For production, you might want to use http-proxy-middleware
-    // For now, redirect to the service
-    res.redirect(302, targetUrl);
-  } else {
-    res.redirect(302, targetUrl);
-  }
+  // Redirect to the actual service
+  res.redirect(302, targetUrl);
 });
 
 app.use('/api/hr', (req, res) => {
-  const hrServiceUrl = process.env.HR_SERVICE_URL || 'http://localhost:3002';
+  // Use environment variables, fallback to Azure App Service URLs (not localhost)
+  const hrServiceUrl = process.env.HR_SERVICE_URL || 
+                      process.env.HR_SERVICE_APP_URL || 
+                      'https://etelios-hr-service.azurewebsites.net';
   const targetUrl = `${hrServiceUrl}${req.originalUrl}`;
   
-  // Use proxy or redirect based on environment
-  if (process.env.USE_PROXY === 'true') {
-    // For production, you might want to use http-proxy-middleware
-    // For now, redirect to the service
-    res.redirect(302, targetUrl);
-  } else {
-    res.redirect(302, targetUrl);
-  }
+  // Redirect to the actual service
+  res.redirect(302, targetUrl);
 });
 
 // Error handling middleware

@@ -9,8 +9,8 @@ resources:
 - repo: self
 
 variables:
-  # Container registry service connection established during pipeline creation
-  dockerRegistryServiceConnection: '4cdd8644-0f78-4962-bde8-8af000a00202'
+  # Container registry service connection - use name instead of GUID for consistency
+  dockerRegistryServiceConnection: 'AzureContainerRegistry'
   imageRepository: 'eteliosbackend'
   containerRegistry: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'
   dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'

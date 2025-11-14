@@ -67,76 +67,23 @@ stages:
               appName: '$(appServiceName)'
               containers: '$(containerRegistry)/$(imageRepository):$(tag)'
               appSettings: |
-                [
-                  {
-                    "name": "WEBSITES_PORT",
-                    "value": "3002"
-                  },
-                  {
-                    "name": "NODE_ENV",
-                    "value": "production"
-                  },
-                  {
-                    "name": "PORT",
-                    "value": "3002"
-                  },
-                  {
-                    "name": "SERVICE_NAME",
-                    "value": "hr-service"
-                  },
-                  {
-                    "name": "MONGO_URI",
-                    "value": "$(mongo-uri)"
-                  },
-                  {
-                    "name": "JWT_SECRET",
-                    "value": "$(jwt-secret)"
-                  },
-                  {
-                    "name": "JWT_REFRESH_SECRET",
-                    "value": "$(jwt-refresh-secret)"
-                  },
-                  {
-                    "name": "JWT_EXPIRY",
-                    "value": "1h"
-                  },
-                  {
-                    "name": "JWT_REFRESH_EXPIRY",
-                    "value": "7d"
-                  },
-                  {
-                    "name": "CORS_ORIGIN",
-                    "value": "https://your-frontend.azurewebsites.net"
-                  },
-                  {
-                    "name": "FRONTEND_URL",
-                    "value": "https://your-frontend.azurewebsites.net"
-                  },
-                  {
-                    "name": "AZURE_FRONTEND_URL",
-                    "value": "https://your-frontend.azurewebsites.net"
-                  },
-                  {
-                    "name": "STORAGE_PROVIDER",
-                    "value": "azure"
-                  },
-                  {
-                    "name": "AZURE_STORAGE_CONNECTION_STRING",
-                    "value": "$(azure-storage-connection-string)"
-                  },
-                  {
-                    "name": "LOG_LEVEL",
-                    "value": "info"
-                  },
-                  {
-                    "name": "TEST_MODE",
-                    "value": "false"
-                  },
-                  {
-                    "name": "ENABLE_ROLE_SEEDING",
-                    "value": "false"
-                  }
-                ]
+                -WEBSITES_PORT=3002
+                -NODE_ENV=production
+                -PORT=3002
+                -SERVICE_NAME=hr-service
+                -MONGO_URI=$(mongo-uri)
+                -JWT_SECRET=$(jwt-secret)
+                -JWT_REFRESH_SECRET=$(jwt-refresh-secret)
+                -JWT_EXPIRY=1h
+                -JWT_REFRESH_EXPIRY=7d
+                -CORS_ORIGIN=https://your-frontend.azurewebsites.net
+                -FRONTEND_URL=https://your-frontend.azurewebsites.net
+                -AZURE_FRONTEND_URL=https://your-frontend.azurewebsites.net
+                -STORAGE_PROVIDER=azure
+                -AZURE_STORAGE_CONNECTION_STRING=$(azure-storage-connection-string)
+                -LOG_LEVEL=info
+                -TEST_MODE=false
+                -ENABLE_ROLE_SEEDING=false
 
           - task: AzureAppServiceManage@0
             displayName: 'Restart App Service'

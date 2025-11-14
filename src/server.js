@@ -205,28 +205,76 @@ app.use('*', (req, res) => {
 // Start server
 // Azure App Service sets PORT automatically, use it or default to 3000
 const SERVER_PORT = process.env.PORT || process.env.WEBSITES_PORT || PORT;
-const server = app.listen(SERVER_PORT, '0.0.0.0', () => {
-  logger.info(`🚀 Etelios Main Server started on port ${SERVER_PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`Health check: http://0.0.0.0:${SERVER_PORT}/health`);
-  logger.info(`API docs: http://0.0.0.0:${SERVER_PORT}/api`);
+
+let server;
+try {
+  server = app.listen(SERVER_PORT, '0.0.0.0', () => {
+    logger.info(`🚀 Etelios Main Server started on port ${SERVER_PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`Health check: http://0.0.0.0:${SERVER_PORT}/health`);
+    logger.info(`API docs: http://0.0.0.0:${SERVER_PORT}/api`);
+  });
+
+  // Handle server errors
+  server.on('error', (error) => {
+    logger.error('Server error:', error);
+    if (error.code === 'EADDRINUSE') {
+      logger.error(`Port ${SERVER_PORT} is already in use`);
+    }
+    process.exit(1);
+  });
+} catch (error) {
+  logger.error('Failed to start server:', error);
+  process.exit(1);
+}
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  if (server) {
+    server.close(() => {
+      process.exit(1);
+    });
+  } else {
+    process.exit(1);
+  }
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  if (server) {
+    server.close(() => {
+      process.exit(1);
+    });
+  } else {
+    process.exit(1);
+  }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received. Shutting down gracefully.');
-  server.close(() => {
-    logger.info('Process terminated');
+  if (server) {
+    server.close(() => {
+      logger.info('Process terminated');
+      process.exit(0);
+    });
+  } else {
     process.exit(0);
-  });
+  }
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received. Shutting down gracefully.');
-  server.close(() => {
-    logger.info('Process terminated');
+  if (server) {
+    server.close(() => {
+      logger.info('Process terminated');
+      process.exit(0);
+    });
+  } else {
     process.exit(0);
-  });
+  }
 });
 
 module.exports = app;

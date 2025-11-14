@@ -372,13 +372,17 @@ const startServer = async () => {
   try {
     await connectDB();
     
-    // Seed default roles if they don't exist
-    try {
-      const { seedRoles } = require('./utils/seedRoles');
-      await seedRoles();
-      logger.info('Default roles checked/created');
-    } catch (seedError) {
-      logger.warn('Failed to seed roles', { error: seedError.message });
+    // Seed default roles only if ENABLE_ROLE_SEEDING is true (disabled by default for production)
+    if (process.env.ENABLE_ROLE_SEEDING === 'true') {
+      try {
+        const { seedRoles } = require('./utils/seedRoles');
+        await seedRoles();
+        logger.info('Default roles checked/created (seeding enabled)');
+      } catch (seedError) {
+        logger.warn('Failed to seed roles', { error: seedError.message });
+      }
+    } else {
+      logger.info('Role seeding disabled - using real data from database');
     }
     
     // Load routes BEFORE starting server

@@ -132,6 +132,10 @@ stages:
                   {
                     "name": "TEST_MODE",
                     "value": "false"
+                  },
+                  {
+                    "name": "ENABLE_ROLE_SEEDING",
+                    "value": "false"
                   }
                 ]
 

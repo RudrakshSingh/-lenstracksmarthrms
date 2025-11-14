@@ -159,6 +159,22 @@ app.use('/api/auth', (req, res) => {
   const authServiceUrl = process.env.AUTH_SERVICE_URL || 
                         process.env.AUTH_SERVICE_APP_URL || 
                         'https://etelios-auth-service.azurewebsites.net';
+  
+  // Check if Auth service URL is set and not localhost
+  if (!authServiceUrl || authServiceUrl.includes('localhost')) {
+    return res.status(503).json({
+      success: false,
+      message: 'Auth Service is not available',
+      error: 'The Auth service App Service has not been created yet',
+      hint: 'Please create the Auth service App Service or configure AUTH_SERVICE_URL environment variable',
+      availableEndpoints: [
+        'GET /',
+        'GET /health',
+        'GET /api'
+      ]
+    });
+  }
+  
   const targetUrl = `${authServiceUrl}${req.originalUrl}`;
   
   // Redirect to the actual service
@@ -170,6 +186,22 @@ app.use('/api/hr', (req, res) => {
   const hrServiceUrl = process.env.HR_SERVICE_URL || 
                       process.env.HR_SERVICE_APP_URL || 
                       'https://etelios-hr-service.azurewebsites.net';
+  
+  // Check if HR service URL is set and not localhost
+  if (!hrServiceUrl || hrServiceUrl.includes('localhost')) {
+    return res.status(503).json({
+      success: false,
+      message: 'HR Service is not available',
+      error: 'The HR service App Service has not been created yet',
+      hint: 'Please create the HR service App Service or configure HR_SERVICE_URL environment variable',
+      availableEndpoints: [
+        'GET /',
+        'GET /health',
+        'GET /api'
+      ]
+    });
+  }
+  
   const targetUrl = `${hrServiceUrl}${req.originalUrl}`;
   
   // Redirect to the actual service

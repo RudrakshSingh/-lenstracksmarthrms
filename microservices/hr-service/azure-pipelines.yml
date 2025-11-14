@@ -55,7 +55,7 @@ stages:
           - task: AzureKeyVault@2
             displayName: 'Get secrets from Key Vault'
             inputs:
-              azureSubscription: 'Azure-Service-Connection'
+              azureSubscription: 'eteliosacr-connection'
               KeyVaultName: '$(keyVaultName)'
               SecretsFilter: 'mongo-uri,jwt-secret,jwt-refresh-secret,azure-storage-connection-string'
               RunAsPreJob: true
@@ -63,7 +63,7 @@ stages:
           - task: AzureWebAppContainer@1
             displayName: 'Deploy to Azure App Service'
             inputs:
-              azureSubscription: 'Azure-Service-Connection'
+              azureSubscription: 'eteliosacr-connection'
               appName: '$(appServiceName)'
               containers: '$(containerRegistry)/$(imageRepository):$(tag)'
               appSettings: |
@@ -141,6 +141,6 @@ stages:
           - task: AzureAppServiceManage@0
             displayName: 'Restart App Service'
             inputs:
-              azureSubscription: 'Azure-Service-Connection'
+              azureSubscription: 'eteliosacr-connection'
               Action: 'Restart Azure App Service'
               WebAppName: '$(appServiceName)'

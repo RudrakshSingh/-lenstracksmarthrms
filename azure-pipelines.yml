@@ -56,7 +56,7 @@ stages:
             inputs:
               azureSubscription: 'Azure-Service-Connection'
               appName: 'etelios-app-service-cxf6hvgjb7gah7dr'
-              containers: '$(containerRegistry)/$(imageRepository):$(tag)'
+              containers: '$(containerRegistry)/$(imageRepository):latest'
               appSettings: |
                 [
                   {
@@ -70,5 +70,16 @@ stages:
                   {
                     "name": "NODE_ENV",
                     "value": "production"
+                  },
+                  {
+                    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
+                    "value": "false"
                   }
                 ]
+
+          - task: AzureAppServiceManage@0
+            displayName: 'Restart App Service to apply changes'
+            inputs:
+              azureSubscription: 'Azure-Service-Connection'
+              Action: 'Restart Azure App Service'
+              WebAppName: 'etelios-app-service-cxf6hvgjb7gah7dr'

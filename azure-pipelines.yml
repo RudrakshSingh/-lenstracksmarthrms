@@ -54,7 +54,7 @@ stages:
             displayName: 'Deploy to Azure App Service'
             inputs:
               azureSubscription: 'Azure-Service-Connection'
-              appName: 'etelios-app-service-cxf6hvgjb7gah7dr'
+              appName: 'Etelios-app-service'
               containers: '$(containerRegistry)/$(imageRepository):latest'
               appSettings: |
                 [

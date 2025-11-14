@@ -53,7 +53,7 @@ stages:
           - task: AzureWebAppContainer@1
             displayName: 'Deploy to Azure App Service'
             inputs:
-              azureSubscription: 'Azure-Service-Connection'
+              azureSubscription: 'eteliosacr-connection'
               appName: 'Etelios-app-service'
               containers: '$(containerRegistry)/$(imageRepository):latest'
               appSettings: |
@@ -79,6 +79,6 @@ stages:
           - task: AzureAppServiceManage@0
             displayName: 'Restart App Service to apply changes'
             inputs:
-              azureSubscription: 'Azure-Service-Connection'
+              azureSubscription: 'eteliosacr-connection'
               Action: 'Restart Azure App Service'
               WebAppName: 'etelios-app-service-cxf6hvgjb7gah7dr'

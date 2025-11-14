@@ -57,24 +57,10 @@ stages:
               appName: 'Etelios-app-service'
               containers: '$(containerRegistry)/$(imageRepository):latest'
               appSettings: |
-                [
-                  {
-                    "name": "WEBSITES_PORT",
-                    "value": "3000"
-                  },
-                  {
-                    "name": "PORT",
-                    "value": "3000"
-                  },
-                  {
-                    "name": "NODE_ENV",
-                    "value": "production"
-                  },
-                  {
-                    "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-                    "value": "false"
-                  }
-                ]
+                -WEBSITES_PORT=3000
+                -PORT=3000
+                -NODE_ENV=production
+                -SCM_DO_BUILD_DURING_DEPLOYMENT=false
 
           - task: AzureAppServiceManage@0
             displayName: 'Restart App Service to apply changes'

@@ -11,8 +11,7 @@
 **Pipeline File:** `azure-pipelines.yml`
 
 **Tags Pushed:**
-- `$(Build.BuildId)` - Serial number tag (e.g., `123`, `124`, `125`)
-- `latest` - Always points to the most recent build
+- `latest` - Only tag pushed (no serial numbers)
 
 **App Service:** `etelios-app-service-cxf6hvgjb7gah7dr`
 - Pulls from: `eteliosacr-hvawabdbgge7e0fu.azurecr.io/eteliosbackend:latest`
@@ -30,8 +29,7 @@
 **Pipeline File:** `microservices/hr-service/azure-pipelines.yml`
 
 **Tags Pushed:**
-- `$(Build.BuildId)` - Serial number tag
-- `latest` - Always points to the most recent build
+- `latest` - Only tag pushed (no serial numbers)
 
 **App Service:** `etelios-hr-service`
 - Pulls from: `eteliosregistry.azurecr.io/hr-service:latest`
@@ -71,15 +69,13 @@ Both pipelines are already configured to push `latest` tag:
 ### Main Pipeline (`azure-pipelines.yml`)
 ```yaml
 tags: |
-  $(tag)      # Build ID (serial number)
-  latest      # Latest tag
+  latest      # Only latest tag (no serial numbers)
 ```
 
 ### HR Service Pipeline (`microservices/hr-service/azure-pipelines.yml`)
 ```yaml
 tags: |
-  $(tag)      # Build ID (serial number)
-  latest      # Latest tag
+  latest      # Only latest tag (no serial numbers)
 ```
 
 ---

@@ -367,50 +367,6 @@ app.get('/api/hr/health', (req, res) => {
   });
 });
 
-// Base /api/hr route - show available endpoints
-app.get('/api/hr', (req, res) => {
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
-  res.json({
-    service: 'hr-service',
-    version: '1.0.0',
-    status: 'operational',
-    message: 'HR Management Service API',
-    baseUrl: baseUrl,
-    endpoints: {
-      // Authentication endpoints
-      login: 'POST /api/auth/login',
-      refreshToken: 'POST /api/auth/refresh',
-      logout: 'POST /api/auth/logout',
-      getCurrentUser: 'GET /api/auth/me',
-      // Health & Status
-      health: 'GET /api/hr/health',
-      status: 'GET /api/hr/status',
-      // HR Endpoints (require authentication)
-      employees: 'GET /api/hr/employees',
-      onboarding: 'POST /api/hr/onboarding',
-      leave: 'GET /api/hr/leave',
-      payroll: 'GET /api/hr/payroll',
-      reports: 'GET /api/hr/reports'
-    },
-    authentication: {
-      note: 'Most endpoints require authentication. Include Authorization header with Bearer token.',
-      example: 'Authorization: Bearer <your-token>',
-      loginEndpoint: `${baseUrl}/api/auth/login`,
-      loginExample: {
-        method: 'POST',
-        url: `${baseUrl}/api/auth/login`,
-        body: {
-          email: 'user@example.com',
-          password: 'your-password',
-          rememberMe: false
-        }
-      }
-    },
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
 // Start server
 const startServer = async () => {
   try {
@@ -427,6 +383,50 @@ const startServer = async () => {
     
     // Load routes BEFORE starting server
     loadRoutes();
+    
+    // Base /api/hr route - show available endpoints (MUST be after loadRoutes to override router handlers)
+    app.get('/api/hr', (req, res) => {
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      res.json({
+        service: 'hr-service',
+        version: '1.0.0',
+        status: 'operational',
+        message: 'HR Management Service API',
+        baseUrl: baseUrl,
+        endpoints: {
+          // Authentication endpoints
+          login: 'POST /api/auth/login',
+          refreshToken: 'POST /api/auth/refresh',
+          logout: 'POST /api/auth/logout',
+          getCurrentUser: 'GET /api/auth/me',
+          // Health & Status
+          health: 'GET /api/hr/health',
+          status: 'GET /api/hr/status',
+          // HR Endpoints (require authentication)
+          employees: 'GET /api/hr/employees',
+          onboarding: 'POST /api/hr/onboarding',
+          leave: 'GET /api/hr/leave',
+          payroll: 'GET /api/hr/payroll',
+          reports: 'GET /api/hr/reports'
+        },
+        authentication: {
+          note: 'Most endpoints require authentication. Include Authorization header with Bearer token.',
+          example: 'Authorization: Bearer <your-token>',
+          loginEndpoint: `${baseUrl}/api/auth/login`,
+          loginExample: {
+            method: 'POST',
+            url: `${baseUrl}/api/auth/login`,
+            body: {
+              email: 'user@example.com',
+              password: 'your-password',
+              rememberMe: false
+            }
+          }
+        },
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
+      });
+    });
     
     // Enhanced 404 handler with route information - MUST be after routes are loaded
     app.use((req, res) => {

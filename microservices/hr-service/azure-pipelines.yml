@@ -38,7 +38,6 @@ stages:
         dockerfile: $(dockerfilePath)
         containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
-          $(tag)
           latest
 
 - stage: Deploy

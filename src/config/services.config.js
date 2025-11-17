@@ -18,6 +18,21 @@ module.exports = {
       port: 3002,
       basePath: '/api/hr',
       defaultUrl: 'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net',
+      envVar: 'HR_SERVICE_URL',
+      subRoutes: ['/api/transfers', '/api/hr-letter'] // Additional HR service routes mounted at different paths
+    },
+    'transfers': {
+      name: 'hr-service',
+      port: 3002,
+      basePath: '/api/transfers',
+      defaultUrl: 'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net',
+      envVar: 'HR_SERVICE_URL'
+    },
+    'hr-letters': {
+      name: 'hr-service',
+      port: 3002,
+      basePath: '/api/hr-letter',
+      defaultUrl: 'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net',
       envVar: 'HR_SERVICE_URL'
     },
     'attendance': {

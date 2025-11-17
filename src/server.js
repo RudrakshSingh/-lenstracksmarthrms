@@ -180,9 +180,17 @@ app.get('/api', async (req, res) => {
 });
 
 // Create proxy middleware for each service
-const allServices = servicesConfig.getAllServices();
+// IMPORTANT: Order matters - more specific paths should be registered first
+// So /api/hr-letter and /api/transfers should come before /api/hr
 
-Object.entries(allServices).forEach(([key, service]) => {
+// First, get all services and sort by path specificity (longer paths first)
+const allServices = servicesConfig.getAllServices();
+const sortedServices = Object.entries(allServices).sort((a, b) => {
+  // Sort by path length (longer = more specific = should come first)
+  return b[1].basePath.length - a[1].basePath.length;
+});
+
+sortedServices.forEach(([key, service]) => {
   const serviceUrl = service.url;
   const basePath = service.basePath;
   const serviceConfig = servicesConfig.services[key];
@@ -203,12 +211,16 @@ Object.entries(allServices).forEach(([key, service]) => {
     timeout: 30000, // 30 second timeout
     proxyTimeout: 30000,
     onProxyReq: (proxyReq, req, res) => {
-      // Log proxy requests
-      logger.info(`Proxying ${req.method} ${req.originalUrl} to ${serviceUrl}${req.path}`);
+      // Log proxy requests (only in development to reduce noise)
+      if (process.env.NODE_ENV === 'development') {
+        logger.info(`Proxying ${req.method} ${req.originalUrl} to ${serviceUrl}${req.path}`);
+      }
     },
     onProxyRes: (proxyRes, req, res) => {
-      // Log successful proxy responses
-      logger.info(`Proxied ${req.method} ${req.originalUrl} - Status: ${proxyRes.statusCode}`);
+      // Log successful proxy responses (only in development)
+      if (process.env.NODE_ENV === 'development') {
+        logger.info(`Proxied ${req.method} ${req.originalUrl} - Status: ${proxyRes.statusCode}`);
+      }
     },
     onError: (err, req, res) => {
       logger.error(`Proxy error for ${service.name}:`, err.message);
@@ -224,7 +236,8 @@ Object.entries(allServices).forEach(([key, service]) => {
     }
   });
   
-  // Apply proxy middleware to base path
+  // Apply proxy middleware using Express path matching
+  // This will match all paths starting with basePath
   app.use(basePath, (req, res, next) => {
     // Check if service URL is localhost (not deployed) in production
     if (serviceUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
@@ -245,45 +258,7 @@ Object.entries(allServices).forEach(([key, service]) => {
     proxyMiddleware(req, res, next);
   });
   
-  logger.info(`Proxy route configured: ${basePath} -> ${serviceUrl}`);
-  
-  // Handle sub-routes (like geofencing for attendance service)
-  if (serviceConfig.subRoutes && Array.isArray(serviceConfig.subRoutes)) {
-    serviceConfig.subRoutes.forEach(subRoute => {
-      const subRouteProxy = createProxyMiddleware({
-        target: serviceUrl,
-        changeOrigin: true,
-        pathRewrite: {
-          [`^${subRoute}`]: subRoute, // Keep the path as-is when forwarding
-        },
-        timeout: 30000,
-        proxyTimeout: 30000,
-        onError: (err, req, res) => {
-          logger.error(`Proxy error for ${service.name} sub-route ${subRoute}:`, err.message);
-          if (!res.headersSent) {
-            res.status(503).json({
-              success: false,
-              message: `${service.name} is currently unavailable`,
-              error: err.message
-            });
-          }
-        }
-      });
-      
-      app.use(subRoute, (req, res, next) => {
-        if (serviceUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
-          return res.status(503).json({
-            success: false,
-            message: `${service.name} is not available`,
-            error: 'The service App Service has not been created yet'
-          });
-        }
-        subRouteProxy(req, res, next);
-      });
-      
-      logger.info(`Sub-route proxy configured: ${subRoute} -> ${serviceUrl}`);
-    });
-  }
+  logger.info(`Proxy route configured: ${basePath}* -> ${serviceUrl}`);
 });
 
 // Error handling middleware

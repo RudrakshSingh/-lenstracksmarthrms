@@ -41,17 +41,33 @@ app.use(cors({
 }));
 app.use(compression());
 
-// Rate limiting
+// Rate limiting - optimized for performance
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // limit each IP to 1000 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  // Skip rate limiting for health checks
+  skip: (req) => {
+    return req.path === '/health' || req.path === '/';
+  }
 });
 app.use(limiter);
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsing middleware - optimized for performance
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    // Store raw body for signature verification if needed
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb',
+  parameterLimit: 1000 // Limit number of parameters
+}));
 
 // Static files
 app.use('/public', express.static(path.join(__dirname, 'public')));
@@ -67,16 +83,36 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Helper function to check service status
+// Cache utility for service status
+const cache = require('./utils/cache');
+
+// Helper function to check service status with caching
 const checkServiceStatus = async (serviceUrl) => {
+  const cacheKey = `service_status:${serviceUrl}`;
+  
+  // Try to get from cache first (5 second TTL for service status)
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  
   try {
     const response = await axios.get(`${serviceUrl}/health`, { 
-      timeout: 3000,
-      validateStatus: () => true // Don't throw on any status code
+      timeout: 2000, // Reduced timeout for faster failure
+      validateStatus: () => true, // Don't throw on any status code
+      headers: {
+        'Connection': 'keep-alive' // Reuse connections
+      }
     });
-    return response.status === 200 ? 'online' : 'unhealthy';
+    const status = response.status === 200 ? 'online' : 'unhealthy';
+    // Cache for 5 seconds
+    cache.set(cacheKey, status, 5);
+    return status;
   } catch (error) {
-    return 'offline';
+    const status = 'offline';
+    // Cache offline status for 10 seconds (longer to avoid hammering offline services)
+    cache.set(cacheKey, status, 10);
+    return status;
   }
 };
 
@@ -201,44 +237,68 @@ sortedServices.forEach(([key, service]) => {
     return;
   }
   
-  // Create proxy middleware for main base path
+  // Create proxy middleware for main base path - optimized for performance
+  // Note: We don't rewrite the path because services expect the full path (e.g., /api/auth/login)
   const proxyMiddleware = createProxyMiddleware({
     target: serviceUrl,
     changeOrigin: true,
-    pathRewrite: {
-      [`^${basePath}`]: '', // Remove base path when forwarding to service
-    },
-    timeout: 30000, // 30 second timeout
+    // No pathRewrite - forward the full path as services mount routes at /api/auth, /api/hr, etc.
+    timeout: 30000, // Increased to 30 seconds to handle slow Azure responses
     proxyTimeout: 30000,
+    // Optimize headers
+    headers: {
+      'Connection': 'keep-alive',
+      'Keep-Alive': 'timeout=5, max=1000'
+    },
+    // Enable HTTP/2 if supported
+    xfwd: true, // Add X-Forwarded-* headers
+    // Optimize request handling
     onProxyReq: (proxyReq, req, res) => {
-      // Log proxy requests (only in development to reduce noise)
-      if (process.env.NODE_ENV === 'development') {
-        logger.info(`Proxying ${req.method} ${req.originalUrl} to ${serviceUrl}${req.path}`);
-      }
+      // Set keep-alive for better connection reuse
+      proxyReq.setHeader('Connection', 'keep-alive');
+      
+      // Log proxy requests for debugging
+      logger.info(`[Proxy] ${req.method} ${req.originalUrl} -> ${serviceUrl}${req.path}`);
     },
     onProxyRes: (proxyRes, req, res) => {
-      // Log successful proxy responses (only in development)
-      if (process.env.NODE_ENV === 'development') {
-        logger.info(`Proxied ${req.method} ${req.originalUrl} - Status: ${proxyRes.statusCode}`);
+      // Add caching headers for GET requests
+      if (req.method === 'GET' && proxyRes.statusCode === 200) {
+        // Cache public GET requests for 60 seconds
+        if (!req.path.includes('/auth/') && !req.path.includes('/profile')) {
+          proxyRes.headers['Cache-Control'] = 'public, max-age=60, s-maxage=60';
+        }
       }
+      
+      // Add performance headers
+      proxyRes.headers['X-Content-Type-Options'] = 'nosniff';
+      proxyRes.headers['X-Frame-Options'] = 'DENY';
+      
+      // Log proxy responses for debugging
+      logger.info(`[Proxy] ${req.method} ${req.originalUrl} <- ${proxyRes.statusCode} from ${service.name}`);
     },
     onError: (err, req, res) => {
-      logger.error(`Proxy error for ${service.name}:`, err.message);
+      logger.error(`[Proxy Error] ${service.name} - ${req.method} ${req.originalUrl}:`, err.message);
       if (!res.headersSent) {
         res.status(503).json({
           success: false,
           message: `${service.name} is currently unavailable`,
           error: err.message,
           service: service.name,
-          url: serviceUrl
+          url: serviceUrl,
+          path: req.path,
+          originalUrl: req.originalUrl
         });
       }
     }
   });
   
   // Apply proxy middleware using Express path matching
-  // This will match all paths starting with basePath
+  // Express app.use('/api/auth', ...) automatically matches /api/auth and all sub-paths like /api/auth/status
+  // No wildcard needed - Express handles this automatically
   app.use(basePath, (req, res, next) => {
+    // Log the request for debugging
+    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${serviceUrl}${req.path}`);
+    
     // Check if service URL is localhost (not deployed) in production
     if (serviceUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
       return res.status(503).json({

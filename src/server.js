@@ -188,7 +188,7 @@ app.use('/api/auth', (req, res) => {
   // Use environment variables, fallback to Azure App Service URLs (not localhost)
   const authServiceUrl = process.env.AUTH_SERVICE_URL || 
                         process.env.AUTH_SERVICE_APP_URL || 
-                        'https://etelios-auth-service.azurewebsites.net';
+                        'https://etelios-auth-service-h8btakd4byhncmgc.centralindia-01.azurewebsites.net';
   
   // Check if Auth service URL is set and not localhost
   if (!authServiceUrl || authServiceUrl.includes('localhost')) {
@@ -215,7 +215,7 @@ app.use('/api/hr', (req, res) => {
   // Use environment variables, fallback to Azure App Service URLs (not localhost)
   const hrServiceUrl = process.env.HR_SERVICE_URL || 
                       process.env.HR_SERVICE_APP_URL || 
-                      'https://etelios-hr-service.azurewebsites.net';
+                      'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net';
   
   // Check if HR service URL is set and not localhost
   if (!hrServiceUrl || hrServiceUrl.includes('localhost')) {

@@ -1,4 +1,4 @@
-# Multi-stage build for Notification Service
+# Multi-stage build for Realtime Service
 FROM node:18-alpine AS builder
 
 # Set working directory
@@ -37,21 +37,22 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/package*.json ./
 
 # Create necessary directories
-RUN mkdir -p logs storage/documents storage/images storage/backups storage/temp \
+RUN mkdir -p logs \
     && chown -R nodejs:nodejs /app
 
 # Switch to non-root user
 USER nodejs
 
-# Expose port
-EXPOSE 3015
+# Expose port (realtime-service typically uses port 3021 or 3017)
+EXPOSE 3021
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "const port = process.env.PORT || 3015; require('http').get('http://localhost:' + port + '/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
+    CMD node -e "const port = process.env.PORT || 3021; require('http').get('http://localhost:' + port + '/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application
 CMD ["node", "src/server.js"]
+

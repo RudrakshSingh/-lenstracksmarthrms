@@ -6,6 +6,9 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const winston = require('winston');
 const path = require('path');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+const servicesConfig = require('./config/services.config');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -67,7 +70,6 @@ app.get('/health', (req, res) => {
 // Helper function to check service status
 const checkServiceStatus = async (serviceUrl) => {
   try {
-    const axios = require('axios');
     const response = await axios.get(`${serviceUrl}/health`, { 
       timeout: 3000,
       validateStatus: () => true // Don't throw on any status code
@@ -81,161 +83,159 @@ const checkServiceStatus = async (serviceUrl) => {
 // Root route - API information
 app.get('/', async (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  // Use environment variables for service URLs, fallback to Azure App Service URLs
-  const authServiceUrl = process.env.AUTH_SERVICE_URL || 
-                        process.env.AUTH_SERVICE_APP_URL || 
-                        'https://etelios-auth-service-h8btakd4byhncmgc.centralindia-01.azurewebsites.net';
-  const hrServiceUrl = process.env.HR_SERVICE_URL || 
-                      process.env.HR_SERVICE_APP_URL || 
-                      'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net';
+  const allServices = servicesConfig.getAllServices();
   
-  // Check service status
-  const [authStatus, hrStatus] = await Promise.all([
-    checkServiceStatus(authServiceUrl),
-    checkServiceStatus(hrServiceUrl)
-  ]);
+  // Check status for all services
+  const serviceStatuses = {};
+  const statusChecks = Object.entries(allServices).map(async ([key, service]) => {
+    if (!service.isWebSocket) {
+      const status = await checkServiceStatus(service.url);
+      serviceStatuses[key] = {
+        ...service,
+        status: status,
+        note: status === 'offline' && service.url.includes('localhost') 
+          ? 'Service not deployed to Azure yet. Configure service URL via environment variable.' 
+          : null
+      };
+    } else {
+      serviceStatuses[key] = {
+        ...service,
+        status: 'unknown',
+        note: 'WebSocket service - status check not available'
+      };
+    }
+  });
+  
+  await Promise.all(statusChecks);
   
   res.json({
-    service: 'Etelios API Gateway - Auth & HR Services',
+    service: 'Etelios API Gateway - All Microservices',
     version: '1.0.0',
     status: 'operational',
-    message: 'Welcome to Etelios HRMS API - Running Auth and HR Services Only',
+    message: 'Welcome to Etelios HRMS & ERP API Gateway',
     baseUrl: baseUrl,
     endpoints: {
       health: '/health',
       api: '/api',
-      auth: '/api/auth',
-      hr: '/api/hr'
+      services: Object.values(serviceStatuses).map(s => s.basePath)
     },
-    services: {
-      auth: {
-        url: authServiceUrl,
-        endpoint: '/api/auth',
-        status: authStatus,
-        note: authStatus === 'offline' ? 'App Service not created or not running. Please create the App Service in Azure.' : null
-      },
-      hr: {
-        url: hrServiceUrl,
-        endpoint: '/api/hr',
-        status: hrStatus,
-        note: hrStatus === 'offline' ? 'App Service not created or not running. Please create the App Service in Azure.' : null
-      }
-    },
+    services: serviceStatuses,
     documentation: {
       swagger: '/api-docs',
-      postman: '/postman/HRMS-API-Collection.json'
+      postman: '/postman/HRMS-API-Collection.json',
+      frontendGuide: 'See FRONTEND-API-ACCESS.md for frontend integration guide'
     },
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    note: 'This API Gateway routes to Auth and HR services only. Other services are not available.'
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
 // API Documentation endpoint
 app.get('/api', async (req, res) => {
-  // Use environment variables for service URLs, fallback to Azure App Service URLs
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  const authServiceUrl = process.env.AUTH_SERVICE_URL || 
-                        process.env.AUTH_SERVICE_APP_URL || 
-                        'https://etelios-auth-service-h8btakd4byhncmgc.centralindia-01.azurewebsites.net';
-  const hrServiceUrl = process.env.HR_SERVICE_URL || 
-                      process.env.HR_SERVICE_APP_URL || 
-                      'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net';
+  const allServices = servicesConfig.getAllServices();
   
-  // Check service status
-  const [authStatus, hrStatus] = await Promise.all([
-    checkServiceStatus(authServiceUrl),
-    checkServiceStatus(hrServiceUrl)
-  ]);
+  // Check status for all services
+  const serviceStatuses = {};
+  const statusChecks = Object.entries(allServices).map(async ([key, service]) => {
+    if (!service.isWebSocket) {
+      const status = await checkServiceStatus(service.url);
+      serviceStatuses[key] = {
+        ...service,
+        status: status,
+        note: status === 'offline' && service.url.includes('localhost') 
+          ? 'Service not deployed to Azure yet' 
+          : null
+      };
+    } else {
+      serviceStatuses[key] = {
+        ...service,
+        status: 'unknown',
+        note: 'WebSocket service'
+      };
+    }
+  });
+  
+  await Promise.all(statusChecks);
   
   res.json({
-    message: 'Etelios HRMS API Gateway - Auth & HR Services Only',
+    message: 'Etelios HRMS & ERP API Gateway',
     version: '1.0.0',
     gateway: {
       url: baseUrl,
       status: 'operational'
     },
-    services: {
-      'auth': {
-        url: authServiceUrl,
-        endpoint: '/api/auth',
-        status: authStatus,
-        note: authStatus === 'offline' ? 'App Service not created or not running' : null
-      },
-      'hr': {
-        url: hrServiceUrl,
-        endpoint: '/api/hr',
-        status: hrStatus,
-        note: hrStatus === 'offline' ? 'App Service not created or not running' : null
-      }
-    },
+    services: serviceStatuses,
     endpoints: {
       'health': '/health',
       'api': '/api',
-      'auth': '/api/auth',
-      'hr': '/api/hr'
+      ...Object.fromEntries(Object.entries(allServices).map(([key, s]) => [key, s.basePath]))
     },
     documentation: {
       'swagger': '/api-docs',
-      'postman': '/postman/HRMS-API-Collection.json'
-    },
-    note: 'This API Gateway routes to Auth and HR services only. Other services are not available.'
+      'postman': '/postman/HRMS-API-Collection.json',
+      'frontendGuide': 'See FRONTEND-API-ACCESS.md'
+    }
   });
 });
 
-// Service proxy endpoints - Only Auth and HR Services
-app.use('/api/auth', (req, res) => {
-  // Use environment variables, fallback to Azure App Service URLs (not localhost)
-  const authServiceUrl = process.env.AUTH_SERVICE_URL || 
-                        process.env.AUTH_SERVICE_APP_URL || 
-                        'https://etelios-auth-service-h8btakd4byhncmgc.centralindia-01.azurewebsites.net';
-  
-  // Check if Auth service URL is set and not localhost
-  if (!authServiceUrl || authServiceUrl.includes('localhost')) {
-    return res.status(503).json({
-      success: false,
-      message: 'Auth Service is not available',
-      error: 'The Auth service App Service has not been created yet',
-      hint: 'Please create the Auth service App Service or configure AUTH_SERVICE_URL environment variable',
-      availableEndpoints: [
-        'GET /',
-        'GET /health',
-        'GET /api'
-      ]
-    });
-  }
-  
-  const targetUrl = `${authServiceUrl}${req.originalUrl}`;
-  
-  // Redirect to the actual service
-  res.redirect(302, targetUrl);
-});
+// Create proxy middleware for each service
+const allServices = servicesConfig.getAllServices();
 
-app.use('/api/hr', (req, res) => {
-  // Use environment variables, fallback to Azure App Service URLs (not localhost)
-  const hrServiceUrl = process.env.HR_SERVICE_URL || 
-                      process.env.HR_SERVICE_APP_URL || 
-                      'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net';
+Object.entries(allServices).forEach(([key, service]) => {
+  const serviceUrl = service.url;
+  const basePath = service.basePath;
   
-  // Check if HR service URL is set and not localhost
-  if (!hrServiceUrl || hrServiceUrl.includes('localhost')) {
-    return res.status(503).json({
-      success: false,
-      message: 'HR Service is not available',
-      error: 'The HR service App Service has not been created yet',
-      hint: 'Please create the HR service App Service or configure HR_SERVICE_URL environment variable',
-      availableEndpoints: [
-        'GET /',
-        'GET /health',
-        'GET /api'
-      ]
-    });
+  // Skip WebSocket services for now (they need special handling)
+  if (service.isWebSocket) {
+    logger.info(`WebSocket service ${key} configured at ${basePath} - requires WebSocket proxy setup`);
+    return;
   }
   
-  const targetUrl = `${hrServiceUrl}${req.originalUrl}`;
+  // Create proxy middleware
+  app.use(basePath, (req, res, next) => {
+    // Check if service URL is localhost (not deployed)
+    if (serviceUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
+      return res.status(503).json({
+        success: false,
+        message: `${service.name} is not available`,
+        error: 'The service App Service has not been created yet',
+        hint: `Please create the ${service.name} App Service or configure ${servicesConfig.services[key].envVar} environment variable`,
+        availableEndpoints: [
+          'GET /',
+          'GET /health',
+          'GET /api'
+        ]
+      });
+    }
+    
+    // Create proxy middleware for this request
+    const proxy = createProxyMiddleware({
+      target: serviceUrl,
+      changeOrigin: true,
+      pathRewrite: {
+        [`^${basePath}`]: '', // Remove base path when forwarding
+      },
+      onProxyReq: (proxyReq, req, res) => {
+        // Log proxy requests in development
+        if (process.env.NODE_ENV === 'development') {
+          logger.info(`Proxying ${req.method} ${req.originalUrl} to ${serviceUrl}${req.path}`);
+        }
+      },
+      onError: (err, req, res) => {
+        logger.error(`Proxy error for ${service.name}:`, err.message);
+        res.status(503).json({
+          success: false,
+          message: `${service.name} is currently unavailable`,
+          error: err.message
+        });
+      }
+    });
+    
+    proxy(req, res, next);
+  });
   
-  // Redirect to the actual service
-  res.redirect(302, targetUrl);
+  logger.info(`Proxy route configured: ${basePath} -> ${serviceUrl}`);
 });
 
 // Error handling middleware
@@ -250,17 +250,21 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use('*', (req, res) => {
+  const allServices = servicesConfig.getAllServices();
+  const availableEndpoints = [
+    'GET /',
+    'GET /health',
+    'GET /api',
+    ...Object.values(allServices).map(s => `${s.basePath}/*`)
+  ];
+  
   res.status(404).json({
     error: 'Not Found',
     message: 'The requested resource was not found',
-    availableEndpoints: [
-      'GET /',
-      'GET /health',
-      'GET /api',
-      'GET /api/auth',
-      'GET /api/hr'
-    ],
-    hint: 'This API Gateway routes to Auth and HR services only. Use /api/auth or /api/hr endpoints.'
+    path: req.path,
+    method: req.method,
+    availableEndpoints: availableEndpoints,
+    hint: 'Check /api endpoint for all available services and their endpoints'
   });
 });
 
@@ -275,6 +279,13 @@ try {
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Health check: http://0.0.0.0:${SERVER_PORT}/health`);
     logger.info(`API docs: http://0.0.0.0:${SERVER_PORT}/api`);
+    
+    // Log all configured proxy routes
+    const allServices = servicesConfig.getAllServices();
+    logger.info(`Configured ${Object.keys(allServices).length} microservices:`);
+    Object.entries(allServices).forEach(([key, service]) => {
+      logger.info(`  - ${service.basePath} -> ${service.url}`);
+    });
   });
 
   // Handle server errors

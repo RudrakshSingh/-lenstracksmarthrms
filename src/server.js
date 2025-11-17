@@ -84,10 +84,10 @@ app.get('/', async (req, res) => {
   // Use environment variables for service URLs, fallback to Azure App Service URLs
   const authServiceUrl = process.env.AUTH_SERVICE_URL || 
                         process.env.AUTH_SERVICE_APP_URL || 
-                        'https://etelios-auth-service.azurewebsites.net';
+                        'https://etelios-auth-service-h8btakd4byhncmgc.centralindia-01.azurewebsites.net';
   const hrServiceUrl = process.env.HR_SERVICE_URL || 
                       process.env.HR_SERVICE_APP_URL || 
-                      'https://etelios-hr-service.azurewebsites.net';
+                      'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net';
   
   // Check service status
   const [authStatus, hrStatus] = await Promise.all([
@@ -137,10 +137,10 @@ app.get('/api', async (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const authServiceUrl = process.env.AUTH_SERVICE_URL || 
                         process.env.AUTH_SERVICE_APP_URL || 
-                        'https://etelios-auth-service.azurewebsites.net';
+                        'https://etelios-auth-service-h8btakd4byhncmgc.centralindia-01.azurewebsites.net';
   const hrServiceUrl = process.env.HR_SERVICE_URL || 
                       process.env.HR_SERVICE_APP_URL || 
-                      'https://etelios-hr-service.azurewebsites.net';
+                      'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net';
   
   // Check service status
   const [authStatus, hrStatus] = await Promise.all([

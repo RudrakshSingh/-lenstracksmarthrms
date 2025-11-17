@@ -74,18 +74,47 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Body parsing middleware - optimized for performance
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ 
+  extended: true,
+  limit: '10mb',
+  parameterLimit: 1000 // Limit number of parameters
+}));
+
+// Compression middleware - optimize response size
+const compression = require('compression');
+app.use(compression({
+  level: 6, // Compression level (1-9, 6 is good balance)
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    return compression.filter(req, res);
+  }
+}));
 
 // Database connection
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'hr_service'}`;
     await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-      retryWrites: true
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s
+      socketTimeoutMS: 45000, // Socket timeout
+      maxPoolSize: 10, // Maximum number of connections in pool
+      minPoolSize: 2, // Minimum number of connections in pool
+      maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
+      retryWrites: true,
+      retryReads: true,
+      // Optimize for performance
+      bufferMaxEntries: 0, // Disable mongoose buffering
+      bufferCommands: false // Disable mongoose buffering
     });
     logger.info('hr-service: MongoDB connected successfully', {
       database: mongoose.connection.name,
@@ -360,23 +389,7 @@ app.get('/live', (req, res) => {
 });
 
 // Business API Routes (legacy endpoints for backwards compatibility)
-app.get('/api/hr/status', (req, res) => {
-  res.json({
-    service: 'hr-service',
-    status: 'operational',
-    timestamp: new Date().toISOString(),
-    businessLogic: 'active'
-  });
-});
-
-app.get('/api/hr/health', (req, res) => {
-  res.json({
-    service: 'hr-service',
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    businessLogic: 'active'
-  });
-});
+// These will be registered in startServer() after loadRoutes() to ensure correct order
 
 // Start server
 const startServer = async () => {
@@ -423,6 +436,25 @@ const startServer = async () => {
       logger.error('Error loading routes', { error: routeError.message, stack: routeError.stack });
       // Continue startup even if some routes fail to load
     }
+    
+    // Status and health endpoints (MUST be after loadRoutes to ensure they're accessible)
+    app.get('/api/hr/status', (req, res) => {
+      res.json({
+        service: 'hr-service',
+        status: 'operational',
+        timestamp: new Date().toISOString(),
+        businessLogic: 'active'
+      });
+    });
+
+    app.get('/api/hr/health', (req, res) => {
+      res.json({
+        service: 'hr-service',
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        businessLogic: 'active'
+      });
+    });
     
     // Base /api/hr route - show available endpoints (MUST be after loadRoutes to override router handlers)
     app.get('/api/hr', (req, res) => {

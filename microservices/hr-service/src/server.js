@@ -81,11 +81,22 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'hr_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('hr-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      retryWrites: true
+    });
+    logger.info('hr-service: MongoDB connected successfully', {
+      database: mongoose.connection.name,
+      host: mongoose.connection.host
+    });
   } catch (error) {
-    logger.error('hr-service: Database connection failed', { error: error.message });
-    process.exit(1);
+    logger.error('hr-service: Database connection failed', { 
+      error: error.message,
+      note: 'Service will continue but database operations will fail'
+    });
+    throw error; // Re-throw to allow retry logic in startServer
   }
 };
 
@@ -370,7 +381,26 @@ app.get('/api/hr/health', (req, res) => {
 // Start server
 const startServer = async () => {
   try {
-    await connectDB();
+    // Connect to database with retry logic
+    let dbConnected = false;
+    const maxRetries = 3;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        await connectDB();
+        dbConnected = true;
+        break;
+      } catch (dbError) {
+        logger.warn(`Database connection attempt ${i + 1}/${maxRetries} failed`, { error: dbError.message });
+        if (i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+        }
+      }
+    }
+    
+    if (!dbConnected) {
+      logger.error('Failed to connect to database after retries - service will start but may have limited functionality');
+      // Don't exit - allow service to start for health checks
+    }
     
     // Seed default roles only if ENABLE_ROLE_SEEDING is true (disabled by default for production)
     if (process.env.ENABLE_ROLE_SEEDING === 'true') {
@@ -380,13 +410,19 @@ const startServer = async () => {
         logger.info('Default roles checked/created (seeding enabled)');
       } catch (seedError) {
         logger.warn('Failed to seed roles', { error: seedError.message });
+        // Don't fail startup if role seeding fails
       }
     } else {
       logger.info('Role seeding disabled - using real data from database');
     }
     
     // Load routes BEFORE starting server
-    loadRoutes();
+    try {
+      loadRoutes();
+    } catch (routeError) {
+      logger.error('Error loading routes', { error: routeError.message, stack: routeError.stack });
+      // Continue startup even if some routes fail to load
+    }
     
     // Base /api/hr route - show available endpoints (MUST be after loadRoutes to override router handlers)
     app.get('/api/hr', (req, res) => {
@@ -469,10 +505,11 @@ const startServer = async () => {
     // Azure App Service sets PORT automatically, use it or default to 3002
     const PORT = process.env.PORT || process.env.WEBSITES_PORT || 3002;
     
-    app.listen(PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       logger.info(`hr-service running on port ${PORT}`);
       logger.info(`hr-service started on http://0.0.0.0:${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`Database: ${dbConnected ? 'connected' : 'disconnected (will retry)'}`);
       
       // Log registered routes for debugging
       if (process.env.NODE_ENV === 'development') {
@@ -491,9 +528,42 @@ const startServer = async () => {
         logger.info(`Registered routes: ${routes.length} routes loaded`);
       }
     });
+    
+    // Handle server errors gracefully
+    server.on('error', (error) => {
+      logger.error('Server error', { error: error.message, code: error.code });
+      if (error.code === 'EADDRINUSE') {
+        logger.error(`Port ${PORT} is already in use`);
+      }
+    });
+    
+    // Graceful shutdown
+    process.on('SIGTERM', () => {
+      logger.info('SIGTERM received, shutting down gracefully');
+      server.close(() => {
+        logger.info('Server closed');
+        process.exit(0);
+      });
+    });
+    
+    process.on('SIGINT', () => {
+      logger.info('SIGINT received, shutting down gracefully');
+      server.close(() => {
+        logger.info('Server closed');
+        process.exit(0);
+      });
+    });
+    
   } catch (error) {
     logger.error('hr-service startup failed', { error: error.message, stack: error.stack });
-    process.exit(1);
+    // Don't exit immediately - log error and try to start anyway for health checks
+    logger.warn('Attempting to start service in degraded mode');
+    
+    const PORT = process.env.PORT || process.env.WEBSITES_PORT || 3002;
+    app.listen(PORT, '0.0.0.0', () => {
+      logger.warn(`hr-service started in degraded mode on port ${PORT}`);
+      logger.warn('Some functionality may be limited');
+    });
   }
 };
 

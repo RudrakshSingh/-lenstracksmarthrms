@@ -115,14 +115,22 @@ app.get('/health', (req, res) => {
     emergencyLock: 'active',
     greywallSystem: 'hidden'
   });
+});
 
-// Business API Routes
+// Business API Status Routes (before route loading to ensure they're accessible)
 app.get('/api/auth/status', (req, res) => {
   res.json({
     service: 'auth-service',
     status: 'operational',
     timestamp: new Date().toISOString(),
-    businessLogic: 'active'
+    businessLogic: 'active',
+    endpoints: {
+      login: 'POST /api/auth/login',
+      register: 'POST /api/auth/register',
+      logout: 'POST /api/auth/logout',
+      refresh: 'POST /api/auth/refresh-token',
+      profile: 'GET /api/auth/profile'
+    }
   });
 });
 
@@ -134,62 +142,6 @@ app.get('/api/auth/health', (req, res) => {
     businessLogic: 'active'
   });
 });
-
-
-app.post('/api/auth/login', (req, res) => {
-  res.json({
-    service: 'auth-service',
-    endpoint: '/api/auth/login',
-    method: 'POST',
-    status: 'success',
-    message: 'User login endpoint',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.post('/api/auth/register', (req, res) => {
-  res.json({
-    service: 'auth-service',
-    endpoint: '/api/auth/register',
-    method: 'POST',
-    status: 'success',
-    message: 'User registration endpoint',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.post('/api/auth/logout', (req, res) => {
-  res.json({
-    service: 'auth-service',
-    endpoint: '/api/auth/logout',
-    method: 'POST',
-    status: 'success',
-    message: 'User logout endpoint',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.post('/api/auth/refresh', (req, res) => {
-  res.json({
-    service: 'auth-service',
-    endpoint: '/api/auth/refresh',
-    method: 'POST',
-    status: 'success',
-    message: 'Token refresh endpoint',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/api/auth/profile', (req, res) => {
-  res.json({
-    service: 'auth-service',
-    endpoint: '/api/auth/profile',
-    method: 'GET',
-    status: 'success',
-    message: 'User profile endpoint',
-    timestamp: new Date().toISOString()
-  });
-});});
 
 // Error handling
 app.use((err, req, res, next) => {

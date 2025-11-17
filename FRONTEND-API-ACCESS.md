@@ -33,9 +33,19 @@ All services are accessible through the API Gateway using the following base pat
 ### 3. Attendance Service
 - **Endpoint:** `/api/attendance`
 - **Examples:**
-  - `POST /api/attendance/check-in`
-  - `POST /api/attendance/check-out`
-  - `GET /api/attendance/history`
+  - `POST /api/attendance/clock-in` - Clock in with location and selfie
+  - `POST /api/attendance/clock-out` - Clock out with location and selfie
+  - `GET /api/attendance/history` - Get attendance history
+  - `GET /api/attendance/summary` - Get attendance summary
+  - `GET /api/attendance` - Get all attendance records (HR/Admin only)
+
+### 3a. Geofencing Service (Part of Attendance Service)
+- **Endpoint:** `/api/geofencing`
+- **Examples:**
+  - `POST /api/geofencing/check` - Check geofencing status
+  - `GET /api/geofencing/settings` - Get user's geofencing settings
+  - `PUT /api/geofencing/settings/:userId` - Update geofencing settings (Admin only)
+  - `GET /api/geofencing/users` - Get all users with geofencing enabled (Admin only)
 
 ### 4. Payroll Service
 - **Endpoint:** `/api/payroll`

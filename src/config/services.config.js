@@ -25,7 +25,8 @@ module.exports = {
       port: 3003,
       basePath: '/api/attendance',
       defaultUrl: process.env.ATTENDANCE_SERVICE_URL || 'http://localhost:3003',
-      envVar: 'ATTENDANCE_SERVICE_URL'
+      envVar: 'ATTENDANCE_SERVICE_URL',
+      subRoutes: ['/api/geofencing'] // Geofencing is part of attendance service
     },
     'payroll': {
       name: 'payroll-service',

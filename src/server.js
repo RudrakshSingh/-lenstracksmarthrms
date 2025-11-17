@@ -185,6 +185,7 @@ const allServices = servicesConfig.getAllServices();
 Object.entries(allServices).forEach(([key, service]) => {
   const serviceUrl = service.url;
   const basePath = service.basePath;
+  const serviceConfig = servicesConfig.services[key];
   
   // Skip WebSocket services for now (they need special handling)
   if (service.isWebSocket) {
@@ -192,15 +193,46 @@ Object.entries(allServices).forEach(([key, service]) => {
     return;
   }
   
-  // Create proxy middleware
+  // Create proxy middleware for main base path
+  const proxyMiddleware = createProxyMiddleware({
+    target: serviceUrl,
+    changeOrigin: true,
+    pathRewrite: {
+      [`^${basePath}`]: '', // Remove base path when forwarding to service
+    },
+    timeout: 30000, // 30 second timeout
+    proxyTimeout: 30000,
+    onProxyReq: (proxyReq, req, res) => {
+      // Log proxy requests
+      logger.info(`Proxying ${req.method} ${req.originalUrl} to ${serviceUrl}${req.path}`);
+    },
+    onProxyRes: (proxyRes, req, res) => {
+      // Log successful proxy responses
+      logger.info(`Proxied ${req.method} ${req.originalUrl} - Status: ${proxyRes.statusCode}`);
+    },
+    onError: (err, req, res) => {
+      logger.error(`Proxy error for ${service.name}:`, err.message);
+      if (!res.headersSent) {
+        res.status(503).json({
+          success: false,
+          message: `${service.name} is currently unavailable`,
+          error: err.message,
+          service: service.name,
+          url: serviceUrl
+        });
+      }
+    }
+  });
+  
+  // Apply proxy middleware to base path
   app.use(basePath, (req, res, next) => {
-    // Check if service URL is localhost (not deployed)
+    // Check if service URL is localhost (not deployed) in production
     if (serviceUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
       return res.status(503).json({
         success: false,
         message: `${service.name} is not available`,
         error: 'The service App Service has not been created yet',
-        hint: `Please create the ${service.name} App Service or configure ${servicesConfig.services[key].envVar} environment variable`,
+        hint: `Please create the ${service.name} App Service or configure ${serviceConfig.envVar} environment variable`,
         availableEndpoints: [
           'GET /',
           'GET /health',
@@ -209,33 +241,49 @@ Object.entries(allServices).forEach(([key, service]) => {
       });
     }
     
-    // Create proxy middleware for this request
-    const proxy = createProxyMiddleware({
-      target: serviceUrl,
-      changeOrigin: true,
-      pathRewrite: {
-        [`^${basePath}`]: '', // Remove base path when forwarding
-      },
-      onProxyReq: (proxyReq, req, res) => {
-        // Log proxy requests in development
-        if (process.env.NODE_ENV === 'development') {
-          logger.info(`Proxying ${req.method} ${req.originalUrl} to ${serviceUrl}${req.path}`);
-        }
-      },
-      onError: (err, req, res) => {
-        logger.error(`Proxy error for ${service.name}:`, err.message);
-        res.status(503).json({
-          success: false,
-          message: `${service.name} is currently unavailable`,
-          error: err.message
-        });
-      }
-    });
-    
-    proxy(req, res, next);
+    // Use the proxy middleware
+    proxyMiddleware(req, res, next);
   });
   
   logger.info(`Proxy route configured: ${basePath} -> ${serviceUrl}`);
+  
+  // Handle sub-routes (like geofencing for attendance service)
+  if (serviceConfig.subRoutes && Array.isArray(serviceConfig.subRoutes)) {
+    serviceConfig.subRoutes.forEach(subRoute => {
+      const subRouteProxy = createProxyMiddleware({
+        target: serviceUrl,
+        changeOrigin: true,
+        pathRewrite: {
+          [`^${subRoute}`]: subRoute, // Keep the path as-is when forwarding
+        },
+        timeout: 30000,
+        proxyTimeout: 30000,
+        onError: (err, req, res) => {
+          logger.error(`Proxy error for ${service.name} sub-route ${subRoute}:`, err.message);
+          if (!res.headersSent) {
+            res.status(503).json({
+              success: false,
+              message: `${service.name} is currently unavailable`,
+              error: err.message
+            });
+          }
+        }
+      });
+      
+      app.use(subRoute, (req, res, next) => {
+        if (serviceUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
+          return res.status(503).json({
+            success: false,
+            message: `${service.name} is not available`,
+            error: 'The service App Service has not been created yet'
+          });
+        }
+        subRouteProxy(req, res, next);
+      });
+      
+      logger.info(`Sub-route proxy configured: ${subRoute} -> ${serviceUrl}`);
+    });
+  }
 });
 
 // Error handling middleware

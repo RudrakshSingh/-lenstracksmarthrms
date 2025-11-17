@@ -63,4 +63,4 @@ stages:
             inputs:
               azureSubscription: 'Azure-Service-Connection'
               Action: 'Restart Azure App Service'
-              WebAppName: 'etelios-app-service-cxf6hvgjb7gah7dr'
+              WebAppName: 'Etelios-app-service'

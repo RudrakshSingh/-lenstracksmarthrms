@@ -38,7 +38,6 @@ stages:
         dockerfile: $(dockerfilePath)
         containerRegistry: $(dockerRegistryServiceConnection)
         tags: |
-          $(tag)
           latest
 
 - stage: Deploy
@@ -66,62 +65,8 @@ stages:
             inputs:
               azureSubscription: 'Azure-Service-Connection'
               appName: '$(appServiceName)'
-              containers: '$(containerRegistry)/$(imageRepository):$(tag)'
-              appSettings: |
-                [
-                  {
-                    "name": "WEBSITES_PORT",
-                    "value": "3001"
-                  },
-                  {
-                    "name": "NODE_ENV",
-                    "value": "production"
-                  },
-                  {
-                    "name": "PORT",
-                    "value": "3001"
-                  },
-                  {
-                    "name": "SERVICE_NAME",
-                    "value": "auth-service"
-                  },
-                  {
-                    "name": "MONGO_URI",
-                    "value": "$(mongo-uri)"
-                  },
-                  {
-                    "name": "JWT_SECRET",
-                    "value": "$(jwt-secret)"
-                  },
-                  {
-                    "name": "JWT_REFRESH_SECRET",
-                    "value": "$(jwt-refresh-secret)"
-                  },
-                  {
-                    "name": "JWT_EXPIRY",
-                    "value": "1h"
-                  },
-                  {
-                    "name": "JWT_REFRESH_EXPIRY",
-                    "value": "7d"
-                  },
-                  {
-                    "name": "CORS_ORIGIN",
-                    "value": "https://your-frontend.azurewebsites.net"
-                  },
-                  {
-                    "name": "REDIS_URL",
-                    "value": "redis://your-redis.redis.cache.windows.net:6380"
-                  },
-                  {
-                    "name": "LOG_LEVEL",
-                    "value": "info"
-                  },
-                  {
-                    "name": "TEST_MODE",
-                    "value": "false"
-                  }
-                ]
+              containers: '$(containerRegistry)/$(imageRepository):latest'
+              appSettings: '-WEBSITES_PORT "3001" -NODE_ENV "production" -PORT "3001" -SERVICE_NAME "auth-service" -MONGO_URI "$(mongo-uri)" -JWT_SECRET "$(jwt-secret)" -JWT_REFRESH_SECRET "$(jwt-refresh-secret)" -JWT_EXPIRY "1h" -JWT_REFRESH_EXPIRY "7d" -CORS_ORIGIN "https://your-frontend.azurewebsites.net" -REDIS_URL "redis://your-redis.redis.cache.windows.net:6380" -LOG_LEVEL "info" -TEST_MODE "false"'
 
           - task: AzureAppServiceManage@0
             displayName: 'Restart App Service'

@@ -64,8 +64,22 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Helper function to check service status
+const checkServiceStatus = async (serviceUrl) => {
+  try {
+    const axios = require('axios');
+    const response = await axios.get(`${serviceUrl}/health`, { 
+      timeout: 3000,
+      validateStatus: () => true // Don't throw on any status code
+    });
+    return response.status === 200 ? 'online' : 'unhealthy';
+  } catch (error) {
+    return 'offline';
+  }
+};
+
 // Root route - API information
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   // Use environment variables for service URLs, fallback to Azure App Service URLs
   const authServiceUrl = process.env.AUTH_SERVICE_URL || 
@@ -74,6 +88,12 @@ app.get('/', (req, res) => {
   const hrServiceUrl = process.env.HR_SERVICE_URL || 
                       process.env.HR_SERVICE_APP_URL || 
                       'https://etelios-hr-service.azurewebsites.net';
+  
+  // Check service status
+  const [authStatus, hrStatus] = await Promise.all([
+    checkServiceStatus(authServiceUrl),
+    checkServiceStatus(hrServiceUrl)
+  ]);
   
   res.json({
     service: 'Etelios API Gateway - Auth & HR Services',
@@ -91,12 +111,14 @@ app.get('/', (req, res) => {
       auth: {
         url: authServiceUrl,
         endpoint: '/api/auth',
-        status: 'active'
+        status: authStatus,
+        note: authStatus === 'offline' ? 'App Service not created or not running. Please create the App Service in Azure.' : null
       },
       hr: {
         url: hrServiceUrl,
         endpoint: '/api/hr',
-        status: 'active'
+        status: hrStatus,
+        note: hrStatus === 'offline' ? 'App Service not created or not running. Please create the App Service in Azure.' : null
       }
     },
     documentation: {
@@ -110,7 +132,7 @@ app.get('/', (req, res) => {
 });
 
 // API Documentation endpoint
-app.get('/api', (req, res) => {
+app.get('/api', async (req, res) => {
   // Use environment variables for service URLs, fallback to Azure App Service URLs
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const authServiceUrl = process.env.AUTH_SERVICE_URL || 
@@ -119,6 +141,12 @@ app.get('/api', (req, res) => {
   const hrServiceUrl = process.env.HR_SERVICE_URL || 
                       process.env.HR_SERVICE_APP_URL || 
                       'https://etelios-hr-service.azurewebsites.net';
+  
+  // Check service status
+  const [authStatus, hrStatus] = await Promise.all([
+    checkServiceStatus(authServiceUrl),
+    checkServiceStatus(hrServiceUrl)
+  ]);
   
   res.json({
     message: 'Etelios HRMS API Gateway - Auth & HR Services Only',
@@ -131,12 +159,14 @@ app.get('/api', (req, res) => {
       'auth': {
         url: authServiceUrl,
         endpoint: '/api/auth',
-        status: 'active'
+        status: authStatus,
+        note: authStatus === 'offline' ? 'App Service not created or not running' : null
       },
       'hr': {
         url: hrServiceUrl,
         endpoint: '/api/hr',
-        status: 'active'
+        status: hrStatus,
+        note: hrStatus === 'offline' ? 'App Service not created or not running' : null
       }
     },
     endpoints: {

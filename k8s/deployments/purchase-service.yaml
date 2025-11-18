@@ -1,0 +1,90 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: purchase-service
+  namespace: etelios
+  labels:
+    app: purchase-service
+    version: latest
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: purchase-service
+  template:
+    metadata:
+      labels:
+        app: purchase-service
+        version: latest
+    spec:
+      containers:
+      - name: purchase-service
+        image: eteliosacr.azurecr.io/purchase-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3008
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3008"
+        - name: SERVICE_NAME
+          value: "purchase-service"
+        - name: K8S_ENV
+          value: "true"
+        envFrom:
+        - configMapRef:
+            name: etelios-config
+        - secretRef:
+            name: etelios-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3008
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3008
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: purchase-service
+  namespace: etelios
+  labels:
+    app: purchase-service
+spec:
+  type: ClusterIP
+  selector:
+    app: purchase-service
+  ports:
+  - port: 3008
+    targetPort: 3008
+    protocol: TCP
+    name: http

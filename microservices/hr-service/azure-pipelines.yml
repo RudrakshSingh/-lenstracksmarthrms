@@ -20,7 +20,7 @@ variables:
   dockerfilePath: '$(Build.SourcesDirectory)/microservices/hr-service/Dockerfile'
   tag: '$(Build.BuildId)'
   resourceGroup: 'etelios-hrms-rg'
-  appServiceName: 'etelios-hr-service'
+  appServiceName: 'etelios-hr-service-backend-a4ayeqefdsbsc2g3'
   keyVaultName: 'etelios-keyvault'
 
 stages:

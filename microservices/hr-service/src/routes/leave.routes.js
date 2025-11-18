@@ -6,6 +6,7 @@ const { requireRole, requirePermission } = require('../middleware/rbac.middlewar
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
 const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
+const { cacheMiddleware } = require('../middleware/cache.middleware');
 
 // All routes require authentication
 router.use(authenticate);
@@ -40,6 +41,7 @@ router.get(
   '/policies/leave',
   requireRole(['hr', 'admin', 'manager', 'employee']),
   requirePermission('hr.leave.read'),
+  cacheMiddleware(600), // Cache leave policies for 10 minutes (they don't change often)
   asyncHandler(leaveController.getLeavePolicy)
 );
 

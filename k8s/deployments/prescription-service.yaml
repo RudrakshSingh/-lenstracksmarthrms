@@ -1,0 +1,90 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prescription-service
+  namespace: etelios
+  labels:
+    app: prescription-service
+    version: latest
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prescription-service
+  template:
+    metadata:
+      labels:
+        app: prescription-service
+        version: latest
+    spec:
+      containers:
+      - name: prescription-service
+        image: eteliosacr.azurecr.io/prescription-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3013
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3013"
+        - name: SERVICE_NAME
+          value: "prescription-service"
+        - name: K8S_ENV
+          value: "true"
+        envFrom:
+        - configMapRef:
+            name: etelios-config
+        - secretRef:
+            name: etelios-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3013
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3013
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prescription-service
+  namespace: etelios
+  labels:
+    app: prescription-service
+spec:
+  type: ClusterIP
+  selector:
+    app: prescription-service
+  ports:
+  - port: 3013
+    targetPort: 3013
+    protocol: TCP
+    name: http

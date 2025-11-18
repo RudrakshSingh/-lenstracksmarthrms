@@ -23,7 +23,8 @@ class ReportsService {
       
       const components = await PayrollComponent.find(query)
         .populate('employee_id', 'code roleFamily workLocation')
-        .populate('run_id');
+        .populate('run_id')
+        .lean(); // Use lean() for read-only queries
       
       const grouped = {};
       

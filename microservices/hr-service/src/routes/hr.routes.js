@@ -138,6 +138,9 @@ const updateStoreSchema = {
   })
 };
 
+// Cache middleware for GET requests
+const { cacheMiddleware } = require('../middleware/cache.middleware');
+
 // Routes
 router.get('/employees',
   authenticate,

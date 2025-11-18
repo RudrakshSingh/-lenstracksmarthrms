@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etelios-config
+  namespace: etelios
+data:
+  NODE_ENV: "production"
+  CORS_ORIGIN: "*"
+  LOG_LEVEL: "info"
+  
+  # Service URLs (using Kubernetes service names)
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  HR_SERVICE_URL: "http://hr-service:3002"
+  ATTENDANCE_SERVICE_URL: "http://attendance-service:3003"
+  PAYROLL_SERVICE_URL: "http://payroll-service:3004"
+  CRM_SERVICE_URL: "http://crm-service:3005"
+  INVENTORY_SERVICE_URL: "http://inventory-service:3006"
+  SALES_SERVICE_URL: "http://sales-service:3007"
+  PURCHASE_SERVICE_URL: "http://purchase-service:3008"
+  FINANCIAL_SERVICE_URL: "http://financial-service:3009"
+  DOCUMENT_SERVICE_URL: "http://document-service:3010"
+  SERVICE_MANAGEMENT_URL: "http://service-management:3011"
+  CPP_SERVICE_URL: "http://cpp-service:3012"
+  PRESCRIPTION_SERVICE_URL: "http://prescription-service:3013"
+  ANALYTICS_SERVICE_URL: "http://analytics-service:3014"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:3015"
+  MONITORING_SERVICE_URL: "http://monitoring-service:3016"
+  TENANT_REGISTRY_SERVICE_URL: "http://tenant-registry-service:3020"
+  REALTIME_SERVICE_URL: "http://realtime-service:3021"
+  
+  # Rate Limiting
+  RATE_LIMIT_WINDOW_MS: "900000"
+  RATE_LIMIT_MAX_REQUESTS: "1000"
+  
+  # File Upload
+  MAX_FILE_SIZE: "10485760"
+  
+  # Enable/Disable Features
+  ENABLE_ROLE_SEEDING: "false"
+

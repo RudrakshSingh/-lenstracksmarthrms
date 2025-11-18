@@ -1,0 +1,2 @@
+./k8s/build-and-push.sh: line 17: declare: -A: invalid option
+declare: usage: declare [-afFirtx] [-p] [name[=value] ...]

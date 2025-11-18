@@ -33,27 +33,26 @@ const logger = winston.createLogger({
   ]
 });
 
-// Security middleware
-app.use(helmet());
+// Production-grade security middleware
+const { applyProductionSecurity, rateLimiters } = require('./middleware/production-security');
+const securityConfig = applyProductionSecurity(app);
+
+// CORS configuration
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
 }));
-app.use(compression());
 
-// Rate limiting - optimized for performance
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false, // Disable `X-RateLimit-*` headers
-  // Skip rate limiting for health checks
-  skip: (req) => {
-    return req.path === '/health' || req.path === '/';
-  }
-});
-app.use(limiter);
+// Apply rate limiting based on endpoint type
+app.use('/api/auth/login', securityConfig.rateLimiters.auth);
+app.use('/api/auth/register', securityConfig.rateLimiters.auth);
+app.use('/api/auth/change-password', securityConfig.rateLimiters.sensitive);
+app.use('/api/auth/reset-password', securityConfig.rateLimiters.sensitive);
+app.use('/api', securityConfig.rateLimiters.api);
+app.use('/', securityConfig.rateLimiters.public);
 
 // Body parsing middleware - optimized for performance
 app.use(express.json({ 

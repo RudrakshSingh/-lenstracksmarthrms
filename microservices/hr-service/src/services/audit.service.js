@@ -73,7 +73,8 @@ class AuditService {
         .populate('actor_id', 'name email')
         .sort({ timestamp: -1 })
         .limit(limit * 1)
-        .skip((page - 1) * limit);
+        .skip((page - 1) * limit)
+        .lean(); // Use lean() for read-only queries
       
       const total = await AuditLog.countDocuments(query);
       

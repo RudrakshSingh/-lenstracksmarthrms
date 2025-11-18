@@ -153,10 +153,19 @@ module.exports = {
 
   /**
    * Get service URL from environment variable or default
+   * In Kubernetes, uses service names (e.g., http://auth-service:3001)
    */
   getServiceUrl(serviceKey) {
     const service = this.services[serviceKey];
     if (!service) return null;
+    
+    // Check if running in Kubernetes
+    const isKubernetes = process.env.KUBERNETES_SERVICE_HOST || process.env.K8S_ENV === 'true';
+    
+    // If in Kubernetes and no env var is set, use Kubernetes service name
+    if (isKubernetes && !process.env[service.envVar]) {
+      return `http://${service.name}:${service.port}`;
+    }
     
     return process.env[service.envVar] || service.defaultUrl;
   },

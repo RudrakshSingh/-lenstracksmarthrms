@@ -55,6 +55,9 @@ const createEmployee = async (employeeData, createdBy) => {
 
     await employee.save();
     
+    // Invalidate employee list cache
+    await cache.invalidatePattern('employees:*');
+    
     // Record audit log
     try {
       if (auditUtils.logUserManagementEvent) {
@@ -89,56 +92,63 @@ const createEmployee = async (employeeData, createdBy) => {
  */
 const getEmployees = async (filters = {}, page = 1, limit = 10) => {
   try {
-    const query = { isDeleted: false };
+    // Generate cache key based on filters and pagination
+    const cacheKey = `employees:${JSON.stringify(filters)}:${page}:${limit}`;
+    
+    // Try to get from cache first (60 second TTL)
+    return await cache.getOrSet(cacheKey, async () => {
+      const query = { isDeleted: false };
 
-    // Apply filters
-    if (filters.status) {
-      query.status = filters.status;
-    }
-    if (filters.store) {
-      query.store = filters.store;
-    }
-    if (filters.role) {
-      query.role = filters.role;
-    }
-    if (filters.department) {
-      query.department = new RegExp(filters.department, 'i');
-    }
-    if (filters.search) {
-      query.$or = [
-        { firstName: new RegExp(filters.search, 'i') },
-        { lastName: new RegExp(filters.search, 'i') },
-        { email: new RegExp(filters.search, 'i') },
-        { employeeId: new RegExp(filters.search, 'i') }
-      ];
-    }
-
-    const skip = (page - 1) * limit;
-
-    const [employees, total] = await Promise.all([
-      User.find(query)
-        .populate('role', 'name permissions')
-        .populate('store', 'name address')
-        .select('-password -refreshToken')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      User.countDocuments(query)
-    ]);
-
-    const totalPages = Math.ceil(total / limit);
-
-    return {
-      employees,
-      pagination: {
-        currentPage: page,
-        totalPages,
-        totalItems: total,
-        itemsPerPage: limit,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1
+      // Apply filters
+      if (filters.status) {
+        query.status = filters.status;
       }
-    };
+      if (filters.store) {
+        query.store = filters.store;
+      }
+      if (filters.role) {
+        query.role = filters.role;
+      }
+      if (filters.department) {
+        query.department = new RegExp(filters.department, 'i');
+      }
+      if (filters.search) {
+        query.$or = [
+          { firstName: new RegExp(filters.search, 'i') },
+          { lastName: new RegExp(filters.search, 'i') },
+          { email: new RegExp(filters.search, 'i') },
+          { employeeId: new RegExp(filters.search, 'i') }
+        ];
+      }
+
+      const skip = (page - 1) * limit;
+
+      const [employees, total] = await Promise.all([
+        User.find(query)
+          .populate('role', 'name permissions')
+          .populate('store', 'name address')
+          .select('-password -refreshToken')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(), // Use lean() for read-only queries - returns plain JS objects (faster)
+        User.countDocuments(query)
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        employees,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems: total,
+          itemsPerPage: limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      };
+    }, 60); // Cache for 60 seconds
   } catch (error) {
     logger.error('Error in getEmployees service', { error: error.message });
     throw error;

@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  tenant-management-service:
+    build: .
+    ports:
+      - "3017:3017"
+    environment:
+      - NODE_ENV=development
+      - PORT=3017
+      - SERVICE_NAME=tenant-management-service
+      - MONGO_URI=mongodb://mongo:27017/etelios_tenant_management
+      - REDIS_URL=redis://redis:6379
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - CORS_ORIGIN=*
+      - BASE_DOMAIN=yourdomain.com
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - etelios-network
+
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "27018:27017"
+    volumes:
+      - tenant-management_mongo_data:/data/db
+    networks:
+      - etelios-network
+
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - tenant-management_redis_data:/data
+    networks:
+      - etelios-network
+
+volumes:
+  tenant-management_mongo_data:
+  tenant-management_redis_data:
+
+networks:
+  etelios-network:
+    external: true
+

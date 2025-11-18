@@ -16,11 +16,11 @@ variables:
   serviceName: 'hr-service'
   dockerRegistryServiceConnection: 'AzureContainerRegistry'
   imageRepository: 'hr-service'
-  containerRegistry: 'eteliosregistry.azurecr.io'
+  containerRegistry: 'eteliosacr.azurecr.io'  # Updated to use actual ACR
   dockerfilePath: '$(Build.SourcesDirectory)/microservices/hr-service/Dockerfile'
   tag: '$(Build.BuildId)'
   resourceGroup: 'etelios-hrms-rg'
-  appServiceName: 'etelios-hr-service-backend-a4ayeqefdsbsc2g3'
+  appServiceName: 'etelios-hr-service'  # Updated to standard name
   keyVaultName: 'etelios-keyvault'
 
 stages:

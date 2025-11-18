@@ -16,11 +16,11 @@ variables:
   serviceName: 'auth-service'
   dockerRegistryServiceConnection: 'AzureContainerRegistry'
   imageRepository: 'auth-service'
-  containerRegistry: 'eteliosregistry.azurecr.io'
+  containerRegistry: 'eteliosacr.azurecr.io'  # Updated to use actual ACR
   dockerfilePath: '$(Build.SourcesDirectory)/microservices/auth-service/Dockerfile'
   tag: '$(Build.BuildId)'
   resourceGroup: 'etelios-hrms-rg'
-  appServiceName: 'etelios-auth-service-h8btakd4byhncmgc'
+  appServiceName: 'etelios-auth-service'  # Updated to standard name
   keyVaultName: 'etelios-keyvault'
 
 stages:

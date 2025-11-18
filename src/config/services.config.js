@@ -10,14 +10,18 @@ module.exports = {
       name: 'auth-service',
       port: 3001,
       basePath: '/api/auth',
-      defaultUrl: 'https://etelios-auth-service-h8btakd4byhncmgc.centralindia-01.azurewebsites.net',
+      // Default URL - can be overridden via AUTH_SERVICE_URL environment variable
+      // DevOps will provide the actual App Service URL after creation
+      defaultUrl: process.env.AUTH_SERVICE_URL || 'https://etelios-auth-service.azurewebsites.net',
       envVar: 'AUTH_SERVICE_URL'
     },
     'hr': {
       name: 'hr-service',
       port: 3002,
       basePath: '/api/hr',
-      defaultUrl: 'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net',
+      // Default URL - can be overridden via HR_SERVICE_URL environment variable
+      // DevOps will provide the actual App Service URL after creation
+      defaultUrl: process.env.HR_SERVICE_URL || 'https://etelios-hr-service.azurewebsites.net',
       envVar: 'HR_SERVICE_URL',
       subRoutes: ['/api/transfers', '/api/hr-letter'] // Additional HR service routes mounted at different paths
     },
@@ -25,14 +29,14 @@ module.exports = {
       name: 'hr-service',
       port: 3002,
       basePath: '/api/transfers',
-      defaultUrl: 'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net',
+      defaultUrl: process.env.HR_SERVICE_URL || 'https://etelios-hr-service.azurewebsites.net',
       envVar: 'HR_SERVICE_URL'
     },
     'hr-letters': {
       name: 'hr-service',
       port: 3002,
       basePath: '/api/hr-letter',
-      defaultUrl: 'https://etelios-hr-service-backend-a4ayeqefdsbsc2g3.centralindia-01.azurewebsites.net',
+      defaultUrl: process.env.HR_SERVICE_URL || 'https://etelios-hr-service.azurewebsites.net',
       envVar: 'HR_SERVICE_URL'
     },
     'attendance': {
@@ -148,6 +152,13 @@ module.exports = {
       defaultUrl: process.env.REALTIME_SERVICE_URL || 'http://localhost:3021',
       envVar: 'REALTIME_SERVICE_URL',
       isWebSocket: true
+    },
+    'tenant-management': {
+      name: 'tenant-management-service',
+      port: 3017,
+      basePath: '/api/admin/v1',
+      defaultUrl: process.env.TENANT_MANAGEMENT_SERVICE_URL || 'http://localhost:3017',
+      envVar: 'TENANT_MANAGEMENT_SERVICE_URL'
     }
   },
 

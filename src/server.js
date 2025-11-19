@@ -115,33 +115,60 @@ const checkServiceStatus = async (serviceUrl) => {
   }
 };
 
-// Root route - API information
-app.get('/', async (req, res) => {
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
+// Service registry for dynamic management
+const serviceRegistry = {};
+
+// Initialize service registry from config
+function initializeServiceRegistry() {
   const allServices = servicesConfig.getAllServices();
-  
-  // Check status for all services
-  const serviceStatuses = {};
-  const statusChecks = Object.entries(allServices).map(async ([key, service]) => {
+  Object.entries(allServices).forEach(([key, service]) => {
+    serviceRegistry[key] = {
+      name: service.name,
+      port: service.port,
+      basePath: service.basePath,
+      url: service.url,
+      isWebSocket: service.isWebSocket || false,
+      status: 'unknown',
+      note: null,
+      lastChecked: null
+    };
+  });
+}
+
+// Update service statuses in registry
+async function updateServiceStatuses() {
+  const updatePromises = Object.entries(serviceRegistry).map(async ([key, service]) => {
     if (!service.isWebSocket) {
       const status = await checkServiceStatus(service.url);
-      serviceStatuses[key] = {
-        ...service,
-        status: status,
-        note: status === 'offline' && service.url.includes('localhost') 
-          ? 'Service not deployed to Azure yet. Configure service URL via environment variable.' 
-          : null
-      };
+      serviceRegistry[key].status = status;
+      serviceRegistry[key].lastChecked = new Date().toISOString();
+      serviceRegistry[key].note = status === 'offline' && service.url.includes('localhost') 
+        ? 'Service not deployed to Azure yet. Configure service URL via environment variable.' 
+        : null;
     } else {
-      serviceStatuses[key] = {
-        ...service,
-        status: 'unknown',
-        note: 'WebSocket service - status check not available'
-      };
+      serviceRegistry[key].status = 'unknown';
+      serviceRegistry[key].note = 'WebSocket service - status check not available';
+      serviceRegistry[key].lastChecked = new Date().toISOString();
     }
   });
   
-  await Promise.all(statusChecks);
+  await Promise.all(updatePromises);
+  logger.info('Service statuses updated');
+}
+
+// Initialize registry on startup (before routes)
+initializeServiceRegistry();
+
+// Variable to hold status update interval (started after server is ready)
+let statusUpdateInterval = null;
+
+// Root route - API information (redirects to /api for consistency)
+app.get('/', async (req, res) => {
+  // Redirect to /api endpoint for service discovery
+  const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
+  
+  // Quick status update (non-blocking)
+  updateServiceStatuses().catch(err => logger.error('Error updating service statuses:', err));
   
   res.json({
     service: 'Etelios API Gateway - All Microservices',
@@ -152,65 +179,59 @@ app.get('/', async (req, res) => {
     endpoints: {
       health: '/health',
       api: '/api',
-      services: Object.values(serviceStatuses).map(s => s.basePath)
+      admin: '/admin/services'
     },
-    services: serviceStatuses,
-    documentation: {
-      swagger: '/api-docs',
-      postman: '/postman/HRMS-API-Collection.json',
-      frontendGuide: 'See FRONTEND-API-ACCESS.md for frontend integration guide'
-    },
+    note: 'Use /api endpoint for complete service discovery',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// API Documentation endpoint
+// API Documentation endpoint - Frontend Discovery Endpoint
 app.get('/api', async (req, res) => {
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
-  const allServices = servicesConfig.getAllServices();
+  const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
   
-  // Check status for all services
-  const serviceStatuses = {};
-  const statusChecks = Object.entries(allServices).map(async ([key, service]) => {
-    if (!service.isWebSocket) {
-      const status = await checkServiceStatus(service.url);
-      serviceStatuses[key] = {
-        ...service,
-        status: status,
-        note: status === 'offline' && service.url.includes('localhost') 
-          ? 'Service not deployed to Azure yet' 
-          : null
-      };
-    } else {
-      serviceStatuses[key] = {
-        ...service,
-        status: 'unknown',
-        note: 'WebSocket service'
-      };
-    }
+  // Update service statuses before responding (with timeout to avoid blocking)
+  const statusUpdatePromise = updateServiceStatuses();
+  const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000)); // Max 2 seconds
+  await Promise.race([statusUpdatePromise, timeoutPromise]);
+  
+  // Format services for frontend
+  const formattedServices = {};
+  Object.entries(serviceRegistry).forEach(([key, service]) => {
+    formattedServices[key] = {
+      name: service.name,
+      port: service.port,
+      basePath: service.basePath,
+      url: service.url,
+      isWebSocket: service.isWebSocket,
+      status: service.status,
+      note: service.note
+    };
   });
   
-  await Promise.all(statusChecks);
+  // Get all service base paths for endpoints list
+  const serviceEndpoints = Object.values(serviceRegistry).map(s => s.basePath);
   
   res.json({
-    message: 'Etelios HRMS & ERP API Gateway',
-    version: '1.0.0',
-    gateway: {
-      url: baseUrl,
-      status: 'operational'
+    "service": "Etelios API Gateway - All Microservices",
+    "version": "1.0.0",
+    "status": "operational",
+    "message": "Welcome to Etelios HRMS & ERP API Gateway",
+    "baseUrl": baseUrl,
+    "endpoints": {
+      "health": "/health",
+      "api": "/api",
+      "services": serviceEndpoints
     },
-    services: serviceStatuses,
-    endpoints: {
-      'health': '/health',
-      'api': '/api',
-      ...Object.fromEntries(Object.entries(allServices).map(([key, s]) => [key, s.basePath]))
+    "services": formattedServices,
+    "documentation": {
+      "swagger": "/api-docs",
+      "postman": "/postman/HRMS-API-Collection.json",
+      "frontendGuide": "See FRONTEND-API-ACCESS.md"
     },
-    documentation: {
-      'swagger': '/api-docs',
-      'postman': '/postman/HRMS-API-Collection.json',
-      'frontendGuide': 'See FRONTEND-API-ACCESS.md'
-    }
+    "timestamp": new Date().toISOString(),
+    "environment": process.env.NODE_ENV || "development"
   });
 });
 
@@ -225,6 +246,8 @@ const sortedServices = Object.entries(allServices).sort((a, b) => {
   return b[1].basePath.length - a[1].basePath.length;
 });
 
+// Create proxy middleware for each service
+// IMPORTANT: Order matters - more specific paths should be registered first
 sortedServices.forEach(([key, service]) => {
   const serviceUrl = service.url;
   const basePath = service.basePath;
@@ -277,6 +300,13 @@ sortedServices.forEach(([key, service]) => {
     },
     onError: (err, req, res) => {
       logger.error(`[Proxy Error] ${service.name} - ${req.method} ${req.originalUrl}:`, err.message);
+      
+      // Update service status in registry
+      if (serviceRegistry[key]) {
+        serviceRegistry[key].status = 'offline';
+        serviceRegistry[key].lastChecked = new Date().toISOString();
+      }
+      
       if (!res.headersSent) {
         res.status(503).json({
           success: false,
@@ -295,6 +325,23 @@ sortedServices.forEach(([key, service]) => {
   // Express app.use('/api/auth', ...) automatically matches /api/auth and all sub-paths like /api/auth/status
   // No wildcard needed - Express handles this automatically
   app.use(basePath, (req, res, next) => {
+    // Check service status from registry
+    const registryService = serviceRegistry[key];
+    if (registryService && registryService.status === 'offline' && process.env.NODE_ENV === 'production') {
+      return res.status(503).json({
+        success: false,
+        message: `${service.name} is currently offline`,
+        error: 'Service is not available',
+        hint: `Check service status at /api endpoint`,
+        availableEndpoints: [
+          'GET /',
+          'GET /health',
+          'GET /api',
+          'GET /admin/services'
+        ]
+      });
+    }
+    
     // Log the request for debugging
     logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${serviceUrl}${req.path}`);
     
@@ -330,14 +377,94 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Admin endpoint for service monitoring
+app.get('/admin/services', async (req, res) => {
+  // Update statuses before responding
+  await updateServiceStatuses();
+  
+  const serviceStatus = Object.entries(serviceRegistry).map(([key, service]) => ({
+    name: key,
+    url: service.url,
+    status: service.status,
+    basePath: service.basePath,
+    isWebSocket: service.isWebSocket,
+    lastChecked: service.lastChecked,
+    note: service.note
+  }));
+  
+  const onlineCount = serviceStatus.filter(s => s.status === 'online').length;
+  const offlineCount = serviceStatus.filter(s => s.status === 'offline').length;
+  const unknownCount = serviceStatus.filter(s => s.status === 'unknown').length;
+  
+  res.json({
+    totalServices: serviceStatus.length,
+    onlineServices: onlineCount,
+    offlineServices: offlineCount,
+    unknownServices: unknownCount,
+    services: serviceStatus,
+    lastUpdated: new Date().toISOString()
+  });
+});
+
+// Manual service registration endpoint (for admin use)
+app.post('/admin/services', (req, res) => {
+  const { name, url, basePath, port, isWebSocket } = req.body;
+  
+  if (!name || !url || !basePath) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required fields: name, url, basePath'
+    });
+  }
+  
+  serviceRegistry[name] = {
+    name: `${name}-service`,
+    port: port || 3000,
+    basePath: basePath,
+    url: url,
+    isWebSocket: isWebSocket || false,
+    status: 'unknown',
+    note: 'Manually added service',
+    lastChecked: null
+  };
+  
+  logger.info(`Service ${name} manually added to registry`);
+  
+  res.json({
+    success: true,
+    message: `Service ${name} added successfully`,
+    service: serviceRegistry[name]
+  });
+});
+
+// Remove service endpoint (for admin use)
+app.delete('/admin/services/:name', (req, res) => {
+  const { name } = req.params;
+  
+  if (!serviceRegistry[name]) {
+    return res.status(404).json({
+      success: false,
+      error: `Service ${name} not found in registry`
+    });
+  }
+  
+  delete serviceRegistry[name];
+  logger.info(`Service ${name} removed from registry`);
+  
+  res.json({
+    success: true,
+    message: `Service ${name} removed successfully`
+  });
+});
+
 // 404 handler
 app.use('*', (req, res) => {
-  const allServices = servicesConfig.getAllServices();
   const availableEndpoints = [
     'GET /',
     'GET /health',
     'GET /api',
-    ...Object.values(allServices).map(s => `${s.basePath}/*`)
+    'GET /admin/services',
+    ...Object.values(serviceRegistry).map(s => `${s.basePath}/*`)
   ];
   
   res.status(404).json({
@@ -356,11 +483,12 @@ const SERVER_PORT = process.env.PORT || process.env.WEBSITES_PORT || PORT;
 
 let server;
 try {
-  server = app.listen(SERVER_PORT, '0.0.0.0', () => {
+  server = app.listen(SERVER_PORT, '0.0.0.0', async () => {
     logger.info(`🚀 Etelios Main Server started on port ${SERVER_PORT}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Health check: http://0.0.0.0:${SERVER_PORT}/health`);
     logger.info(`API docs: http://0.0.0.0:${SERVER_PORT}/api`);
+    logger.info(`Admin services: http://0.0.0.0:${SERVER_PORT}/admin/services`);
     
     // Log all configured proxy routes
     const allServices = servicesConfig.getAllServices();
@@ -368,6 +496,20 @@ try {
     Object.entries(allServices).forEach(([key, service]) => {
       logger.info(`  - ${service.basePath} -> ${service.url}`);
     });
+    
+    // Initial service status update
+    logger.info('Performing initial service status check...');
+    await updateServiceStatuses();
+    logger.info('Initial service status check completed');
+    
+    // Start periodic status updates (every 30 seconds)
+    statusUpdateInterval = setInterval(async () => {
+      await updateServiceStatuses();
+      const statusSummary = Object.entries(serviceRegistry)
+        .map(([key, service]) => `${key}: ${service.status}`)
+        .join(', ');
+      logger.info(`Service statuses: ${statusSummary}`);
+    }, 30000);
   });
 
   // Handle server errors
@@ -410,6 +552,9 @@ process.on('unhandledRejection', (reason, promise) => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received. Shutting down gracefully.');
+  if (statusUpdateInterval) {
+    clearInterval(statusUpdateInterval);
+  }
   if (server) {
     server.close(() => {
       logger.info('Process terminated');
@@ -422,6 +567,9 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received. Shutting down gracefully.');
+  if (statusUpdateInterval) {
+    clearInterval(statusUpdateInterval);
+  }
   if (server) {
     server.close(() => {
       logger.info('Process terminated');

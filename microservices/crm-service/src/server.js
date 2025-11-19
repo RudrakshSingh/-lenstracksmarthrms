@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
@@ -22,6 +25,9 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,8 +35,18 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'crm_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('crm-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) logger.info('crm-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('crm-service: Database connection failed', { error: error.message });
     process.exit(1);
@@ -39,32 +55,29 @@ const connectDB = async () => {
 
 // Load routes with COMPLETE logic
 const loadRoutes = () => {
-  console.log('🔧 Loading crm-service routes with COMPLETE logic...');
-  
   try {
     const crmRoutes = require('./routes/crm.routes.js');
     app.use('/api/crm', apiRateLimit, crmRoutes);
-    console.log('✅ crm.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('crm.routes.js loaded');
   } catch (error) {
-    console.log('❌ crm.routes.js failed:', error.message);
+    logger.error('crm.routes.js failed:', error.message);
   }
   try {
     const engagementRoutes = require('./routes/engagement.routes.js');
     app.use('/api/engagement', apiRateLimit, engagementRoutes);
-    console.log('✅ engagement.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('engagement.routes.js loaded');
   } catch (error) {
-    console.log('❌ engagement.routes.js failed:', error.message);
+    logger.error('engagement.routes.js failed:', error.message);
   }
   try {
     const incentiveRoutes = require('./routes/incentive.routes.js');
     app.use('/api/incentive', apiRateLimit, incentiveRoutes);
-    console.log('✅ incentive.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('incentive.routes.js loaded');
   } catch (error) {
-    console.log('❌ incentive.routes.js failed:', error.message);
+    logger.error('incentive.routes.js failed:', error.message);
   }
 
-  console.log('✅ crm-service routes loaded with COMPLETE logic');
-};
+  };
 
 // Health check
 app.get('/health', (req, res) => {
@@ -222,9 +235,7 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`crm-service running on port ${PORT}`);
-      console.log(`🚀 crm-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 3, Controllers: 3, Models: 11`);
-    });
+      });
   } catch (error) {
     logger.error('crm-service startup failed', { error: error.message });
     process.exit(1);

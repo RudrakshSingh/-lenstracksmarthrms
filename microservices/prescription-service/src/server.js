@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
@@ -22,6 +25,9 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,8 +35,18 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'prescription_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('prescription-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) logger.info('prescription-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('prescription-service: Database connection failed', { error: error.message });
     process.exit(1);
@@ -39,31 +55,27 @@ const connectDB = async () => {
 
 // Load routes with COMPLETE logic
 const loadRoutes = () => {
-  console.log('🔧 Loading prescription-service routes with COMPLETE logic...');
-  
   try {
     const prescriptionRoutes = require('./routes/prescription.routes.js');
     app.use('/api/prescription', apiRateLimit, prescriptionRoutes);
-    console.log('✅ prescription.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('prescription.routes.js loaded');
   } catch (error) {
-    console.log('❌ prescription.routes.js failed:', error.message);
+    logger.error('prescription.routes.js failed:', error.message);
   }
   try {
     const manualRegistrationRoutes = require('./routes/manualRegistration.routes.js');
-    app.use('/api/manual-registration', apiRateLimit, manual-registrationRoutes);
-    console.log('✅ manualRegistration.routes.js loaded with COMPLETE logic');
+    app.use('/api/manual-registration', apiRateLimit, manualRegistrationRoutes);
+    if (!isProduction) logger.info('manualRegistration.routes.js loaded');
   } catch (error) {
-    console.log('❌ manualRegistration.routes.js failed:', error.message);
+    logger.error('manualRegistration.routes.js failed:', error.message);
   }
   try {
     const manualRegisterRoutes = require('./routes/manualRegister.routes.js');
-    app.use('/api/manual-register', apiRateLimit, manual-registerRoutes);
-    console.log('✅ manualRegister.routes.js loaded with COMPLETE logic');
+    app.use('/api/manual-register', apiRateLimit, manualRegisterRoutes);
+    if (!isProduction) logger.info('manualRegister.routes.js loaded');
   } catch (error) {
-    console.log('❌ manualRegister.routes.js failed:', error.message);
+    logger.error('manualRegister.routes.js failed:', error.message);
   }
-
-  console.log('✅ prescription-service routes loaded with COMPLETE logic');
 };
 
 // Health check
@@ -199,9 +211,7 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`prescription-service running on port ${PORT}`);
-      console.log(`🚀 prescription-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 3, Controllers: 3, Models: 6`);
-    });
+      });
   } catch (error) {
     logger.error('prescription-service startup failed', { error: error.message });
     process.exit(1);

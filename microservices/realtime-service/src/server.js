@@ -1,4 +1,6 @@
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const { createServer } = require('http');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -8,6 +10,7 @@ const realtimeService = require('./services/realtime.service');
 const logger = require('./utils/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 const server = createServer(app);
 
 const PORT = process.env.PORT || 3021;
@@ -28,6 +31,9 @@ realtimeService.initialize(server)
     logger.error('Failed to initialize real-time service:', error);
     process.exit(1);
   });
+
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -93,7 +99,7 @@ process.on('SIGINT', async () => {
 
 // Start server
 server.listen(PORT, () => {
-  logger.info(`🚀 Real-time Service started on port ${PORT}`, {
+  if (!isProduction) logger.info(`Real-time Service started on port ${PORT}`, {
     port: PORT,
     environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString()

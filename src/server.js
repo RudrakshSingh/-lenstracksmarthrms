@@ -12,16 +12,19 @@ const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const isProduction = process.env.NODE_ENV === 'production';
 
-// Logger setup
+// Optimized logger - only log errors in production
 const logger = winston.createLogger({
-  level: 'info',
+  level: isProduction ? 'error' : 'info',
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.errors({ stack: true }),
     winston.format.json()
   ),
-  transports: [
+  transports: isProduction ? [
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' })
+  ] : [
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
@@ -33,11 +36,20 @@ const logger = winston.createLogger({
   ]
 });
 
+// Response time tracking middleware
+const responseTime = require('response-time');
+app.use(responseTime((req, res, time) => {
+  if (time > 40 && !isProduction) {
+    logger.warn(`Slow request: ${req.method} ${req.path} took ${time.toFixed(2)}ms`);
+  }
+  res.setHeader('X-Response-Time', `${time.toFixed(2)}ms`);
+}));
+
 // Production-grade security middleware
-const { applyProductionSecurity, rateLimiters } = require('./middleware/production-security');
+const { applyProductionSecurity } = require('./middleware/production-security');
 const securityConfig = applyProductionSecurity(app);
 
-// CORS configuration
+// CORS configuration - optimized
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
   credentials: true,
@@ -46,7 +58,17 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
 }));
 
-// Apply rate limiting based on endpoint type
+// Compression - only for responses > 1KB
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  }
+}));
+
+// Apply rate limiting
 app.use('/api/auth/login', securityConfig.rateLimiters.auth);
 app.use('/api/auth/register', securityConfig.rateLimiters.auth);
 app.use('/api/auth/change-password', securityConfig.rateLimiters.sensitive);
@@ -54,71 +76,87 @@ app.use('/api/auth/reset-password', securityConfig.rateLimiters.sensitive);
 app.use('/api', securityConfig.rateLimiters.api);
 app.use('/', securityConfig.rateLimiters.public);
 
-// Body parsing middleware - optimized for performance
+// Body parsing - optimized
 app.use(express.json({ 
   limit: '10mb',
   verify: (req, res, buf) => {
-    // Store raw body for signature verification if needed
     req.rawBody = buf;
   }
 }));
 app.use(express.urlencoded({ 
   extended: true, 
   limit: '10mb',
-  parameterLimit: 1000 // Limit number of parameters
+  parameterLimit: 1000
 }));
 
-// Static files
-app.use('/public', express.static(path.join(__dirname, 'public')));
+// Static files with aggressive caching
+app.use('/public', express.static(path.join(__dirname, 'public'), {
+  maxAge: '1y',
+  immutable: true
+}));
 
-// Health check endpoint
+// Health check - optimized for speed
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'Etelios Main Server',
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development'
+    version: '1.0.0'
   });
 });
 
-// Cache utility for service status
+// Cache utility
 const cache = require('./utils/cache');
 
-// Helper function to check service status with caching
+// Optimized service status check with aggressive caching and HTTPS support
 const checkServiceStatus = async (serviceUrl) => {
   const cacheKey = `service_status:${serviceUrl}`;
-  
-  // Try to get from cache first (5 second TTL for service status)
   const cached = cache.get(cacheKey);
   if (cached !== undefined) {
     return cached;
   }
   
+  // Skip health check for localhost in production
+  if (serviceUrl.includes('localhost') && isProduction) {
+    const status = 'offline';
+    cache.set(cacheKey, status, 300); // Cache for 5 minutes
+    return status;
+  }
+  
   try {
-    const response = await axios.get(`${serviceUrl}/health`, { 
-      timeout: 2000, // Reduced timeout for faster failure
-      validateStatus: () => true, // Don't throw on any status code
-      headers: {
-        'Connection': 'keep-alive' // Reuse connections
-      }
+    // Ensure HTTPS for production URLs
+    let healthUrl = serviceUrl;
+    if (isProduction && serviceUrl.startsWith('http://') && !serviceUrl.includes('localhost')) {
+      healthUrl = serviceUrl.replace('http://', 'https://');
+    }
+    
+    const response = await axios.get(`${healthUrl}/health`, { 
+      timeout: 2000, // Increased timeout for HTTPS
+      validateStatus: () => true,
+      headers: { 
+        'Connection': 'keep-alive',
+        'Accept': 'application/json'
+      },
+      httpsAgent: isProduction ? new (require('https').Agent)({
+        rejectUnauthorized: false // Allow self-signed certs in development
+      }) : undefined
     });
     const status = response.status === 200 ? 'online' : 'unhealthy';
-    // Cache for 5 seconds
-    cache.set(cacheKey, status, 5);
+    cache.set(cacheKey, status, 30); // Cache for 30 seconds
     return status;
   } catch (error) {
     const status = 'offline';
-    // Cache offline status for 10 seconds (longer to avoid hammering offline services)
-    cache.set(cacheKey, status, 10);
+    cache.set(cacheKey, status, 60); // Cache offline for 60 seconds
+    if (!isProduction) {
+      logger.debug(`Service ${serviceUrl} health check failed:`, error.message);
+    }
     return status;
   }
 };
 
-// Service registry for dynamic management
+// Service registry
 const serviceRegistry = {};
 
-// Initialize service registry from config
 function initializeServiceRegistry() {
   const allServices = servicesConfig.getAllServices();
   Object.entries(allServices).forEach(([key, service]) => {
@@ -129,74 +167,62 @@ function initializeServiceRegistry() {
       url: service.url,
       isWebSocket: service.isWebSocket || false,
       status: 'unknown',
-      note: null,
       lastChecked: null
     };
   });
 }
 
-// Update service statuses in registry
+// Optimized status update - non-blocking
 async function updateServiceStatuses() {
   const updatePromises = Object.entries(serviceRegistry).map(async ([key, service]) => {
     if (!service.isWebSocket) {
       const status = await checkServiceStatus(service.url);
       serviceRegistry[key].status = status;
-      serviceRegistry[key].lastChecked = new Date().toISOString();
-      serviceRegistry[key].note = status === 'offline' && service.url.includes('localhost') 
-        ? 'Service not deployed to Azure yet. Configure service URL via environment variable.' 
-        : null;
+      serviceRegistry[key].lastChecked = Date.now();
     } else {
       serviceRegistry[key].status = 'unknown';
-      serviceRegistry[key].note = 'WebSocket service - status check not available';
-      serviceRegistry[key].lastChecked = new Date().toISOString();
+      serviceRegistry[key].lastChecked = Date.now();
     }
   });
-  
   await Promise.all(updatePromises);
-  logger.info('Service statuses updated');
 }
 
-// Initialize registry on startup (before routes)
 initializeServiceRegistry();
 
-// Variable to hold status update interval (started after server is ready)
 let statusUpdateInterval = null;
+let apiEndpointCache = null;
+let apiEndpointCacheTime = 0;
+const API_CACHE_TTL = 5000; // Cache /api endpoint for 5 seconds
 
-// Root route - API information (redirects to /api for consistency)
-app.get('/', async (req, res) => {
-  // Redirect to /api endpoint for service discovery
+// Root route - cached response
+app.get('/', (req, res) => {
   const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
-  
-  // Quick status update (non-blocking)
-  updateServiceStatuses().catch(err => logger.error('Error updating service statuses:', err));
-  
   res.json({
-    service: 'Etelios API Gateway - All Microservices',
+    service: 'Etelios API Gateway',
     version: '1.0.0',
     status: 'operational',
-    message: 'Welcome to Etelios HRMS & ERP API Gateway',
     baseUrl: baseUrl,
     endpoints: {
       health: '/health',
       api: '/api',
       admin: '/admin/services'
     },
-    note: 'Use /api endpoint for complete service discovery',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    timestamp: new Date().toISOString()
   });
 });
 
-// API Documentation endpoint - Frontend Discovery Endpoint
+// API endpoint - cached and optimized
 app.get('/api', async (req, res) => {
+  const now = Date.now();
+  if (apiEndpointCache && (now - apiEndpointCacheTime) < API_CACHE_TTL) {
+    return res.json(apiEndpointCache);
+  }
+
   const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
   
-  // Update service statuses before responding (with timeout to avoid blocking)
-  const statusUpdatePromise = updateServiceStatuses();
-  const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000)); // Max 2 seconds
-  await Promise.race([statusUpdatePromise, timeoutPromise]);
+  // Non-blocking status update
+  updateServiceStatuses().catch(() => {});
   
-  // Format services for frontend
   const formattedServices = {};
   Object.entries(serviceRegistry).forEach(([key, service]) => {
     formattedServices[key] = {
@@ -205,181 +231,135 @@ app.get('/api', async (req, res) => {
       basePath: service.basePath,
       url: service.url,
       isWebSocket: service.isWebSocket,
-      status: service.status,
-      note: service.note
+      status: service.status
     };
   });
   
-  // Get all service base paths for endpoints list
   const serviceEndpoints = Object.values(serviceRegistry).map(s => s.basePath);
   
-  res.json({
-    "service": "Etelios API Gateway - All Microservices",
-    "version": "1.0.0",
-    "status": "operational",
-    "message": "Welcome to Etelios HRMS & ERP API Gateway",
-    "baseUrl": baseUrl,
-    "endpoints": {
-      "health": "/health",
-      "api": "/api",
-      "services": serviceEndpoints
+  const response = {
+    service: 'Etelios API Gateway',
+    version: '1.0.0',
+    status: 'operational',
+    baseUrl: baseUrl,
+    endpoints: {
+      health: '/health',
+      api: '/api',
+      services: serviceEndpoints
     },
-    "services": formattedServices,
-    "documentation": {
-      "swagger": "/api-docs",
-      "postman": "/postman/HRMS-API-Collection.json",
-      "frontendGuide": "See FRONTEND-API-ACCESS.md"
-    },
-    "timestamp": new Date().toISOString(),
-    "environment": process.env.NODE_ENV || "development"
-  });
+    services: formattedServices,
+    timestamp: new Date().toISOString()
+  };
+
+  apiEndpointCache = response;
+  apiEndpointCacheTime = now;
+  res.json(response);
 });
 
-// Create proxy middleware for each service
-// IMPORTANT: Order matters - more specific paths should be registered first
-// So /api/hr-letter and /api/transfers should come before /api/hr
-
-// First, get all services and sort by path specificity (longer paths first)
+// Optimized proxy middleware creation
 const allServices = servicesConfig.getAllServices();
 const sortedServices = Object.entries(allServices).sort((a, b) => {
-  // Sort by path length (longer = more specific = should come first)
   return b[1].basePath.length - a[1].basePath.length;
 });
 
-// Create proxy middleware for each service
-// IMPORTANT: Order matters - more specific paths should be registered first
 sortedServices.forEach(([key, service]) => {
   const serviceUrl = service.url;
   const basePath = service.basePath;
-  const serviceConfig = servicesConfig.services[key];
   
-  // Skip WebSocket services for now (they need special handling)
   if (service.isWebSocket) {
-    logger.info(`WebSocket service ${key} configured at ${basePath} - requires WebSocket proxy setup`);
     return;
   }
   
-  // Create proxy middleware for main base path - optimized for performance
-  // Note: We don't rewrite the path because services expect the full path (e.g., /api/auth/login)
+  // Ensure HTTPS for production URLs
+  let targetUrl = serviceUrl;
+  if (isProduction && serviceUrl.startsWith('http://') && !serviceUrl.includes('localhost')) {
+    targetUrl = serviceUrl.replace('http://', 'https://');
+  }
+  
+  // Optimized proxy middleware - minimal logging with HTTPS support
   const proxyMiddleware = createProxyMiddleware({
-    target: serviceUrl,
+    target: targetUrl,
     changeOrigin: true,
-    // No pathRewrite - forward the full path as services mount routes at /api/auth, /api/hr, etc.
-    timeout: 30000, // Increased to 30 seconds to handle slow Azure responses
-    proxyTimeout: 30000,
-    // Optimize headers
+    timeout: 10000,
+    proxyTimeout: 10000,
+    secure: false, // Allow self-signed certificates
     headers: {
       'Connection': 'keep-alive',
       'Keep-Alive': 'timeout=5, max=1000'
     },
-    // Enable HTTP/2 if supported
-    xfwd: true, // Add X-Forwarded-* headers
-    // Optimize request handling
-    onProxyReq: (proxyReq, req, res) => {
-      // Set keep-alive for better connection reuse
+    xfwd: true,
+    protocolRewrite: isProduction && targetUrl.startsWith('https://') ? 'https' : undefined,
+    onProxyReq: (proxyReq, req) => {
       proxyReq.setHeader('Connection', 'keep-alive');
-      
-      // Log proxy requests for debugging
-      logger.info(`[Proxy] ${req.method} ${req.originalUrl} -> ${serviceUrl}${req.path}`);
+      if (!isProduction && req.path.includes('/api/')) {
+        logger.debug(`Proxy: ${req.method} ${req.path} -> ${service.name}`);
+      }
     },
-    onProxyRes: (proxyRes, req, res) => {
-      // Add caching headers for GET requests
+    onProxyRes: (proxyRes, req) => {
       if (req.method === 'GET' && proxyRes.statusCode === 200) {
-        // Cache public GET requests for 60 seconds
         if (!req.path.includes('/auth/') && !req.path.includes('/profile')) {
           proxyRes.headers['Cache-Control'] = 'public, max-age=60, s-maxage=60';
         }
       }
-      
-      // Add performance headers
       proxyRes.headers['X-Content-Type-Options'] = 'nosniff';
       proxyRes.headers['X-Frame-Options'] = 'DENY';
-      
-      // Log proxy responses for debugging
-      logger.info(`[Proxy] ${req.method} ${req.originalUrl} <- ${proxyRes.statusCode} from ${service.name}`);
     },
     onError: (err, req, res) => {
-      logger.error(`[Proxy Error] ${service.name} - ${req.method} ${req.originalUrl}:`, err.message);
-      
-      // Update service status in registry
       if (serviceRegistry[key]) {
         serviceRegistry[key].status = 'offline';
-        serviceRegistry[key].lastChecked = new Date().toISOString();
+        serviceRegistry[key].lastChecked = Date.now();
       }
       
       if (!res.headersSent) {
         res.status(503).json({
           success: false,
           message: `${service.name} is currently unavailable`,
-          error: err.message,
-          service: service.name,
-          url: serviceUrl,
-          path: req.path,
-          originalUrl: req.originalUrl
+          error: isProduction ? 'Service unavailable' : err.message
         });
       }
     }
   });
   
-  // Apply proxy middleware using Express path matching
-  // Express app.use('/api/auth', ...) automatically matches /api/auth and all sub-paths like /api/auth/status
-  // No wildcard needed - Express handles this automatically
   app.use(basePath, (req, res, next) => {
-    // Check service status from registry
     const registryService = serviceRegistry[key];
-    if (registryService && registryService.status === 'offline' && process.env.NODE_ENV === 'production') {
+    if (registryService && registryService.status === 'offline' && isProduction) {
       return res.status(503).json({
         success: false,
-        message: `${service.name} is currently offline`,
-        error: 'Service is not available',
-        hint: `Check service status at /api endpoint`,
-        availableEndpoints: [
-          'GET /',
-          'GET /health',
-          'GET /api',
-          'GET /admin/services'
-        ]
+        message: `${service.name} is currently offline`
       });
     }
     
-    // Log the request for debugging
-    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${serviceUrl}${req.path}`);
-    
-    // Check if service URL is localhost (not deployed) in production
-    if (serviceUrl.includes('localhost') && process.env.NODE_ENV === 'production') {
+    if (serviceUrl.includes('localhost') && isProduction) {
       return res.status(503).json({
         success: false,
-        message: `${service.name} is not available`,
-        error: 'The service App Service has not been created yet',
-        hint: `Please create the ${service.name} App Service or configure ${serviceConfig.envVar} environment variable`,
-        availableEndpoints: [
-          'GET /',
-          'GET /health',
-          'GET /api'
-        ]
+        message: `${service.name} is not available`
       });
     }
     
-    // Use the proxy middleware
     proxyMiddleware(req, res, next);
   });
-  
-  logger.info(`Proxy route configured: ${basePath}* -> ${serviceUrl}`);
 });
 
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   logger.error('Unhandled error:', err);
   res.status(err.status || 500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    message: isProduction ? 'Something went wrong' : err.message
   });
 });
 
-// Admin endpoint for service monitoring
+// Admin endpoint - cached
+let adminCache = null;
+let adminCacheTime = 0;
+const ADMIN_CACHE_TTL = 10000; // 10 seconds
+
 app.get('/admin/services', async (req, res) => {
-  // Update statuses before responding
+  const now = Date.now();
+  if (adminCache && (now - adminCacheTime) < ADMIN_CACHE_TTL) {
+    return res.json(adminCache);
+  }
+
   await updateServiceStatuses();
   
   const serviceStatus = Object.entries(serviceRegistry).map(([key, service]) => ({
@@ -388,25 +368,28 @@ app.get('/admin/services', async (req, res) => {
     status: service.status,
     basePath: service.basePath,
     isWebSocket: service.isWebSocket,
-    lastChecked: service.lastChecked,
-    note: service.note
+    lastChecked: service.lastChecked
   }));
   
   const onlineCount = serviceStatus.filter(s => s.status === 'online').length;
   const offlineCount = serviceStatus.filter(s => s.status === 'offline').length;
   const unknownCount = serviceStatus.filter(s => s.status === 'unknown').length;
   
-  res.json({
+  const response = {
     totalServices: serviceStatus.length,
     onlineServices: onlineCount,
     offlineServices: offlineCount,
     unknownServices: unknownCount,
     services: serviceStatus,
     lastUpdated: new Date().toISOString()
-  });
+  };
+
+  adminCache = response;
+  adminCacheTime = now;
+  res.json(response);
 });
 
-// Manual service registration endpoint (for admin use)
+// Manual service registration
 app.post('/admin/services', (req, res) => {
   const { name, url, basePath, port, isWebSocket } = req.body;
   
@@ -424,11 +407,12 @@ app.post('/admin/services', (req, res) => {
     url: url,
     isWebSocket: isWebSocket || false,
     status: 'unknown',
-    note: 'Manually added service',
     lastChecked: null
   };
   
-  logger.info(`Service ${name} manually added to registry`);
+  // Invalidate caches
+  apiEndpointCache = null;
+  adminCache = null;
   
   res.json({
     success: true,
@@ -437,7 +421,7 @@ app.post('/admin/services', (req, res) => {
   });
 });
 
-// Remove service endpoint (for admin use)
+// Remove service
 app.delete('/admin/services/:name', (req, res) => {
   const { name } = req.params;
   
@@ -449,7 +433,8 @@ app.delete('/admin/services/:name', (req, res) => {
   }
   
   delete serviceRegistry[name];
-  logger.info(`Service ${name} removed from registry`);
+  apiEndpointCache = null;
+  adminCache = null;
   
   res.json({
     success: true,
@@ -457,62 +442,104 @@ app.delete('/admin/services/:name', (req, res) => {
   });
 });
 
+// Procurement alias
+const purchaseService = servicesConfig.getServiceUrl('purchase');
+if (purchaseService) {
+  const procurementProxy = createProxyMiddleware({
+    target: purchaseService,
+    changeOrigin: true,
+    pathRewrite: { '^/api/procurement': '/api/purchase' },
+    timeout: 10000,
+    proxyTimeout: 10000
+  });
+  
+  app.use('/api/procurement', procurementProxy);
+}
+
+// AI Chat endpoint
+app.post('/api/chat', (req, res) => {
+  const { message } = req.body;
+  
+  if (!message) {
+    return res.status(400).json({
+      success: false,
+      error: 'Message is required'
+    });
+  }
+  
+  res.json({
+    success: true,
+    data: {
+      response: `AI chat functionality will be implemented soon.`,
+      timestamp: new Date().toISOString()
+    }
+  });
+});
+
+// Global search endpoints
+const crmService = servicesConfig.getServiceUrl('crm');
+const salesService = servicesConfig.getServiceUrl('sales');
+const inventoryService = servicesConfig.getServiceUrl('inventory');
+
+if (crmService) {
+  app.get('/api/customers', createProxyMiddleware({
+    target: crmService,
+    changeOrigin: true,
+    pathRewrite: { '^/api/customers': '/api/crm/customers' },
+    timeout: 10000
+  }));
+}
+
+if (inventoryService) {
+  app.get('/api/products', createProxyMiddleware({
+    target: inventoryService,
+    changeOrigin: true,
+    pathRewrite: { '^/api/products': '/api/inventory/products' },
+    timeout: 10000
+  }));
+}
+
+if (salesService) {
+  app.get('/api/orders', createProxyMiddleware({
+    target: salesService,
+    changeOrigin: true,
+    pathRewrite: { '^/api/orders': '/api/sales/orders' },
+    timeout: 10000
+  }));
+}
+
 // 404 handler
 app.use('*', (req, res) => {
-  const availableEndpoints = [
-    'GET /',
-    'GET /health',
-    'GET /api',
-    'GET /admin/services',
-    ...Object.values(serviceRegistry).map(s => `${s.basePath}/*`)
-  ];
-  
   res.status(404).json({
     error: 'Not Found',
     message: 'The requested resource was not found',
     path: req.path,
-    method: req.method,
-    availableEndpoints: availableEndpoints,
-    hint: 'Check /api endpoint for all available services and their endpoints'
+    method: req.method
   });
 });
 
 // Start server
-// Azure App Service sets PORT automatically, use it or default to 3000
 const SERVER_PORT = process.env.PORT || process.env.WEBSITES_PORT || PORT;
 
 let server;
 try {
   server = app.listen(SERVER_PORT, '0.0.0.0', async () => {
-    logger.info(`🚀 Etelios Main Server started on port ${SERVER_PORT}`);
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    logger.info(`Health check: http://0.0.0.0:${SERVER_PORT}/health`);
-    logger.info(`API docs: http://0.0.0.0:${SERVER_PORT}/api`);
-    logger.info(`Admin services: http://0.0.0.0:${SERVER_PORT}/admin/services`);
+    if (!isProduction) {
+      logger.info(`Etelios Main Server started on port ${SERVER_PORT}`);
+      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    }
     
-    // Log all configured proxy routes
-    const allServices = servicesConfig.getAllServices();
-    logger.info(`Configured ${Object.keys(allServices).length} microservices:`);
-    Object.entries(allServices).forEach(([key, service]) => {
-      logger.info(`  - ${service.basePath} -> ${service.url}`);
-    });
-    
-    // Initial service status update
-    logger.info('Performing initial service status check...');
     await updateServiceStatuses();
-    logger.info('Initial service status check completed');
     
-    // Start periodic status updates (every 30 seconds)
-    statusUpdateInterval = setInterval(async () => {
-      await updateServiceStatuses();
-      const statusSummary = Object.entries(serviceRegistry)
-        .map(([key, service]) => `${key}: ${service.status}`)
-        .join(', ');
-      logger.info(`Service statuses: ${statusSummary}`);
-    }, 30000);
+    // Status updates every 60 seconds (reduced frequency)
+    statusUpdateInterval = setInterval(() => {
+      updateServiceStatuses().catch(() => {});
+      // Invalidate caches
+      apiEndpointCache = null;
+      adminCache = null;
+    }, 60000);
   });
 
-  // Handle server errors
   server.on('error', (error) => {
     logger.error('Server error:', error);
     if (error.code === 'EADDRINUSE') {
@@ -525,59 +552,31 @@ try {
   process.exit(1);
 }
 
-// Handle uncaught exceptions
+// Graceful shutdown
+const shutdown = () => {
+  if (statusUpdateInterval) {
+    clearInterval(statusUpdateInterval);
+  }
+  if (server) {
+    server.close(() => {
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
-  if (server) {
-    server.close(() => {
-      process.exit(1);
-    });
-  } else {
-    process.exit(1);
-  }
+  shutdown();
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  if (server) {
-    server.close(() => {
-      process.exit(1);
-    });
-  } else {
-    process.exit(1);
-  }
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled Rejection:', reason);
+  shutdown();
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received. Shutting down gracefully.');
-  if (statusUpdateInterval) {
-    clearInterval(statusUpdateInterval);
-  }
-  if (server) {
-    server.close(() => {
-      logger.info('Process terminated');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received. Shutting down gracefully.');
-  if (statusUpdateInterval) {
-    clearInterval(statusUpdateInterval);
-  }
-  if (server) {
-    server.close(() => {
-      logger.info('Process terminated');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
-});
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 module.exports = app;

@@ -414,9 +414,125 @@ const getComplianceData = async (widgetType, user) => {
   };
 };
 
+/**
+ * Get company statistics for dashboard
+ */
+const getCompanyStats = async (req, res, next) => {
+  try {
+    // This would integrate with actual services to get real data
+    // For now, returning structure matching frontend expectations
+    const stats = {
+      totalEmployees: 1250,
+      totalRevenue: 5000000,
+      totalOrders: 3420,
+      totalCustomers: 890,
+      monthlyGrowth: 12.5,
+      activeProjects: 45
+    };
+
+    res.status(200).json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    logger.error('Error in getCompanyStats controller', { error: error.message });
+    next(error);
+  }
+};
+
+/**
+ * Get top performers for dashboard
+ */
+const getTopPerformers = async (req, res, next) => {
+  try {
+    // This would integrate with HR and performance services
+    const topPerformers = [
+      {
+        id: 'emp_001',
+        name: 'John Doe',
+        department: 'Sales',
+        performance: 95.5,
+        revenue: 150000,
+        avatar: 'https://example.com/avatar.jpg'
+      }
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: topPerformers
+    });
+  } catch (error) {
+    logger.error('Error in getTopPerformers controller', { error: error.message });
+    next(error);
+  }
+};
+
+/**
+ * Get top sales for dashboard
+ */
+const getTopSales = async (req, res, next) => {
+  try {
+    // This would integrate with sales service
+    const topSales = [
+      {
+        id: 'sale_001',
+        customerName: 'ABC Corp',
+        amount: 25000,
+        date: '2024-01-15',
+        status: 'completed',
+        salesperson: 'Jane Smith'
+      }
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: topSales
+    });
+  } catch (error) {
+    logger.error('Error in getTopSales controller', { error: error.message });
+    next(error);
+  }
+};
+
+/**
+ * Get recent activities for dashboard
+ */
+const getRecentActivities = async (req, res, next) => {
+  try {
+    const { limit = 20 } = req.query;
+    
+    // This would integrate with audit logs and activity tracking
+    const activities = [
+      {
+        id: 'activity_001',
+        type: 'order_created',
+        description: 'New order #ORD-001 created',
+        timestamp: new Date().toISOString(),
+        user: 'John Doe',
+        metadata: {
+          orderId: 'ORD-001',
+          amount: 1500
+        }
+      }
+    ];
+
+    res.status(200).json({
+      success: true,
+      data: activities.slice(0, parseInt(limit))
+    });
+  } catch (error) {
+    logger.error('Error in getRecentActivities controller', { error: error.message });
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboard,
   getDashboardData,
   getAllDashboards,
-  updateDashboard
+  updateDashboard,
+  getCompanyStats,
+  getTopPerformers,
+  getTopSales,
+  getRecentActivities
 };

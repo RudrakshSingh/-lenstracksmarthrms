@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
@@ -22,6 +25,9 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,8 +35,18 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'sales_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('sales-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) logger.info('sales-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('sales-service: Database connection failed', { error: error.message });
     process.exit(1);
@@ -39,32 +55,29 @@ const connectDB = async () => {
 
 // Load routes with COMPLETE logic
 const loadRoutes = () => {
-  console.log('🔧 Loading sales-service routes with COMPLETE logic...');
-  
   try {
     const salesRoutes = require('./routes/sales.routes.js');
     app.use('/api/sales', apiRateLimit, salesRoutes);
-    console.log('✅ sales.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('sales.routes.js loaded');
   } catch (error) {
-    console.log('❌ sales.routes.js failed:', error.message);
+    logger.error('sales.routes.js failed:', error.message);
   }
   try {
     const posRoutes = require('./routes/pos.routes.js');
     app.use('/api/pos', apiRateLimit, posRoutes);
-    console.log('✅ pos.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('pos.routes.js loaded');
   } catch (error) {
-    console.log('❌ pos.routes.js failed:', error.message);
+    logger.error('pos.routes.js failed:', error.message);
   }
   try {
     const discountRoutes = require('./routes/discount.routes.js');
     app.use('/api/discount', apiRateLimit, discountRoutes);
-    console.log('✅ discount.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('discount.routes.js loaded');
   } catch (error) {
-    console.log('❌ discount.routes.js failed:', error.message);
+    logger.error('discount.routes.js failed:', error.message);
   }
 
-  console.log('✅ sales-service routes loaded with COMPLETE logic');
-};
+  };
 
 // Health check
 app.get('/health', (req, res) => {
@@ -211,9 +224,7 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`sales-service running on port ${PORT}`);
-      console.log(`🚀 sales-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 3, Controllers: 3, Models: 12`);
-    });
+      });
   } catch (error) {
     logger.error('sales-service startup failed', { error: error.message });
     process.exit(1);

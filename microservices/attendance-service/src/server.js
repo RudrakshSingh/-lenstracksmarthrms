@@ -4,9 +4,20 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+const responseTime = require('response-time');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Response time tracking
+app.use(responseTime((req, res, time) => {
+  if (time > 40 && !isProduction) {
+    logger.warn(`Slow request: ${req.method} ${req.path} took ${time.toFixed(2)}ms`);
+  }
+  res.setHeader('X-Response-Time', `${time.toFixed(2)}ms`);
+}));
 
 // Security middleware
 app.use(helmet());
@@ -15,48 +26,57 @@ app.use(cors({
   credentials: true
 }));
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 // Rate limiting
 const apiRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
   message: 'Too many requests from this IP'
 });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Database connection
+// Database connection - optimized
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'attendance_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('attendance-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) if (!isProduction) logger.info('attendance-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('attendance-service: Database connection failed', { error: error.message });
     process.exit(1);
   }
 };
 
-// Load routes with COMPLETE logic
+// Load routes - optimized
 const loadRoutes = () => {
-  console.log('🔧 Loading attendance-service routes with COMPLETE logic...');
-  
   try {
     const attendanceRoutes = require('./routes/attendance.routes.js');
     app.use('/api/attendance', apiRateLimit, attendanceRoutes);
-    console.log('✅ attendance.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('attendance.routes.js loaded');
   } catch (error) {
-    console.log('❌ attendance.routes.js failed:', error.message);
+    logger.error('attendance.routes.js failed:', error.message);
   }
   try {
     const geofencingRoutes = require('./routes/geofencing.routes.js');
     app.use('/api/geofencing', apiRateLimit, geofencingRoutes);
-    console.log('✅ geofencing.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('geofencing.routes.js loaded');
   } catch (error) {
-    console.log('❌ geofencing.routes.js failed:', error.message);
+    logger.error('geofencing.routes.js failed:', error.message);
   }
-
-  console.log('✅ attendance-service routes loaded with COMPLETE logic');
 };
 
 // Health check
@@ -72,6 +92,7 @@ app.get('/health', (req, res) => {
     models: 3,
     services: 2
   });
+});
 
 // Business API Routes
 app.get('/api/attendance/status', (req, res) => {
@@ -202,9 +223,7 @@ const startServer = async () => {
     const PORT = process.env.PORT || 3003;
     
     app.listen(PORT, () => {
-      logger.info(`attendance-service running on port ${PORT}`);
-      console.log(`🚀 attendance-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 2, Controllers: 2, Models: 3`);
+      if (!isProduction) logger.info(`attendance-service running on port ${PORT}`);
     });
   } catch (error) {
     logger.error('attendance-service startup failed', { error: error.message });

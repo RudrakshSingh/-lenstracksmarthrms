@@ -1,4 +1,6 @@
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -12,6 +14,7 @@ const logger = require('./utils/logger');
 const tenantRoutes = require('./routes/tenant.routes');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
@@ -38,6 +41,9 @@ databaseRouter.initializeRegistry()
     logger.error('Failed to initialize Tenant Registry Service:', error);
     process.exit(1);
   });
+
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
 
 // Routes
 app.use('/api/tenants', tenantRoutes);

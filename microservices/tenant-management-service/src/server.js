@@ -10,6 +10,7 @@ const connectDB = require('./config/database');
 const { errorConverter, errorHandler } = require('./middleware/error');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet({
@@ -71,24 +72,22 @@ const connectDBWithRetry = async (retries = 5, delay = 5000) => {
   }
 };
 
-// Load routes
+// Load routes - optimized
 const loadRoutes = () => {
-  logger.info('Loading tenant-management-service routes...');
-  
   try {
     const tenantRoutes = require('./routes/tenant.routes.js');
     app.use('/api/admin/v1/tenants', tenantRoutes);
-    logger.info('✅ tenant.routes.js loaded successfully');
+    if (!isProduction) logger.info('tenant.routes.js loaded');
   } catch (error) {
-    logger.error('❌ tenant.routes.js failed to load:', error.message);
+    logger.error('tenant.routes.js failed to load:', error.message);
   }
 
   try {
     const platformRoutes = require('./routes/platform.routes.js');
     app.use('/api/admin/v1/platform', platformRoutes);
-    logger.info('✅ platform.routes.js loaded successfully');
+    if (!isProduction) logger.info('platform.routes.js loaded');
   } catch (error) {
-    logger.error('❌ platform.routes.js failed to load:', error.message);
+    logger.error('platform.routes.js failed to load:', error.message);
   }
 };
 

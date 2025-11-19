@@ -30,33 +30,36 @@ const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'payroll_service'}`;
     await mongoose.connect(mongoUri);
-    logger.info('payroll-service: MongoDB connected successfully');
+    if (!isProduction) logger.info('payroll-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('payroll-service: Database connection failed', { error: error.message });
     process.exit(1);
   }
 };
 
-// Load routes with COMPLETE logic
+// Load routes - optimized
 const loadRoutes = () => {
-  console.log('🔧 Loading payroll-service routes with COMPLETE logic...');
-  
   try {
     const salaryRoutes = require('./routes/salary.routes.js');
     app.use('/api/salary', apiRateLimit, salaryRoutes);
-    console.log('✅ salary.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('salary.routes.js loaded');
   } catch (error) {
-    console.log('❌ salary.routes.js failed:', error.message);
+    logger.error('salary.routes.js failed:', error.message);
   }
   try {
     const unifiedPayrollRoutes = require('./routes/unifiedPayroll.routes.js');
-    app.use('/api/unified-payroll', apiRateLimit, unified-payrollRoutes);
-    console.log('✅ unifiedPayroll.routes.js loaded with COMPLETE logic');
+    app.use('/api/unified-payroll', apiRateLimit, unifiedPayrollRoutes);
+    if (!isProduction) logger.info('unifiedPayroll.routes.js loaded');
   } catch (error) {
-    console.log('❌ unifiedPayroll.routes.js failed:', error.message);
+    logger.error('unifiedPayroll.routes.js failed:', error.message);
   }
-
-  console.log('✅ payroll-service routes loaded with COMPLETE logic');
+  try {
+    const deductionRoutes = require('./routes/deduction.routes.js');
+    app.use('/api/payroll', apiRateLimit, deductionRoutes);
+    if (!isProduction) logger.info('deduction.routes.js loaded');
+  } catch (error) {
+    logger.error('deduction.routes.js failed:', error.message);
+  }
 };
 
 // Health check
@@ -203,8 +206,6 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`payroll-service running on port ${PORT}`);
-      console.log(`🚀 payroll-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 2, Controllers: 2, Models: 3`);
     });
   } catch (error) {
     logger.error('payroll-service startup failed', { error: error.message });

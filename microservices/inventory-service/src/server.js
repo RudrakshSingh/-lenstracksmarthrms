@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
@@ -22,6 +25,9 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,8 +35,18 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'inventory_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('inventory-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) logger.info('inventory-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('inventory-service: Database connection failed', { error: error.message });
     process.exit(1);
@@ -39,38 +55,34 @@ const connectDB = async () => {
 
 // Load routes with COMPLETE logic
 const loadRoutes = () => {
-  console.log('🔧 Loading inventory-service routes with COMPLETE logic...');
-  
   try {
     const erpRoutes = require('./routes/erp.routes.js');
     app.use('/api/erp', apiRateLimit, erpRoutes);
-    console.log('✅ erp.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('erp.routes.js loaded');
   } catch (error) {
-    console.log('❌ erp.routes.js failed:', error.message);
+    logger.error('erp.routes.js failed:', error.message);
   }
   try {
     const assetsRoutes = require('./routes/assets.routes.js');
     app.use('/api/assets', apiRateLimit, assetsRoutes);
-    console.log('✅ assets.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('assets.routes.js loaded');
   } catch (error) {
-    console.log('❌ assets.routes.js failed:', error.message);
+    logger.error('assets.routes.js failed:', error.message);
   }
   try {
     const assetRegisterRoutes = require('./routes/assetRegister.routes.js');
     app.use('/api/asset-register', apiRateLimit, assetRegisterRoutes);
-    console.log('✅ assetRegister.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('assetRegister.routes.js loaded');
   } catch (error) {
-    console.log('❌ assetRegister.routes.js failed:', error.message);
+    logger.error('assetRegister.routes.js failed:', error.message);
   }
   try {
     const productMasterRoutes = require('./routes/productMaster.routes.js');
     app.use('/api/inventory/products', apiRateLimit, productMasterRoutes);
-    console.log('✅ productMaster.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('productMaster.routes.js loaded');
   } catch (error) {
-    console.log('❌ productMaster.routes.js failed:', error.message);
+    logger.error('productMaster.routes.js failed:', error.message);
   }
-
-  console.log('✅ inventory-service routes loaded with COMPLETE logic');
 };
 
 // Health check
@@ -228,9 +240,7 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`inventory-service running on port ${PORT}`);
-      console.log(`🚀 inventory-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 3, Controllers: 3, Models: 14`);
-    });
+      });
   } catch (error) {
     logger.error('inventory-service startup failed', { error: error.message });
     process.exit(1);

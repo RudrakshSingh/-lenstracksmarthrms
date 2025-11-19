@@ -4,9 +4,20 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
+const responseTime = require('response-time');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Response time tracking
+app.use(responseTime((req, res, time) => {
+  if (time > 40 && !isProduction) {
+    logger.warn(`Slow request: ${req.method} ${req.path} took ${time.toFixed(2)}ms`);
+  }
+  res.setHeader('X-Response-Time', `${time.toFixed(2)}ms`);
+}));
 
 // Security middleware
 app.use(helmet());
@@ -15,55 +26,64 @@ app.use(cors({
   credentials: true
 }));
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 // Rate limiting
 const apiRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
   message: 'Too many requests from this IP'
 });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Database connection
+// Database connection - optimized
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'analytics_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('analytics-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) if (!isProduction) logger.info('analytics-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('analytics-service: Database connection failed', { error: error.message });
     process.exit(1);
   }
 };
 
-// Load routes with COMPLETE logic
+// Load routes - optimized
 const loadRoutes = () => {
-  console.log('🔧 Loading analytics-service routes with COMPLETE logic...');
-  
   try {
     const analyticsRoutes = require('./routes/analytics.routes.js');
     app.use('/api/analytics', apiRateLimit, analyticsRoutes);
-    console.log('✅ analytics.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('analytics.routes.js loaded');
   } catch (error) {
-    console.log('❌ analytics.routes.js failed:', error.message);
+    logger.error('analytics.routes.js failed:', error.message);
   }
   try {
     const dashboardRoutes = require('./routes/dashboard.routes.js');
     app.use('/api/dashboard', apiRateLimit, dashboardRoutes);
-    console.log('✅ dashboard.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('dashboard.routes.js loaded');
   } catch (error) {
-    console.log('❌ dashboard.routes.js failed:', error.message);
+    logger.error('dashboard.routes.js failed:', error.message);
   }
   try {
     const expiryReportsRoutes = require('./routes/expiryReports.routes.js');
-    app.use('/api/expiry-reports', apiRateLimit, expiry-reportsRoutes);
-    console.log('✅ expiryReports.routes.js loaded with COMPLETE logic');
+    app.use('/api/expiry-reports', apiRateLimit, expiryReportsRoutes);
+    if (!isProduction) logger.info('expiryReports.routes.js loaded');
   } catch (error) {
-    console.log('❌ expiryReports.routes.js failed:', error.message);
+    logger.error('expiryReports.routes.js failed:', error.message);
   }
-
-  console.log('✅ analytics-service routes loaded with COMPLETE logic');
 };
 
 // Health check
@@ -79,6 +99,7 @@ app.get('/health', (req, res) => {
     models: 3,
     services: 5
   });
+});
 
 // Business API Routes
 app.get('/api/analytics/status', (req, res) => {
@@ -198,9 +219,7 @@ const startServer = async () => {
     const PORT = process.env.PORT || 3014;
     
     app.listen(PORT, () => {
-      logger.info(`analytics-service running on port ${PORT}`);
-      console.log(`🚀 analytics-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 3, Controllers: 3, Models: 3`);
+      if (!isProduction) logger.info(`analytics-service running on port ${PORT}`);
     });
   } catch (error) {
     logger.error('analytics-service startup failed', { error: error.message });

@@ -67,44 +67,44 @@ const connectDB = async () => {
   }
 };
 
-// Load routes with COMPLETE logic
+// Load routes - optimized
 const loadRoutes = () => {
-  console.log('🔧 Loading auth-service routes with COMPLETE logic...');
+  const isProduction = process.env.NODE_ENV === 'production';
   
   try {
     const authRoutes = require('./routes/auth.routes.js');
     app.use('/api/auth', apiRateLimit, authRoutes);
-    console.log('✅ auth.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('auth.routes.js loaded');
   } catch (error) {
-    console.log('❌ auth.routes.js failed:', error.message);
+    logger.error('auth.routes.js failed:', error.message);
   }
   try {
     const realUsersRoutes = require('./routes/realUsers.routes.js');
     app.use('/api/real-users', apiRateLimit, realUsersRoutes);
-    console.log('✅ realUsers.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('realUsers.routes.js loaded');
   } catch (error) {
-    console.log('❌ realUsers.routes.js failed:', error.message);
+    logger.error('realUsers.routes.js failed:', error.message);
   }
   try {
     const permissionRoutes = require('./routes/permission.routes.js');
     app.use('/api/permission', apiRateLimit, permissionRoutes);
-    console.log('✅ permission.routes.js loaded with COMPLETE logic');
+    app.use('/api/user', apiRateLimit, permissionRoutes);
+    if (!isProduction) logger.info('permission.routes.js loaded');
   } catch (error) {
-    console.log('❌ permission.routes.js failed:', error.message);
+    logger.error('permission.routes.js failed:', error.message);
   }
   try {
     const emergencyLockRoutes = require('./routes/emergencyLock.routes.js');
     app.use('/api/auth/emergency', apiRateLimit, emergencyLockRoutes);
-    console.log('✅ emergencyLock.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('emergencyLock.routes.js loaded');
   } catch (error) {
-    console.log('❌ emergencyLock.routes.js failed:', error.message);
+    logger.error('emergencyLock.routes.js failed:', error.message);
   }
   try {
     const greywallRoutes = require('./routes/greywall.routes.js');
     app.use('/api/internal', apiRateLimit, greywallRoutes);
-    console.log('✅ greywall.routes.js loaded (HIDDEN)');
   } catch (error) {
-    console.log('❌ greywall.routes.js failed:', error.message);
+    logger.error('greywall.routes.js failed:', error.message);
   }
   try {
     const greywallAdminRoutes = require('./routes/greywallAdmin.routes.js');
@@ -112,12 +112,9 @@ const loadRoutes = () => {
     app.use('/api/monitoring', apiRateLimit, greywallAdminRoutes);
     app.use('/api/debug', apiRateLimit, greywallAdminRoutes);
     app.use('/api/health', apiRateLimit, greywallAdminRoutes);
-    console.log('✅ greywallAdmin.routes.js loaded (HIDDEN)');
   } catch (error) {
-    console.log('❌ greywallAdmin.routes.js failed:', error.message);
+    logger.error('greywallAdmin.routes.js failed:', error.message);
   }
-
-  console.log('✅ auth-service routes loaded with COMPLETE logic');
 };
 
 // Health check
@@ -191,20 +188,9 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`auth-service running on port ${PORT}`);
-      console.log(`🚀 auth-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 4, Controllers: 4, Models: 5, Emergency Lock: Active`);
       
-      // Start emergency lock monitoring
       monitoringService.startMonitoring();
-      console.log(`🔒 Emergency Lock Monitoring Service started`);
-      
-      // Start key management service
       keyManagementService.startKeyRotationScheduler();
-      console.log(`🔑 Recovery Key Management Service started`);
-      
-      // Start greywall emergency system (hidden)
-      console.log(`🕶️  Greywall Emergency System initialized (HIDDEN)`);
-      console.log(`🔒 Hidden endpoints: /api/internal/*, /api/admin/*, /api/monitoring/*, /api/debug/*, /api/health/*`);
     });
   } catch (error) {
     logger.error('auth-service startup failed', { error: error.message });

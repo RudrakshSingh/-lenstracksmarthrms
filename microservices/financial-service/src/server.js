@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
@@ -22,6 +25,9 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,8 +35,18 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'financial_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('financial-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) logger.info('financial-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('financial-service: Database connection failed', { error: error.message });
     process.exit(1);
@@ -39,24 +55,20 @@ const connectDB = async () => {
 
 // Load routes with COMPLETE logic
 const loadRoutes = () => {
-  console.log('🔧 Loading financial-service routes with COMPLETE logic...');
-  
   try {
     const financialRoutes = require('./routes/financial.routes.js');
     app.use('/api/financial', apiRateLimit, financialRoutes);
-    console.log('✅ financial.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('financial.routes.js loaded');
   } catch (error) {
-    console.log('❌ financial.routes.js failed:', error.message);
+    logger.error('financial.routes.js failed:', error.message);
   }
   try {
     const reportsRoutes = require('./routes/reports.routes.js');
     app.use('/api/reports', apiRateLimit, reportsRoutes);
-    console.log('✅ reports.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('reports.routes.js loaded');
   } catch (error) {
-    console.log('❌ reports.routes.js failed:', error.message);
+    logger.error('reports.routes.js failed:', error.message);
   }
-
-  console.log('✅ financial-service routes loaded with COMPLETE logic');
 };
 
 // Health check
@@ -203,9 +215,7 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`financial-service running on port ${PORT}`);
-      console.log(`🚀 financial-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 2, Controllers: 2, Models: 9`);
-    });
+      });
   } catch (error) {
     logger.error('financial-service startup failed', { error: error.message });
     process.exit(1);

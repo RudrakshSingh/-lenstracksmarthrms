@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const compression = require('compression');
+const responseTime = require('response-time');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -7,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
 
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
@@ -22,6 +25,9 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
+// Compression
+app.use(compression({ level: 6, threshold: 1024 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,8 +35,18 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'document_service'}`;
-    await mongoose.connect(mongoUri);
-    logger.info('document-service: MongoDB connected successfully');
+    await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+      bufferMaxEntries: 0,
+      bufferCommands: false
+    });
+    if (!isProduction) logger.info('document-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('document-service: Database connection failed', { error: error.message });
     process.exit(1);
@@ -39,38 +55,34 @@ const connectDB = async () => {
 
 // Load routes with COMPLETE logic
 const loadRoutes = () => {
-  console.log('🔧 Loading document-service routes with COMPLETE logic...');
-  
   try {
     const documentsRoutes = require('./routes/documents.routes.js');
     app.use('/api/documents', apiRateLimit, documentsRoutes);
-    console.log('✅ documents.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('documents.routes.js loaded');
   } catch (error) {
-    console.log('❌ documents.routes.js failed:', error.message);
+    logger.error('documents.routes.js failed:', error.message);
   }
   try {
     const esignRoutes = require('./routes/esign.routes.js');
     app.use('/api/esign', apiRateLimit, esignRoutes);
-    console.log('✅ esign.routes.js loaded with COMPLETE logic');
+    if (!isProduction) logger.info('esign.routes.js loaded');
   } catch (error) {
-    console.log('❌ esign.routes.js failed:', error.message);
+    logger.error('esign.routes.js failed:', error.message);
   }
   try {
     const contractsVaultRoutes = require('./routes/contractsVault.routes.js');
-    app.use('/api/contracts-vault', apiRateLimit, contracts-vaultRoutes);
-    console.log('✅ contractsVault.routes.js loaded with COMPLETE logic');
+    app.use('/api/contracts-vault', apiRateLimit, contractsVaultRoutes);
+    if (!isProduction) logger.info('contractsVault.routes.js loaded');
   } catch (error) {
-    console.log('❌ contractsVault.routes.js failed:', error.message);
+    logger.error('contractsVault.routes.js failed:', error.message);
   }
   try {
     const documentVerificationRoutes = require('./routes/documentVerification.routes.js');
-    app.use('/api/document-verification', apiRateLimit, document-verificationRoutes);
-    console.log('✅ documentVerification.routes.js loaded with COMPLETE logic');
+    app.use('/api/document-verification', apiRateLimit, documentVerificationRoutes);
+    if (!isProduction) logger.info('documentVerification.routes.js loaded');
   } catch (error) {
-    console.log('❌ documentVerification.routes.js failed:', error.message);
+    logger.error('documentVerification.routes.js failed:', error.message);
   }
-
-  console.log('✅ document-service routes loaded with COMPLETE logic');
 };
 
 // Health check
@@ -217,9 +229,7 @@ const startServer = async () => {
     
     app.listen(PORT, () => {
       logger.info(`document-service running on port ${PORT}`);
-      console.log(`🚀 document-service started on http://localhost:${PORT}`);
-      console.log(`📊 Routes: 4, Controllers: 4, Models: 3`);
-    });
+      });
   } catch (error) {
     logger.error('document-service startup failed', { error: error.message });
     process.exit(1);

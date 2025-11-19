@@ -9,7 +9,11 @@ const {
   getDashboard,
   getDashboardData,
   getAllDashboards,
-  updateDashboard
+  updateDashboard,
+  getCompanyStats,
+  getTopPerformers,
+  getTopSales,
+  getRecentActivities
 } = require('../controllers/dashboardController');
 
 // Validation schemas
@@ -88,6 +92,46 @@ router.put('/:role',
   requirePermission(['manage_dashboard']),
   validateRequest(updateDashboardSchema),
   updateDashboard
+);
+
+/**
+ * @route GET /api/dashboard/stats
+ * @desc Get company statistics
+ * @access Private (All authenticated users)
+ */
+router.get('/stats',
+  authenticate,
+  getCompanyStats
+);
+
+/**
+ * @route GET /api/dashboard/top-performers
+ * @desc Get top performers
+ * @access Private (All authenticated users)
+ */
+router.get('/top-performers',
+  authenticate,
+  getTopPerformers
+);
+
+/**
+ * @route GET /api/dashboard/top-sales
+ * @desc Get top sales
+ * @access Private (All authenticated users)
+ */
+router.get('/top-sales',
+  authenticate,
+  getTopSales
+);
+
+/**
+ * @route GET /api/dashboard/recent-activities
+ * @desc Get recent activities
+ * @access Private (All authenticated users)
+ */
+router.get('/recent-activities',
+  authenticate,
+  getRecentActivities
 );
 
 module.exports = router;

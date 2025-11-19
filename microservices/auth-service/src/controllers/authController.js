@@ -183,9 +183,121 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+/**
+ * Mock login for frontend testing
+ * Creates or finds a user with specified role and returns valid tokens
+ */
+const mockLogin = async (req, res, next) => {
+  try {
+    const User = require('../models/User.model');
+    const { generateAccessToken, generateRefreshToken } = require('../config/jwt');
+    const { role = 'hr', email, employeeId, name } = req.body;
+    
+    // Validate role
+    const validRoles = ['admin', 'hr', 'manager', 'employee', 'superadmin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid role. Must be one of: ${validRoles.join(', ')}`
+      });
+    }
+
+    // Default values for mock user
+    const mockEmail = email || `mock.${role}@etelios.com`;
+    const mockEmployeeId = employeeId || `MOCK${role.toUpperCase()}001`;
+    const mockName = name || `Mock ${role.toUpperCase()} User`;
+
+    // Find or create mock user
+    let user = await User.findOne({ 
+      $or: [
+        { email: mockEmail },
+        { employee_id: mockEmployeeId }
+      ]
+    });
+
+    if (!user) {
+      // Create new mock user
+      // Map role to appropriate department
+      const departmentMap = {
+        'hr': 'HR',
+        'admin': 'TECH',
+        'manager': 'SALES',
+        'employee': 'SALES',
+        'superadmin': 'TECH'
+      };
+      
+      user = new User({
+        tenantId: 'default',
+        employee_id: mockEmployeeId,
+        name: mockName,
+        email: mockEmail,
+        phone: '+919999999999',
+        password: 'mockpassword123', // Will be hashed
+        role: role,
+        department: departmentMap[role] || 'SALES',
+        designation: `${role.toUpperCase()} Manager`,
+        joining_date: new Date(),
+        is_active: true,
+        status: 'active',
+        band_level: 'A',
+        hierarchy_level: 'NATIONAL'
+      });
+      
+      // Hash password
+      const bcrypt = require('bcryptjs');
+      user.password = await bcrypt.hash('mockpassword123', 10);
+      
+      await user.save();
+    } else {
+      // Update existing user to ensure it's active
+      user.is_active = true;
+      user.status = 'active';
+      user.role = role;
+      await user.save();
+    }
+
+    // Generate tokens
+    const accessToken = generateAccessToken({ userId: user._id, role: user.role });
+    const refreshToken = generateRefreshToken({ userId: user._id });
+
+    // Update last login
+    user.last_login = new Date();
+    user.last_activity = new Date();
+    await user.save();
+
+    // Get public profile
+    const userProfile = user.getPublicProfile ? user.getPublicProfile() : {
+      _id: user._id,
+      employee_id: user.employee_id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      department: user.department,
+      designation: user.designation
+    };
+
+    logger.info('Mock login successful', { userId: user._id, role: user.role, email: user.email });
+
+    res.status(200).json({
+      success: true,
+      message: 'Mock login successful',
+      data: {
+        user: userProfile,
+        accessToken,
+        refreshToken
+      },
+      mock: true
+    });
+  } catch (error) {
+    logger.error('Error in mockLogin controller', { error: error.message });
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
+  mockLogin,
   refreshToken,
   logout,
   getProfile,

@@ -44,6 +44,15 @@ const loginSchema = {
   })
 };
 
+const mockLoginSchema = {
+  body: Joi.object({
+    role: Joi.string().valid('admin', 'hr', 'manager', 'employee', 'superadmin').optional(),
+    email: Joi.string().email().optional(),
+    employeeId: Joi.string().optional(),
+    name: Joi.string().optional()
+  })
+};
+
 const changePasswordSchema = {
   body: Joi.object({
     currentPassword: Joi.string().required(),
@@ -95,6 +104,12 @@ router.post('/register',
 router.post('/login', 
   validateRequest(loginSchema),
   authController.login
+);
+
+// Mock login endpoint for frontend testing
+router.post('/mock-login', 
+  validateRequest(mockLoginSchema),
+  authController.mockLogin
 );
 
 router.post('/refresh-token', 

@@ -137,6 +137,11 @@ const createInMemoryRedis = () => {
       }
       return 0;
     },
+    setex: async (key, seconds, value) => {
+      store.set(key, value);
+      setTimeout(() => store.delete(key), seconds * 1000);
+      return 'OK';
+    },
     pipeline: () => {
       const commands = [];
       const pipeline = {

@@ -1,0 +1,10 @@
+{
+  "name": "@etelios/shared",
+  "version": "1.0.0",
+  "description": "Shared utilities and services for Etelios microservices",
+  "main": "index.js",
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  }
+}
+

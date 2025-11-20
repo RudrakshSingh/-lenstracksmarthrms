@@ -31,11 +31,13 @@ services:
       - SERVICE_NAME=auth-service
       - MONGO_URI=mongodb://mongo:27017/etelios_auth_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # HR Management & Employee Data
@@ -49,11 +51,13 @@ services:
       - SERVICE_NAME=hr-service
       - MONGO_URI=mongodb://mongo:27017/etelios_hr_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Attendance & Geofencing
@@ -67,11 +71,13 @@ services:
       - SERVICE_NAME=attendance-service
       - MONGO_URI=mongodb://mongo:27017/etelios_attendance_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Payroll & Salary Management
@@ -85,11 +91,13 @@ services:
       - SERVICE_NAME=payroll-service
       - MONGO_URI=mongodb://mongo:27017/etelios_payroll_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Customer Management & Engagement
@@ -103,11 +111,13 @@ services:
       - SERVICE_NAME=crm-service
       - MONGO_URI=mongodb://mongo:27017/etelios_crm_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # ERP & Inventory Management
@@ -121,11 +131,13 @@ services:
       - SERVICE_NAME=inventory-service
       - MONGO_URI=mongodb://mongo:27017/etelios_inventory_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Sales & Order Management
@@ -139,11 +151,13 @@ services:
       - SERVICE_NAME=sales-service
       - MONGO_URI=mongodb://mongo:27017/etelios_sales_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Purchase & Vendor Management
@@ -157,11 +171,13 @@ services:
       - SERVICE_NAME=purchase-service
       - MONGO_URI=mongodb://mongo:27017/etelios_purchase_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Financial Management & Accounting
@@ -175,11 +191,13 @@ services:
       - SERVICE_NAME=financial-service
       - MONGO_URI=mongodb://mongo:27017/etelios_financial_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Document & E-signature Management
@@ -193,11 +211,13 @@ services:
       - SERVICE_NAME=document-service
       - MONGO_URI=mongodb://mongo:27017/etelios_document_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Service & SLA Management
@@ -211,11 +231,13 @@ services:
       - SERVICE_NAME=service-management
       - MONGO_URI=mongodb://mongo:27017/etelios_service_management
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Customer Protection Plan
@@ -229,11 +251,13 @@ services:
       - SERVICE_NAME=cpp-service
       - MONGO_URI=mongodb://mongo:27017/etelios_cpp_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Prescription Management
@@ -247,11 +271,13 @@ services:
       - SERVICE_NAME=prescription-service
       - MONGO_URI=mongodb://mongo:27017/etelios_prescription_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Analytics & Reporting
@@ -265,11 +291,13 @@ services:
       - SERVICE_NAME=analytics-service
       - MONGO_URI=mongodb://mongo:27017/etelios_analytics_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Notifications & Communications
@@ -283,11 +311,13 @@ services:
       - SERVICE_NAME=notification-service
       - MONGO_URI=mongodb://mongo:27017/etelios_notification_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
   # Monitoring & Health Checks
@@ -301,11 +331,13 @@ services:
       - SERVICE_NAME=monitoring-service
       - MONGO_URI=mongodb://mongo:27017/etelios_monitoring_service
       - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKERS=kafka:29092
       - AUTH_SERVICE_URL=http://auth-service:3001
       - NOTIFICATION_SERVICE_URL=http://notification-service:3015
     depends_on:
       - mongo
       - redis
+      - kafka
     networks:
       - etelios-network
 
@@ -326,6 +358,72 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    networks:
+      - etelios-network
+
+  # Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - etelios-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - etelios-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # Kafka UI (Optional - for monitoring)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     networks:
       - etelios-network
 
@@ -356,6 +454,9 @@ volumes:
   mongo_data:
   redis_data:
   rabbitmq_data:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
 
 networks:
   etelios-network:

@@ -189,6 +189,9 @@ const resetPassword = async (req, res, next) => {
  * Uses caching, pre-hashed passwords, and optimized database operations
  */
 const mockLogin = async (req, res, next) => {
+  // Set longer timeout for this endpoint (4 minutes)
+  req.setTimeout(240000);
+  
   try {
     const User = require('../models/User.model');
     const { generateAccessToken, generateRefreshToken } = require('../config/jwt');

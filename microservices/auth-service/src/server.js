@@ -46,8 +46,9 @@ const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'auth_service'}`;
     await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s
-      socketTimeoutMS: 45000, // Socket timeout
+      serverSelectionTimeoutMS: 30000, // Increased to 30s for Azure
+      socketTimeoutMS: 60000, // Increased to 60s
+      connectTimeoutMS: 30000, // Explicit connect timeout
       maxPoolSize: 10, // Maximum number of connections in pool
       minPoolSize: 2, // Minimum number of connections in pool
       maxIdleTimeMS: 30000, // Close connections after 30s of inactivity

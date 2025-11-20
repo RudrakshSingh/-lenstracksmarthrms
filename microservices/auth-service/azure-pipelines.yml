@@ -66,7 +66,7 @@ stages:
               azureSubscription: 'Azure-Service-Connection'
               appName: '$(appServiceName)'
               containers: '$(containerRegistry)/$(imageRepository):latest'
-              appSettings: '-WEBSITES_PORT "3001" -NODE_ENV "production" -PORT "3001" -SERVICE_NAME "auth-service" -MONGO_URI "$(mongo-uri)" -JWT_SECRET "$(jwt-secret)" -JWT_REFRESH_SECRET "$(jwt-refresh-secret)" -JWT_EXPIRY "1h" -JWT_REFRESH_EXPIRY "7d" -CORS_ORIGIN "https://your-frontend.azurewebsites.net" -REDIS_URL "redis://your-redis.redis.cache.windows.net:6380" -LOG_LEVEL "info" -TEST_MODE "false"'
+              appSettings: '-WEBSITES_PORT "3001" -NODE_ENV "production" -PORT "3001" -WEBSITES_REQUEST_TIMEOUT "300" -SERVICE_NAME "auth-service" -MONGO_URI "$(mongo-uri)" -JWT_SECRET "$(jwt-secret)" -JWT_REFRESH_SECRET "$(jwt-refresh-secret)" -JWT_EXPIRY "1h" -JWT_REFRESH_EXPIRY "7d" -CORS_ORIGIN "https://your-frontend.azurewebsites.net" -REDIS_URL "redis://your-redis.redis.cache.windows.net:6380" -LOG_LEVEL "info" -TEST_MODE "false"'
 
           - task: AzureAppServiceManage@0
             displayName: 'Restart App Service'

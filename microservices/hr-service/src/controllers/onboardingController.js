@@ -50,12 +50,17 @@ const addWorkDetails = async (req, res, next) => {
 
 /**
  * Step 3: Add statutory information
- * @route PATCH /api/hr/employees/:employeeId
+ * @route PATCH /api/hr/employees/:employeeId or POST /api/hr/onboarding/statutory-info
  */
 const addStatutoryInfo = async (req, res, next) => {
   try {
-    const { employeeId } = req.params;
+    // Support both :employeeId param (PATCH) and employeeId in body (POST)
+    const employeeId = req.params.employeeId || req.body.employeeId;
     const updatedBy = req.user?.id || req.user?._id;
+
+    if (!employeeId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID is required');
+    }
 
     const result = await onboardingService.addStatutoryInfo(employeeId, req.body, updatedBy);
 
@@ -143,10 +148,58 @@ const getDraft = async (req, res, next) => {
   }
 };
 
+/**
+ * Step 1: Add personal details (onboarding-specific)
+ * @route POST /api/hr/onboarding/personal-details
+ */
+const addPersonalDetails = async (req, res, next) => {
+  try {
+    const createdBy = req.user?.id || req.user?._id;
+    const result = await onboardingService.addPersonalDetails(req.body, createdBy);
+
+    res.status(201).json({
+      success: true,
+      message: 'Personal details added successfully',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Add personal details error', { error: error.message });
+    next(error);
+  }
+};
+
+/**
+ * Step 4: Add onboarding documents
+ * @route POST /api/hr/onboarding/documents
+ */
+const addDocuments = async (req, res, next) => {
+  try {
+    const { employeeId } = req.body;
+    const uploadedBy = req.user?.id || req.user?._id;
+
+    if (!employeeId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID is required');
+    }
+
+    const result = await onboardingService.addDocuments(employeeId, req.body, uploadedBy);
+
+    res.status(200).json({
+      success: true,
+      message: 'Documents added successfully',
+      data: result
+    });
+  } catch (error) {
+    logger.error('Add documents error', { error: error.message });
+    next(error);
+  }
+};
+
 module.exports = {
   register,
+  addPersonalDetails,
   addWorkDetails,
   addStatutoryInfo,
+  addDocuments,
   completeOnboarding,
   saveDraft,
   getDraft

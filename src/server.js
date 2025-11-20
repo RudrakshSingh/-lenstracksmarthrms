@@ -237,6 +237,10 @@ sortedServices.forEach(([key, service]) => {
   // Optimized proxy middleware - minimal logging with HTTPS support
   // IMPORTANT: Do NOT use pathRewrite - we want to forward the full path including basePath
   const proxyMiddleware = createProxyMiddleware({
+    pathFilter: (pathname, req) => {
+      // Only proxy requests that match the basePath
+      return pathname.startsWith(basePath);
+    },
     target: targetUrl,
     changeOrigin: true,
     timeout: 10000,
@@ -250,15 +254,30 @@ sortedServices.forEach(([key, service]) => {
     xfwd: true,
     protocolRewrite: isProduction && targetUrl.startsWith('https://') ? 'https' : undefined,
     onProxyReq: (proxyReq, req) => {
+      // Set connection headers
       proxyReq.setHeader('Connection', 'keep-alive');
-      // Forward all headers including Authorization
+      
+      // Forward ALL headers from original request (important for POST/PUT/PATCH)
+      Object.keys(req.headers).forEach(key => {
+        const lowerKey = key.toLowerCase();
+        // Skip headers that shouldn't be forwarded
+        if (lowerKey !== 'host' && lowerKey !== 'connection' && lowerKey !== 'content-length') {
+          proxyReq.setHeader(key, req.headers[key]);
+        }
+      });
+      
+      // Ensure Content-Type is forwarded for POST/PUT/PATCH requests
+      if (req.headers['content-type']) {
+        proxyReq.setHeader('Content-Type', req.headers['content-type']);
+      }
+      
+      // Ensure Authorization header is forwarded
       if (req.headers.authorization) {
         proxyReq.setHeader('Authorization', req.headers.authorization);
       }
-      // Forward original URL for debugging
-      if (!isProduction && req.path.includes('/api/')) {
-        logger.debug(`Proxy: ${req.method} ${req.originalUrl} -> ${service.name}${req.path}`);
-      }
+      
+      // Log proxy request
+      logger.info(`[Proxy] ${req.method} ${req.originalUrl} -> ${service.name} at ${targetUrl}${req.path}`);
     },
     onProxyRes: (proxyRes, req) => {
       if (req.method === 'GET' && proxyRes.statusCode === 200) {
@@ -270,48 +289,74 @@ sortedServices.forEach(([key, service]) => {
       proxyRes.headers['X-Frame-Options'] = 'DENY';
     },
     onError: (err, req, res) => {
+      logger.error(`[Proxy Error] ${service.name} - ${req.method} ${req.originalUrl}:`, {
+        error: err.message,
+        code: err.code,
+        service: service.name,
+        path: req.path,
+        method: req.method
+      });
+      
+      // Mark service as offline in registry
       if (serviceRegistry[key]) {
         serviceRegistry[key].status = 'offline';
         serviceRegistry[key].lastChecked = Date.now();
       }
       
+      // Return error response if headers not sent
       if (!res.headersSent) {
         res.status(503).json({
           success: false,
           message: `${service.name} is currently unavailable`,
-          error: isProduction ? 'Service unavailable' : err.message
+          error: isProduction ? 'Service unavailable' : err.message,
+          service: service.name,
+          path: req.path,
+          method: req.method,
+          hint: 'Check service status at /api endpoint'
         });
       }
-    }
+    },
+    // Add log level for better debugging
+    logLevel: isProduction ? 'warn' : 'debug'
   });
   
-  // Use wildcard to match all sub-paths: /api/hr, /api/hr/employees, /api/hr/leave, etc.
-  app.use(`${basePath}*`, (req, res, next) => {
+  // Register proxy middleware for all HTTP methods (GET, POST, PUT, PATCH, DELETE, etc.)
+  // Use basePath without wildcard - Express will match all sub-paths automatically
+  app.use(basePath, (req, res, next) => {
+    // Safety check: ensure request path starts with basePath
+    if (!req.path.startsWith(basePath) && req.path !== basePath) {
+      return next(); // Let other routes handle it
+    }
+    
     const registryService = serviceRegistry[key];
+    
+    // Check if service is offline (only in production)
     if (registryService && registryService.status === 'offline' && isProduction) {
       return res.status(503).json({
         success: false,
         message: `${service.name} is currently offline`,
         service: service.name,
-        path: req.path
+        path: req.path,
+        method: req.method
       });
     }
     
+    // Check if service URL is localhost in production (not deployed)
     if (serviceUrl.includes('localhost') && isProduction) {
       return res.status(503).json({
         success: false,
         message: `${service.name} is not available`,
         service: service.name,
         path: req.path,
-        hint: `Please configure ${serviceConfig.envVar} environment variable`
+        method: req.method,
+        hint: `Please configure ${serviceConfig.envVar} environment variable or deploy the service`
       });
     }
     
-    // Log proxy request for debugging
-    if (!isProduction) {
-      logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.path}`);
-    }
+    // Log proxy request for debugging (always log for troubleshooting)
+    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.path}`);
     
+    // Forward request to service via proxy middleware
     proxyMiddleware(req, res, next);
   });
 });
@@ -431,6 +476,61 @@ if (purchaseService) {
   
   app.use('/api/procurement', procurementProxy);
 }
+
+// API Discovery endpoint - MUST be after proxy middleware but before 404 handler
+app.get('/api', async (req, res) => {
+  const now = Date.now();
+  if (apiEndpointCache && (now - apiEndpointCacheTime) < API_CACHE_TTL) {
+    return res.json(apiEndpointCache);
+  }
+
+  // Update service statuses (non-blocking)
+  updateServiceStatuses().catch(err => {
+    if (!isProduction) logger.error('Error updating service statuses:', err);
+  });
+
+  const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
+  
+  const formattedServices = {};
+  Object.entries(serviceRegistry).forEach(([key, service]) => {
+    formattedServices[key] = {
+      name: service.name,
+      port: service.port,
+      basePath: service.basePath,
+      url: service.url,
+      isWebSocket: service.isWebSocket,
+      status: service.status,
+      lastChecked: service.lastChecked ? new Date(service.lastChecked).toISOString() : null
+    };
+  });
+
+  const serviceEndpoints = Object.values(serviceRegistry).map(s => s.basePath);
+  
+  const response = {
+    service: 'Etelios API Gateway - All Microservices',
+    version: '1.0.0',
+    status: 'operational',
+    message: 'Welcome to Etelios HRMS & ERP API Gateway',
+    baseUrl: baseUrl,
+    endpoints: {
+      health: '/health',
+      api: '/api',
+      services: serviceEndpoints
+    },
+    services: formattedServices,
+    documentation: {
+      swagger: '/api-docs',
+      postman: '/postman/HRMS-API-Collection.json',
+      frontendGuide: 'See FRONTEND-API-ACCESS.md'
+    },
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  };
+
+  apiEndpointCache = response;
+  apiEndpointCacheTime = now;
+  res.json(response);
+});
 
 // AI Chat endpoint
 app.post('/api/chat', (req, res) => {

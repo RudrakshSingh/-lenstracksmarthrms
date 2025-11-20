@@ -58,6 +58,7 @@ const workDetailsSchema = {
 
 const statutoryInfoSchema = {
   body: Joi.object({
+    employeeId: Joi.string().optional(), // Optional for POST route, required for PATCH route
     bankAccount: Joi.object({
       account_number: Joi.string().required(),
       ifsc_code: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).required(),
@@ -111,13 +112,89 @@ const getDraftSchema = {
   })
 };
 
+const personalDetailsSchema = {
+  body: Joi.object({
+    employee_id: Joi.string().required(),
+    name: Joi.string().min(2).max(100).required(),
+    email: Joi.string().email().required(),
+    phone: Joi.string().required(),
+    password: Joi.string().min(8).required(),
+    role: Joi.string().valid('employee', 'hr', 'manager', 'admin', 'superadmin').default('employee'),
+    date_of_birth: Joi.date().optional(),
+    address: Joi.object({
+      address_line_1: Joi.string().optional(),
+      street: Joi.string().optional(),
+      city: Joi.string().required(),
+      state: Joi.string().required(),
+      pincode: Joi.string().pattern(/^\d{6}$/).required(),
+      zip: Joi.string().optional(),
+      country: Joi.string().default('India')
+    }).required()
+  })
+};
+
+const documentsSchema = {
+  body: Joi.object({
+    employeeId: Joi.string().required(),
+    documents: Joi.array().items(
+      Joi.object({
+        type: Joi.string().valid(
+          'AADHAR',
+          'PAN',
+          'PASSPORT',
+          'DRIVING_LICENSE',
+          'EDUCATION_CERTIFICATE',
+          'EXPERIENCE_CERTIFICATE',
+          'BANK_STATEMENT',
+          'PHOTO',
+          'SIGNATURE',
+          'OTHER'
+        ).required(),
+        name: Joi.string().optional(),
+        file_name: Joi.string().optional(),
+        url: Joi.string().uri().optional(),
+        file_url: Joi.string().uri().optional(),
+        uploaded_at: Joi.date().optional(),
+        verified: Joi.boolean().optional(),
+        verified_by: Joi.string().optional(),
+        verified_at: Joi.date().optional(),
+        metadata: Joi.object().optional()
+      }).or('url', 'file_url') // At least one URL is required
+    ).min(1).required()
+  })
+};
+
 // Routes
 // Note: Register endpoint is handled separately at /api/auth/register in server.js
+
+/**
+ * Step 1: Add personal details (onboarding-specific)
+ * @route POST /api/hr/onboarding/personal-details
+ * @access Private (HR, Admin)
+ */
+router.post(
+  '/onboarding/personal-details',
+  authenticate,
+  requireRole(['hr', 'admin', 'superadmin']),
+  validateRequest(personalDetailsSchema),
+  asyncHandler(onboardingController.addPersonalDetails)
+);
 
 /**
  * Step 2: Add work details (uses existing employee creation endpoint)
  * This will be handled by the existing POST /api/hr/employees endpoint
  * but we'll add a specific onboarding route as well
+ */
+router.post(
+  '/onboarding/work-details',
+  authenticate,
+  requireRole(['hr', 'admin', 'superadmin']),
+  validateRequest(workDetailsSchema),
+  asyncHandler(onboardingController.addWorkDetails)
+);
+
+/**
+ * Step 2 (Alternative): Add work details via /work-details (backward compatibility)
  */
 router.post(
   '/work-details',
@@ -129,6 +206,23 @@ router.post(
 
 /**
  * Step 3: Add statutory information
+ * @route POST /api/hr/onboarding/statutory-info
+ * @access Private (HR, Admin)
+ */
+router.post(
+  '/onboarding/statutory-info',
+  authenticate,
+  requireRole(['hr', 'admin', 'superadmin']),
+  validateRequest(statutoryInfoSchema),
+  asyncHandler((req, res, next) => {
+    // Extract employeeId from body for POST route
+    req.params.employeeId = req.body.employeeId;
+    onboardingController.addStatutoryInfo(req, res, next);
+  })
+);
+
+/**
+ * Step 3 (Alternative): Add statutory information via PATCH (backward compatibility)
  * @route PATCH /api/hr/employees/:employeeId/statutory
  * @access Private (HR, Admin)
  */
@@ -141,7 +235,37 @@ router.patch(
 );
 
 /**
+ * Step 4: Add onboarding documents
+ * @route POST /api/hr/onboarding/documents
+ * @access Private (HR, Admin)
+ */
+router.post(
+  '/onboarding/documents',
+  authenticate,
+  requireRole(['hr', 'admin', 'superadmin']),
+  validateRequest(documentsSchema),
+  asyncHandler(onboardingController.addDocuments)
+);
+
+/**
  * Step 5: Complete onboarding
+ * @route POST /api/hr/onboarding/complete/:id
+ * @access Private (HR, Admin)
+ */
+router.post(
+  '/onboarding/complete/:id',
+  authenticate,
+  requireRole(['hr', 'admin', 'superadmin']),
+  validateRequest(completeOnboardingSchema),
+  asyncHandler((req, res, next) => {
+    // Map :id param to employeeId for controller
+    req.params.employeeId = req.params.id;
+    onboardingController.completeOnboarding(req, res, next);
+  })
+);
+
+/**
+ * Step 5 (Alternative): Complete onboarding via /employees/:employeeId/complete-onboarding (backward compatibility)
  * @route POST /api/hr/employees/:employeeId/complete-onboarding
  * @access Private (HR, Admin)
  */

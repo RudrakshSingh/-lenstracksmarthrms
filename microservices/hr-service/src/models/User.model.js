@@ -97,6 +97,56 @@ const userSchema = new mongoose.Schema({
     type: Date
   },
   
+  // Onboarding Documents
+  onboardingDocuments: [{
+    type: {
+      type: String,
+      enum: [
+        'AADHAR',
+        'PAN',
+        'PASSPORT',
+        'DRIVING_LICENSE',
+        'EDUCATION_CERTIFICATE',
+        'EXPERIENCE_CERTIFICATE',
+        'BANK_STATEMENT',
+        'PHOTO',
+        'SIGNATURE',
+        'OTHER'
+      ],
+      required: true
+    },
+    name: {
+      type: String,
+      required: true
+    },
+    url: {
+      type: String,
+      required: true
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    uploadedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    verified: {
+      type: Boolean,
+      default: false
+    },
+    verifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    verifiedAt: {
+      type: Date
+    },
+    metadata: {
+      type: mongoose.Schema.Types.Mixed
+    }
+  }],
+  
   // Refresh Token
   refreshToken: {
     type: String,

@@ -37,6 +37,7 @@ stages:
         repository: $(imageRepository)
         dockerfile: $(dockerfilePath)
         containerRegistry: $(dockerRegistryServiceConnection)
+        buildContext: '$(Build.SourcesDirectory)/microservices/auth-service'
         tags: |
           latest
 

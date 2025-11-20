@@ -565,10 +565,121 @@ const getDraft = async (employeeId) => {
   }
 };
 
+/**
+ * Step 1: Add personal details (onboarding-specific endpoint)
+ * This is similar to registerBasicInfo but specifically for onboarding flow
+ */
+const addPersonalDetails = async (personalData, createdBy) => {
+  try {
+    // Reuse registerBasicInfo logic
+    return await registerBasicInfo(personalData);
+  } catch (error) {
+    logger.error('Error in addPersonalDetails', { error: error.message });
+    throw error;
+  }
+};
+
+/**
+ * Step 4: Add onboarding documents
+ */
+const addDocuments = async (employeeId, documentsData, uploadedBy) => {
+  try {
+    const user = await User.findOne({ employeeId: employeeId.toUpperCase() });
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'EMPLOYEE_NOT_FOUND', 'Employee not found');
+    }
+
+    const { documents } = documentsData;
+
+    if (!documents || !Array.isArray(documents) || documents.length === 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'DOCUMENTS_REQUIRED', 'At least one document is required');
+    }
+
+    // Validate document structure
+    const validDocumentTypes = [
+      'AADHAR',
+      'PAN',
+      'PASSPORT',
+      'DRIVING_LICENSE',
+      'EDUCATION_CERTIFICATE',
+      'EXPERIENCE_CERTIFICATE',
+      'BANK_STATEMENT',
+      'PHOTO',
+      'SIGNATURE',
+      'OTHER'
+    ];
+
+    const processedDocuments = documents.map((doc, index) => {
+      if (!doc.type || !validDocumentTypes.includes(doc.type)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `INVALID_DOCUMENT_TYPE_${index}`, `Invalid document type at index ${index}. Valid types: ${validDocumentTypes.join(', ')}`);
+      }
+
+      if (!doc.url && !doc.file_url) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `MISSING_DOCUMENT_URL_${index}`, `Document URL is required at index ${index}`);
+      }
+
+      return {
+        type: doc.type,
+        name: doc.name || doc.file_name || `${doc.type}_${Date.now()}`,
+        url: doc.url || doc.file_url,
+        uploadedAt: doc.uploaded_at ? new Date(doc.uploaded_at) : new Date(),
+        uploadedBy: uploadedBy,
+        verified: doc.verified || false,
+        verifiedBy: doc.verified_by || null,
+        verifiedAt: doc.verified_at ? new Date(doc.verified_at) : null,
+        metadata: doc.metadata || {}
+      };
+    });
+
+    // Store documents in user model or create a separate document collection
+    // For now, we'll store in user's onboardingDocuments field
+    if (!user.onboardingDocuments) {
+      user.onboardingDocuments = [];
+    }
+
+    // Add new documents (avoid duplicates by type)
+    processedDocuments.forEach(newDoc => {
+      const existingIndex = user.onboardingDocuments.findIndex(
+        d => d.type === newDoc.type && d.url === newDoc.url
+      );
+      
+      if (existingIndex >= 0) {
+        // Update existing document
+        user.onboardingDocuments[existingIndex] = {
+          ...user.onboardingDocuments[existingIndex],
+          ...newDoc,
+          uploadedAt: new Date() // Update upload time
+        };
+      } else {
+        // Add new document
+        user.onboardingDocuments.push(newDoc);
+      }
+    });
+
+    await user.save();
+
+    logger.info('Documents added to onboarding', {
+      employeeId: user.employeeId,
+      documentCount: processedDocuments.length
+    });
+
+    return {
+      employee_id: user.employeeId,
+      documents: user.onboardingDocuments,
+      status: 'documents_added'
+    };
+  } catch (error) {
+    logger.error('Error in addDocuments', { error: error.message, employeeId });
+    throw error;
+  }
+};
+
 module.exports = {
   registerBasicInfo,
+  addPersonalDetails,
   addWorkDetails,
   addStatutoryInfo,
+  addDocuments,
   completeOnboarding,
   saveDraft,
   getDraft

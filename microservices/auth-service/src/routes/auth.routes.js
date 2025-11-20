@@ -107,6 +107,16 @@ router.post('/login',
 );
 
 // Mock login endpoint for frontend testing
+// Try fast mode first (no DB), fallback to regular mode
+const { fastMockLogin } = require('../controllers/authController.fast');
+
+// Fast mock login (no database - instant response)
+router.post('/mock-login-fast', 
+  validateRequest(mockLoginSchema),
+  fastMockLogin
+);
+
+// Regular mock login (with database - may timeout)
 router.post('/mock-login', 
   validateRequest(mockLoginSchema),
   authController.mockLogin

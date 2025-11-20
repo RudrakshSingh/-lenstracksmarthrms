@@ -187,10 +187,19 @@ const resetPassword = async (req, res, next) => {
  * Mock login for frontend testing
  * Optimized version - eliminates 408 timeout errors
  * Uses caching, pre-hashed passwords, and optimized database operations
+ * 
+ * NOTE: If this still times out, use /api/auth/mock-login-fast instead
+ * which returns tokens without any database operations
  */
 const mockLogin = async (req, res, next) => {
   // Set longer timeout for this endpoint (4 minutes)
   req.setTimeout(240000);
+  
+  // Check if fast mode is requested via query parameter
+  if (req.query.fast === 'true' || process.env.MOCK_LOGIN_FAST_MODE === 'true') {
+    const { fastMockLogin } = require('./authController.fast');
+    return fastMockLogin(req, res, next);
+  }
   
   try {
     const User = require('../models/User.model');

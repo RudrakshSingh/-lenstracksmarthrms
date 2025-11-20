@@ -211,50 +211,8 @@ app.get('/', (req, res) => {
   });
 });
 
-// API endpoint - cached and optimized
-app.get('/api', async (req, res) => {
-  const now = Date.now();
-  if (apiEndpointCache && (now - apiEndpointCacheTime) < API_CACHE_TTL) {
-    return res.json(apiEndpointCache);
-  }
-
-  const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
-  
-  // Non-blocking status update
-  updateServiceStatuses().catch(() => {});
-  
-  const formattedServices = {};
-  Object.entries(serviceRegistry).forEach(([key, service]) => {
-    formattedServices[key] = {
-      name: service.name,
-      port: service.port,
-      basePath: service.basePath,
-      url: service.url,
-      isWebSocket: service.isWebSocket,
-      status: service.status
-    };
-  });
-  
-  const serviceEndpoints = Object.values(serviceRegistry).map(s => s.basePath);
-  
-  const response = {
-    service: 'Etelios API Gateway',
-    version: '1.0.0',
-    status: 'operational',
-    baseUrl: baseUrl,
-    endpoints: {
-      health: '/health',
-      api: '/api',
-      services: serviceEndpoints
-    },
-    services: formattedServices,
-    timestamp: new Date().toISOString()
-  };
-
-  apiEndpointCache = response;
-  apiEndpointCacheTime = now;
-  res.json(response);
-});
+// IMPORTANT: Proxy middleware MUST be registered BEFORE the /api route
+// Otherwise /api route will catch all /api/* requests
 
 // Optimized proxy middleware creation
 const allServices = servicesConfig.getAllServices();

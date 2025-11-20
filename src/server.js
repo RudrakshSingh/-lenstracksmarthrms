@@ -277,12 +277,14 @@ sortedServices.forEach(([key, service]) => {
   }
   
   // Optimized proxy middleware - minimal logging with HTTPS support
+  // IMPORTANT: Do NOT use pathRewrite - we want to forward the full path including basePath
   const proxyMiddleware = createProxyMiddleware({
     target: targetUrl,
     changeOrigin: true,
     timeout: 10000,
     proxyTimeout: 10000,
     secure: false, // Allow self-signed certificates
+    // NO pathRewrite - forward full path: /api/hr/employees -> /api/hr/employees
     headers: {
       'Connection': 'keep-alive',
       'Keep-Alive': 'timeout=5, max=1000'
@@ -291,8 +293,13 @@ sortedServices.forEach(([key, service]) => {
     protocolRewrite: isProduction && targetUrl.startsWith('https://') ? 'https' : undefined,
     onProxyReq: (proxyReq, req) => {
       proxyReq.setHeader('Connection', 'keep-alive');
+      // Forward all headers including Authorization
+      if (req.headers.authorization) {
+        proxyReq.setHeader('Authorization', req.headers.authorization);
+      }
+      // Forward original URL for debugging
       if (!isProduction && req.path.includes('/api/')) {
-        logger.debug(`Proxy: ${req.method} ${req.path} -> ${service.name}`);
+        logger.debug(`Proxy: ${req.method} ${req.originalUrl} -> ${service.name}${req.path}`);
       }
     },
     onProxyRes: (proxyRes, req) => {
@@ -320,20 +327,31 @@ sortedServices.forEach(([key, service]) => {
     }
   });
   
-  app.use(basePath, (req, res, next) => {
+  // Use wildcard to match all sub-paths: /api/hr, /api/hr/employees, /api/hr/leave, etc.
+  app.use(`${basePath}*`, (req, res, next) => {
     const registryService = serviceRegistry[key];
     if (registryService && registryService.status === 'offline' && isProduction) {
       return res.status(503).json({
         success: false,
-        message: `${service.name} is currently offline`
+        message: `${service.name} is currently offline`,
+        service: service.name,
+        path: req.path
       });
     }
     
     if (serviceUrl.includes('localhost') && isProduction) {
       return res.status(503).json({
         success: false,
-        message: `${service.name} is not available`
+        message: `${service.name} is not available`,
+        service: service.name,
+        path: req.path,
+        hint: `Please configure ${serviceConfig.envVar} environment variable`
       });
+    }
+    
+    // Log proxy request for debugging
+    if (!isProduction) {
+      logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.path}`);
     }
     
     proxyMiddleware(req, res, next);

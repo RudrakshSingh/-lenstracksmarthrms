@@ -1,10 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const hrLetterController = require('../controllers/hrLetterController');
+const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole, requirePermission } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
 const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
+
+// All routes require authentication
+router.use(authenticate);
 
 // Validation schemas
 const createLetterSchema = {

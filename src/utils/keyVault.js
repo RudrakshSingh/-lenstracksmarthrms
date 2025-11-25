@@ -126,6 +126,15 @@ class KeyVaultConfig {
       'AUTH_SERVICE_URL': 'kv-auth-service-url',
       'NOTIFICATION_SERVICE_URL': 'kv-notification-service-url',
       
+      // Kafka / Azure Event Hubs
+      'KAFKA_BROKERS': 'kv-kafka-brokers',
+      'KAFKA_SECURITY_PROTOCOL': 'kv-kafka-security-protocol',
+      'KAFKA_SASL_MECHANISM': 'kv-kafka-sasl-mechanism',
+      'KAFKA_SASL_USERNAME': 'kv-kafka-sasl-username',
+      'KAFKA_SASL_PASSWORD': 'kv-kafka-sasl-password',
+      'EVENTHUB_CONNECTION_STRING': 'kv-eventhub-connection-string',
+      'EVENTHUB_NAME': 'kv-eventhub-name',
+      
       // Multi-tenant
       'TENANT_DB_PREFIX': 'kv-tenant-db-prefix',
       'TENANT_AUTO_PROVISION': 'kv-tenant-auto-provision'
@@ -170,13 +179,13 @@ class KeyVaultConfig {
           throw error;
         }
       }
-      console.log(`✅ Key Vault: Connected to ${this.keyVaultUrl}`);
+      console.log(`Key Vault: Connected to ${this.keyVaultUrl}`);
     } catch (error) {
       if (error.statusCode === 404) {
         // Test secret doesn't exist, but Key Vault is accessible
-        console.log(`✅ Key Vault: Connected to ${this.keyVaultUrl} (test secret not found, but connection successful)`);
+        console.log(`Key Vault: Connected to ${this.keyVaultUrl} (test secret not found, but connection successful)`);
       } else {
-        console.warn(`⚠️  Key Vault: Failed to connect. Error: ${error.message}. Falling back to environment variables.`);
+        console.warn(`Key Vault: Failed to connect. Error: ${error.message}. Falling back to environment variables.`);
         this.useKeyVault = false;
       }
     }
@@ -228,9 +237,9 @@ class KeyVaultConfig {
     } catch (error) {
       if (error.statusCode === 404) {
         // Secret not found in Key Vault
-        console.warn(`⚠️  Key Vault: Secret '${secretName}' not found. Using default value.`);
+        console.warn(`Key Vault: Secret '${secretName}' not found. Using default value.`);
       } else {
-        console.error(`❌ Key Vault: Error retrieving secret '${secretName}': ${error.message}`);
+        console.error(`Key Vault: Error retrieving secret '${secretName}': ${error.message}`);
       }
     }
 
@@ -259,7 +268,7 @@ class KeyVaultConfig {
 
     // If Key Vault is enabled but not initialized, warn
     if (this.useKeyVault && !this.initialized) {
-      console.warn(`⚠️  Key Vault: get() called before initialization. Use getSecret() for async access or call initialize() first.`);
+      console.warn(`Key Vault: get() called before initialization. Use getSecret() for async access or call initialize() first.`);
     }
 
     return defaultValue;
@@ -304,9 +313,9 @@ class KeyVaultConfig {
       'SENDGRID_API_KEY'
     ];
 
-    console.log('🔑 Preloading common secrets from Key Vault...');
+    console.log(' Preloading common secrets from Key Vault...');
     await this.getSecrets(commonSecrets);
-    console.log('✅ Common secrets preloaded');
+    console.log('Common secrets preloaded');
   }
 }
 

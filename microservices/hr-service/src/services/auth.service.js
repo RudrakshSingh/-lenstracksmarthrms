@@ -18,10 +18,18 @@ const { logAuthEvent } = auditUtils;
  */
 const login = async (email, password, rememberMe = false) => {
   try {
-    // Find user by email
-    const user = await User.findOne({ email: email.toLowerCase() })
+    // Find user by email with timeout protection
+    const userQuery = User.findOne({ email: email.toLowerCase() })
       .populate('role', 'name display_name permissions')
-      .select('+password');
+      .select('+password')
+      .maxTimeMS(10000); // 10 second timeout
+    
+    const user = await Promise.race([
+      userQuery,
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database query timeout')), 10000)
+      )
+    ]);
 
     if (!user) {
       throw new ApiError(httpStatus.UNAUTHORIZED, 'INVALID_CREDENTIALS', 'Invalid email or password');

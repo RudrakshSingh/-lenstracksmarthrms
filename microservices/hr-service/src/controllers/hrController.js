@@ -1,63 +1,140 @@
 const HRService = require('../services/hr.service');
 const logger = require('../config/logger');
+const { 
+  sendSuccess, 
+  sendError, 
+  sendNotFound, 
+  sendServiceUnavailable,
+  createPagination,
+  parsePagination,
+  parseFilters,
+  formatEmployee,
+  validateRequired
+} = require('../../shared/utils/response.util');
 
 /**
  * Get all employees
+ * GET /api/employees
+ * Query Parameters: page, limit, search, department, status, store, role, manager
  */
 const getEmployees = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, status, store, role, department, search } = req.query;
+    // Parse pagination
+    const { page, limit, skip } = parsePagination(req.query);
+    
+    // Parse filters
+    const allowedFilters = ['department', 'status', 'store', 'role', 'manager'];
+    const filters = parseFilters(req.query, allowedFilters);
 
-    const filters = {};
-    if (status) filters.status = status;
-    if (store) filters.store = store;
-    if (role) filters.role = role;
-    if (department) filters.department = department;
-    if (search) filters.search = search;
+    // Get employees from service
+    const result = await HRService.getEmployees(filters, page, limit);
 
-    const result = await HRService.getEmployees(filters, parseInt(page), parseInt(limit));
+    // Format employees
+    const employees = Array.isArray(result.data) 
+      ? result.data.map(emp => formatEmployee(emp))
+      : (result.employees || []).map(emp => formatEmployee(emp));
 
-    res.status(200).json({
-      success: true,
-      message: 'Employees retrieved successfully',
-      data: result
-    });
+    // Create pagination object
+    const total = result.total || result.count || employees.length;
+    const pagination = createPagination(page, limit, total);
+
+    // Send standardized response
+    return sendSuccess(res, employees, 'Employees retrieved successfully', pagination, 200);
   } catch (error) {
     logger.error('Error in getEmployees controller', { error: error.message, userId: req.user?._id });
+    
+    // Check if it's a service unavailable error
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'fetch employees');
+    }
+    
     next(error);
   }
 };
 
 /**
  * Create new employee
+ * POST /api/employees
+ * Required fields: fullName, email, department
  */
 const createEmployee = async (req, res, next) => {
   try {
     const employeeData = req.body;
     const createdBy = req.user?._id || req.user?.id;
 
+    // Validate authentication
     if (!createdBy) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendError(res, 'Authentication required', 'Authentication required', 401);
     }
 
+    // Validate required fields
+    const requiredFields = ['fullName', 'email', 'department'];
+    const validationError = validateRequired(employeeData, requiredFields);
+    if (validationError) {
+      return sendError(res, validationError.error, validationError.message, 400);
+    }
+
+    // Create employee
     const employee = await HRService.createEmployee(employeeData, createdBy);
 
-    res.status(201).json({
-      success: true,
-      message: 'Employee created successfully',
-      data: employee
-    });
+    // Format response
+    const formattedEmployee = formatEmployee(employee);
+
+    // Send standardized response
+    return sendSuccess(res, formattedEmployee, 'Employee created successfully', null, 201);
   } catch (error) {
     logger.error('Error in createEmployee controller', { error: error.message, userId: req.user?._id || req.user?.id });
+    
+    // Check if it's a service unavailable error
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'create employee');
+    }
+    
+    // Check if it's a validation error
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
+    next(error);
+  }
+};
+
+/**
+ * Get employee by ID
+ * GET /api/employees/[id]
+ */
+const getEmployeeById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const employee = await HRService.getEmployeeById(id);
+
+    if (!employee) {
+      return sendNotFound(res, 'Employee', id);
+    }
+
+    // Format response
+    const formattedEmployee = formatEmployee(employee);
+
+    return sendSuccess(res, formattedEmployee, 'Employee retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getEmployeeById controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Employee', req.params.id);
+    }
+    
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'fetch employee');
+    }
+    
     next(error);
   }
 };
 
 /**
  * Update employee
+ * PUT /api/employees/[id]
  */
 const updateEmployee = async (req, res, next) => {
   try {
@@ -67,19 +144,36 @@ const updateEmployee = async (req, res, next) => {
 
     const employee = await HRService.updateEmployee(id, updateData, updatedBy);
 
-    res.status(200).json({
-      success: true,
-      message: 'Employee updated successfully',
-      data: employee
-    });
+    if (!employee) {
+      return sendNotFound(res, 'Employee', id);
+    }
+
+    // Format response
+    const formattedEmployee = formatEmployee(employee);
+
+    return sendSuccess(res, formattedEmployee, 'Employee updated successfully', null, 200);
   } catch (error) {
     logger.error('Error in updateEmployee controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Employee', req.params.id);
+    }
+    
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'update employee');
+    }
+    
     next(error);
   }
 };
 
 /**
  * Delete employee
+ * DELETE /api/employees/[id]
  */
 const deleteEmployee = async (req, res, next) => {
   try {
@@ -88,18 +182,29 @@ const deleteEmployee = async (req, res, next) => {
 
     const result = await HRService.deleteEmployee(id, deletedBy);
 
-    res.status(200).json({
-      success: true,
-      message: result.message
-    });
+    if (!result || (result.deletedCount !== undefined && result.deletedCount === 0)) {
+      return sendNotFound(res, 'Employee', id);
+    }
+
+    return sendSuccess(res, null, result.message || 'Employee deleted successfully', null, 200);
   } catch (error) {
     logger.error('Error in deleteEmployee controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Employee', req.params.id);
+    }
+    
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'delete employee');
+    }
+    
     next(error);
   }
 };
 
 /**
  * Assign role to employee
+ * POST /api/employees/[id]/assign-role
  */
 const assignRole = async (req, res, next) => {
   try {
@@ -107,28 +212,40 @@ const assignRole = async (req, res, next) => {
     const { roleName } = req.body;
     const assignedBy = req.user._id;
 
-    if (!roleName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Role name is required'
-      });
+    // Validate required fields
+    const validationError = validateRequired({ roleName }, ['roleName']);
+    if (validationError) {
+      return sendError(res, validationError.error, validationError.message, 400);
     }
 
     const employee = await HRService.assignRole(id, roleName, assignedBy);
 
-    res.status(200).json({
-      success: true,
-      message: 'Role assigned successfully',
-      data: employee
-    });
+    if (!employee) {
+      return sendNotFound(res, 'Employee', id);
+    }
+
+    // Format response
+    const formattedEmployee = formatEmployee(employee);
+
+    return sendSuccess(res, formattedEmployee, 'Role assigned successfully', null, 200);
   } catch (error) {
     logger.error('Error in assignRole controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Employee', req.params.id);
+    }
+    
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
     next(error);
   }
 };
 
 /**
  * Update employee status
+ * POST /api/employees/[id]/status
  */
 const updateEmployeeStatus = async (req, res, next) => {
   try {
@@ -136,85 +253,115 @@ const updateEmployeeStatus = async (req, res, next) => {
     const { status } = req.body;
     const updatedBy = req.user._id;
 
-    if (!status) {
-      return res.status(400).json({
-        success: false,
-        message: 'Status is required'
-      });
+    // Validate required fields
+    const validationError = validateRequired({ status }, ['status']);
+    if (validationError) {
+      return sendError(res, validationError.error, validationError.message, 400);
     }
 
     const employee = await HRService.updateEmployeeStatus(id, status, updatedBy);
 
-    res.status(200).json({
-      success: true,
-      message: 'Employee status updated successfully',
-      data: employee
-    });
+    if (!employee) {
+      return sendNotFound(res, 'Employee', id);
+    }
+
+    // Format response
+    const formattedEmployee = formatEmployee(employee);
+
+    return sendSuccess(res, formattedEmployee, 'Employee status updated successfully', null, 200);
   } catch (error) {
     logger.error('Error in updateEmployeeStatus controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Employee', req.params.id);
+    }
+    
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
     next(error);
   }
 };
 
 /**
  * Get all stores
+ * GET /api/stores
  */
 const getStores = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, status, search } = req.query;
+    // Parse pagination
+    const { page, limit, skip } = parsePagination(req.query);
 
-    const filters = {};
-    if (status) filters.status = status;
-    if (search) filters.search = search;
+    // Parse filters
+    const allowedFilters = ['status', 'nature'];
+    const filters = parseFilters(req.query, allowedFilters);
 
-    const result = await HRService.getStores(filters, parseInt(page), parseInt(limit));
+    const result = await HRService.getStores(filters, page, limit);
 
     // Ensure result has stores array
-    const stores = result.stores || result || [];
-    const pagination = result.pagination || { current: 1, pages: 1, total: stores.length };
+    const stores = Array.isArray(result.data) 
+      ? result.data 
+      : (result.stores || (Array.isArray(result) ? result : []));
 
-    res.status(200).json({
-      success: true,
-      message: 'Stores retrieved successfully',
-      data: Array.isArray(stores) ? stores : [stores],
-      pagination
-    });
+    // Create pagination object
+    const total = result.total || result.count || stores.length;
+    const pagination = createPagination(page, limit, total);
+
+    return sendSuccess(res, stores, 'Stores retrieved successfully', pagination, 200);
   } catch (error) {
     logger.error('Error in getStores controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'fetch stores');
+    }
+    
     next(error);
   }
 };
 
 /**
  * Create a new store
+ * POST /api/stores
  */
 const createStore = async (req, res, next) => {
   try {
     const storeData = req.body;
     const createdBy = req.user?._id || req.user?.id;
 
+    // Validate authentication
     if (!createdBy) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
+      return sendError(res, 'Authentication required', 'Authentication required', 401);
+    }
+
+    // Validate required fields
+    const requiredFields = ['name', 'code', 'address', 'gst'];
+    const validationError = validateRequired(storeData, requiredFields);
+    if (validationError) {
+      return sendError(res, validationError.error, validationError.message, 400);
     }
 
     const store = await HRService.createStore(storeData, createdBy);
 
-    res.status(201).json({
-      success: true,
-      message: 'Store created successfully',
-      data: store
-    });
+    return sendSuccess(res, store, 'Store created successfully', null, 201);
   } catch (error) {
     logger.error('Error in createStore controller', { error: error.message, userId: req.user?._id || req.user?.id });
+    
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'create store');
+    }
+    
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
     next(error);
   }
 };
 
 /**
  * Get store by ID
+ * GET /api/stores/[id]
  */
 const getStoreById = async (req, res, next) => {
   try {
@@ -222,19 +369,26 @@ const getStoreById = async (req, res, next) => {
 
     const store = await HRService.getStoreById(id);
 
-    res.status(200).json({
-      success: true,
-      message: 'Store retrieved successfully',
-      data: store
-    });
+    if (!store) {
+      return sendNotFound(res, 'Store', id);
+    }
+
+    return sendSuccess(res, store, 'Store retrieved successfully', null, 200);
   } catch (error) {
     logger.error('Error in getStoreById controller', { error: error.message, userId: req.user?._id });
+    
+    // Check if it's a not found error
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Store', req.params.id);
+    }
+    
     next(error);
   }
 };
 
 /**
  * Update store
+ * PUT /api/stores/[id]
  */
 const updateStore = async (req, res, next) => {
   try {
@@ -244,39 +398,56 @@ const updateStore = async (req, res, next) => {
 
     const store = await HRService.updateStore(id, updateData, updatedBy);
 
-    res.status(200).json({
-      success: true,
-      message: 'Store updated successfully',
-      data: store
-    });
+    if (!store) {
+      return sendNotFound(res, 'Store', id);
+    }
+
+    return sendSuccess(res, store, 'Store updated successfully', null, 200);
   } catch (error) {
     logger.error('Error in updateStore controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Store', req.params.id);
+    }
+    
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
     next(error);
   }
 };
 
 /**
  * Delete store
+ * DELETE /api/stores/[id]
  */
 const deleteStore = async (req, res, next) => {
   try {
     const { id } = req.params;
     const deletedBy = req.user._id;
 
-    await HRService.deleteStore(id, deletedBy);
+    const result = await HRService.deleteStore(id, deletedBy);
 
-    res.status(200).json({
-      success: true,
-      message: 'Store deleted successfully'
-    });
+    if (!result || (result.deletedCount !== undefined && result.deletedCount === 0)) {
+      return sendNotFound(res, 'Store', id);
+    }
+
+    return sendSuccess(res, null, 'Store deleted successfully', null, 200);
   } catch (error) {
     logger.error('Error in deleteStore controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Store', req.params.id);
+    }
+    
     next(error);
   }
 };
 
 module.exports = {
   getEmployees,
+  getEmployeeById,
   createEmployee,
   updateEmployee,
   deleteEmployee,

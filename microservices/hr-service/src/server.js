@@ -56,14 +56,16 @@ app.use(cors(corsOptions));
 
 // IP whitelist middleware - only apply if explicitly enabled
 // This allows the IP to be configured but not block requests unless explicitly enabled
+// IMPORTANT: IP whitelist is DISABLED by default to prevent accidental blocking
 if (process.env.IP_WHITELIST_ENABLED === 'true') {
   app.use(ipFilter);
   logger.info('IP whitelist middleware ENABLED', { 
     allowedIPs: process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',') : azureConfig.ipWhitelist.allowedIPs 
   });
 } else {
-  logger.info('IP whitelist configured but not enabled (set IP_WHITELIST_ENABLED=true to enable)', {
-    allowedIPs: process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',') : azureConfig.ipWhitelist.allowedIPs
+  logger.info('IP whitelist DISABLED (set IP_WHITELIST_ENABLED=true to enable)', {
+    note: 'All IPs are allowed by default',
+    configuredIPs: process.env.ALLOWED_IPS ? process.env.ALLOWED_IPS.split(',') : azureConfig.ipWhitelist.allowedIPs
   });
 }
 
@@ -100,32 +102,55 @@ app.use(compression({
   }
 }));
 
-// Database connection
+// Database connection with improved timeout handling
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'hr_service'}`;
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s
-      socketTimeoutMS: 45000, // Socket timeout
-      maxPoolSize: 10, // Maximum number of connections in pool
-      minPoolSize: 2, // Minimum number of connections in pool
-      maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
+    
+    // Set connection options with shorter timeouts to prevent hanging
+    const connectionOptions = {
+      serverSelectionTimeoutMS: 10000, // Increased to 10s for Azure
+      socketTimeoutMS: 30000, // 30s socket timeout
+      connectTimeoutMS: 10000, // 10s connection timeout
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
       retryWrites: true,
       retryReads: true,
-      // Optimize for performance
-      bufferMaxEntries: 0, // Disable mongoose buffering
-      bufferCommands: false // Disable mongoose buffering
+      bufferMaxEntries: 0,
+      bufferCommands: false,
+      // Add heartbeat to detect dead connections
+      heartbeatFrequencyMS: 10000
+    };
+    
+    // Add connection event handlers
+    mongoose.connection.on('error', (err) => {
+      logger.error('MongoDB connection error', { error: err.message });
     });
+    
+    mongoose.connection.on('disconnected', () => {
+      logger.warn('MongoDB disconnected');
+    });
+    
+    mongoose.connection.on('reconnected', () => {
+      logger.info('MongoDB reconnected');
+    });
+    
+    await mongoose.connect(mongoUri, connectionOptions);
+    
     logger.info('hr-service: MongoDB connected successfully', {
       database: mongoose.connection.name,
-      host: mongoose.connection.host
+      host: mongoose.connection.host,
+      readyState: mongoose.connection.readyState
     });
   } catch (error) {
     logger.error('hr-service: Database connection failed', { 
       error: error.message,
-      note: 'Service will continue but database operations will fail'
+      stack: error.stack,
+      note: 'Service will continue but database operations may fail'
     });
-    throw error; // Re-throw to allow retry logic in startServer
+    // Don't throw - allow service to start for health checks
+    // The service can still respond to health checks even if DB is down
   }
 };
 

@@ -12,7 +12,8 @@ const {
   clockOut,
   getAttendanceHistory,
   getAttendanceSummary,
-  getAttendanceRecords
+  getAttendanceRecords,
+  markAttendance
 } = require('../controllers/attendanceController');
 
 // Validation schemas
@@ -88,6 +89,13 @@ router.get('/',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['attendance:read']),
   getAttendanceRecords
+);
+
+// Mark attendance (POST /api/attendance)
+router.post('/',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['attendance:create']),
+  markAttendance
 );
 
 module.exports = router;

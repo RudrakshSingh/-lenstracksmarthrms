@@ -77,6 +77,13 @@ const loadRoutes = () => {
   } catch (error) {
     logger.error('geofencing.routes.js failed:', error.message);
   }
+  try {
+    const securityRoutes = require('./routes/security.routes.js');
+    app.use('/api/security', apiRateLimit, securityRoutes);
+    if (!isProduction) logger.info('security.routes.js loaded');
+  } catch (error) {
+    logger.error('security.routes.js failed:', error.message);
+  }
 };
 
 // Health check

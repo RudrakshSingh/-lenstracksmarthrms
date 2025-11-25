@@ -156,6 +156,29 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
 };
 
 /**
+ * Gets a single employee by ID
+ * @param {string} employeeId - Employee ID
+ * @returns {Promise<Object>} Employee object
+ */
+const getEmployeeById = async (employeeId) => {
+  try {
+    const employee = await User.findById(employeeId)
+      .populate('role', 'name permissions')
+      .populate('store', 'name address')
+      .lean();
+
+    if (!employee || employee.isDeleted) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+    }
+
+    return employee;
+  } catch (error) {
+    logger.error('Error in getEmployeeById service', { error: error.message, employeeId });
+    throw error;
+  }
+};
+
+/**
  * Updates an employee
  * @param {string} employeeId - Employee ID
  * @param {Object} updateData - Update data
@@ -569,6 +592,7 @@ const deleteStore = async (storeId, deletedBy) => {
 module.exports = {
   createEmployee,
   getEmployees,
+  getEmployeeById,
   updateEmployee,
   deleteEmployee,
   assignRole,

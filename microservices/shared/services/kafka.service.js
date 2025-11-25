@@ -35,11 +35,33 @@ class KafkaService {
    */
   async initialize() {
     try {
-      const brokers = process.env.KAFKA_BROKERS 
-        ? process.env.KAFKA_BROKERS.split(',')
-        : ['localhost:9092'];
+      // Determine brokers - support Azure Event Hubs or local Kafka
+      let brokers;
+      if (process.env.KAFKA_BROKERS) {
+        brokers = process.env.KAFKA_BROKERS.split(',');
+      } else if (process.env.EVENTHUB_CONNECTION_STRING) {
+        // Extract broker from Azure Event Hub connection string
+        const connectionString = process.env.EVENTHUB_CONNECTION_STRING;
+        const match = connectionString.match(/Endpoint=sb:\/\/([^\/]+)/);
+        if (match) {
+          brokers = [`${match[1]}:9093`];
+        } else {
+          brokers = ['localhost:9092'];
+        }
+      } else {
+        brokers = ['localhost:9092'];
+      }
 
-      this.kafka = new Kafka({
+      // Check if using Azure Event Hubs (SASL_SSL)
+      const isAzureEventHubs = process.env.KAFKA_SECURITY_PROTOCOL === 'SASL_SSL' || 
+                                process.env.EVENTHUB_CONNECTION_STRING;
+
+      // Get connection string for Azure Event Hubs
+      const connectionString = process.env.EVENTHUB_CONNECTION_STRING || 
+                               process.env.KAFKA_SASL_PASSWORD;
+
+      // Build Kafka configuration
+      const kafkaConfig = {
         clientId: process.env.SERVICE_NAME || 'etelios-service',
         brokers: brokers,
         retry: {
@@ -57,7 +79,21 @@ class KafkaService {
             logger.info('Kafka log', { message, ...extra });
           }
         }
-      });
+      };
+
+      // Add SSL and SASL configuration for Azure Event Hubs
+      if (isAzureEventHubs && connectionString) {
+        kafkaConfig.ssl = {
+          rejectUnauthorized: false
+        };
+        kafkaConfig.sasl = {
+          mechanism: process.env.KAFKA_SASL_MECHANISM || 'plain',
+          username: process.env.KAFKA_SASL_USERNAME || '$ConnectionString',
+          password: connectionString
+        };
+      }
+
+      this.kafka = new Kafka(kafkaConfig);
 
       // Create producer
       this.producer = this.kafka.producer({

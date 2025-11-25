@@ -52,18 +52,32 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
 
       // Check permissions if permissions are specified
       if (allowedPermissions.length > 0) {
+        const userRole = (user.role || '').toLowerCase();
         const userPermissions = user.permissions || [];
-        const hasPermission = allowedPermissions.some(permission =>
-          userPermissions.includes(permission) ||
-          userPermissions.includes('*') // Admin has all permissions
-        );
+        
+        // SuperAdmin and Admin have all permissions - skip permission check
+        if (userRole === 'superadmin' || userRole === 'admin') {
+          // Allow access for superadmin/admin
+        } else {
+          const hasPermission = allowedPermissions.some(permission =>
+            userPermissions.includes(permission) ||
+            userPermissions.includes('*') // Wildcard permission
+          );
 
-        if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'Access denied. Insufficient permissions.',
-            required: allowedPermissions
-          });
+          if (!hasPermission) {
+            logger.warn('Permission denied', {
+              userId: user.id,
+              role: user.role,
+              required: allowedPermissions,
+              has: userPermissions
+            });
+            return res.status(403).json({
+              success: false,
+              message: 'Access denied. Insufficient permissions.',
+              required: allowedPermissions,
+              current: userPermissions
+            });
+          }
         }
       }
 

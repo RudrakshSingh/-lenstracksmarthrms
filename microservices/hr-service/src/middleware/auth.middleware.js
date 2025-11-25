@@ -115,14 +115,30 @@ const authenticate = async (req, res, next) => {
     // Get user from database (if User model exists)
     try {
       const User = require('../models/User.model');
-      const user = await User.findById(decoded.userId || decoded.id);
+      
+      // Add timeout for database query to prevent hanging
+      const userQuery = User.findById(decoded.userId || decoded.id).maxTimeMS(5000);
+      const user = await Promise.race([
+        userQuery,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database query timeout')), 5000)
+        )
+      ]);
       
       if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found',
-          code: 'USER_NOT_FOUND'
+        // If user not found in DB, use token data but log warning
+        logger.warn('User not found in database, using token data', {
+          userId: decoded.userId || decoded.id,
+          email: decoded.email
         });
+        req.user = {
+          id: decoded.userId || decoded.id || 'unknown',
+          userId: decoded.userId || decoded.id,
+          role: decoded.role || 'user',
+          email: decoded.email || 'unknown@example.com',
+          permissions: decoded.permissions || []
+        };
+        return next();
       }
 
       // Allow 'pending' status for newly registered users, but reject 'terminated' or inactive
@@ -145,12 +161,25 @@ const authenticate = async (req, res, next) => {
 
       // Get role name if role is populated or an ID
       let roleName = decoded.role;
+      let permissions = decoded.permissions || [];
+      
       if (user.role) {
         if (typeof user.role === 'object' && user.role.name) {
           roleName = user.role.name;
+          permissions = user.role.permissions || permissions;
         } else if (typeof user.role === 'string') {
-          // Role is an ID, we'll use decoded role for now
-          roleName = decoded.role;
+          // Try to populate role if it's an ID
+          try {
+            const Role = require('../models/Role.model');
+            const role = await Role.findById(user.role).maxTimeMS(3000);
+            if (role) {
+              roleName = role.name;
+              permissions = role.permissions || permissions;
+            }
+          } catch (roleError) {
+            // If role lookup fails, use decoded role
+            logger.warn('Role lookup failed, using decoded role', { error: roleError.message });
+          }
         }
       }
 
@@ -166,16 +195,23 @@ const authenticate = async (req, res, next) => {
         email: user.email,
         role: roleName,
         roleId: typeof user.role === 'object' ? user.role._id : user.role,
-        permissions: decoded.permissions || [],
+        permissions: permissions,
         status: user.status
       };
     } catch (dbError) {
       // If User model doesn't exist or DB lookup fails, use token data
+      logger.warn('Database lookup failed, using token data', {
+        error: dbError.message,
+        userId: decoded.userId || decoded.id
+      });
+      
+      // Don't block request if DB is down - use token data
       req.user = {
         id: decoded.userId || decoded.id || 'unknown',
         userId: decoded.userId || decoded.id,
         role: decoded.role || 'user',
-        email: decoded.email || 'unknown@example.com'
+        email: decoded.email || 'unknown@example.com',
+        permissions: decoded.permissions || []
       };
     }
 

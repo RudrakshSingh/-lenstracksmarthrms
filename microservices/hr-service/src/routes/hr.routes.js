@@ -8,6 +8,7 @@ const Joi = require('joi');
 
 const {
   getEmployees,
+  getEmployeeById,
   createEmployee,
   updateEmployee,
   deleteEmployee,
@@ -154,6 +155,12 @@ router.post('/employees',
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:create']),
   validateRequest(createEmployeeSchema),
   asyncHandler(createEmployee)
+);
+
+router.get('/employees/:id',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:read']),
+  asyncHandler(getEmployeeById)
 );
 
 router.put('/employees/:id',

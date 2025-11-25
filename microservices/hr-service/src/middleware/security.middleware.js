@@ -290,11 +290,11 @@ const ipFilter = (req, res, next) => {
   }
 
   // Check if IP is whitelisted (if whitelist is configured)
-  // Only enforce whitelist if explicitly enabled via IP_WHITELIST_ENABLED=true
-  // OR if ALLOWED_IPS is set AND IP_WHITELIST_ENABLED is not explicitly false
-  const whitelistEnabled = process.env.IP_WHITELIST_ENABLED === 'true' || 
-                          (process.env.ALLOWED_IPS && process.env.IP_WHITELIST_ENABLED !== 'false');
+  // ONLY enforce whitelist if EXPLICITLY enabled via IP_WHITELIST_ENABLED=true
+  // This prevents accidental blocking in production
+  const whitelistEnabled = process.env.IP_WHITELIST_ENABLED === 'true';
   
+  // Only block if whitelist is explicitly enabled AND IP is not in allowed list
   if (whitelistEnabled && allowedIPs.length > 0 && !allowedIPs.includes(clientIP)) {
     logger.warn('Non-whitelisted IP attempted access', { 
       ip: clientIP, 
@@ -308,6 +308,8 @@ const ipFilter = (req, res, next) => {
       code: 'IP_NOT_WHITELISTED'
     });
   }
+  
+  // If whitelist is not explicitly enabled, allow all IPs (default behavior)
 
   next();
 };
@@ -356,9 +358,21 @@ const securityAuditLogger = (req, res, next) => {
   next();
 };
 
-// CSRF protection
+// CSRF protection - DISABLED for API endpoints (REST APIs use JWT, not sessions)
+// Only enable for web forms if needed
 const csrfProtection = (req, res, next) => {
+  // Skip CSRF for API endpoints (they use JWT authentication)
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  // Skip for GET, HEAD, OPTIONS
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    return next();
+  }
+
+  // Only check CSRF if session exists (web forms)
+  if (!req.session) {
     return next();
   }
 

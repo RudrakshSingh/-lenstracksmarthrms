@@ -1,4 +1,5 @@
 const authService = require('../services/auth.service');
+const mockLoginService = require('../services/mockLogin.service');
 const logger = require('../config/logger');
 
 /**
@@ -211,10 +212,38 @@ const getCurrentUser = async (req, res, next) => {
   }
 };
 
+/**
+ * Mock login controller for HR users
+ * @route POST /api/auth/mock-login
+ * @access Public (for development/testing)
+ */
+const mockLogin = async (req, res, next) => {
+  try {
+    const { email, role } = req.body;
+
+    // Only allow in development or if MOCK_LOGIN_ENABLED is true
+    if (process.env.NODE_ENV === 'production' && process.env.MOCK_LOGIN_ENABLED !== 'true') {
+      return res.status(403).json({
+        success: false,
+        error: 'MOCK_LOGIN_DISABLED',
+        message: 'Mock login is disabled in production'
+      });
+    }
+
+    const result = await mockLoginService.mockLogin(email, role || 'hr');
+
+    res.status(200).json(result);
+  } catch (error) {
+    logger.error('Mock login controller error', { error: error.message, email: req.body.email });
+    next(error);
+  }
+};
+
 module.exports = {
   login,
   refreshToken,
   logout,
-  getCurrentUser
+  getCurrentUser,
+  mockLogin
 };
 

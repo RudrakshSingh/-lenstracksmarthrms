@@ -90,5 +90,25 @@ router.get(
   asyncHandler(authController.getCurrentUser)
 );
 
+/**
+ * @route POST /api/auth/mock-login
+ * @desc Mock login for HR users (development/testing only)
+ * @access Public (disabled in production unless MOCK_LOGIN_ENABLED=true)
+ */
+const mockLoginSchema = {
+  body: Joi.object({
+    email: Joi.string().email().optional().messages({
+      'string.email': 'Please provide a valid email address'
+    }),
+    role: Joi.string().valid('hr', 'admin', 'manager', 'employee').optional().default('hr')
+  })
+};
+
+router.post(
+  '/mock-login',
+  validateRequest(mockLoginSchema),
+  asyncHandler(authController.mockLogin)
+);
+
 module.exports = router;
 

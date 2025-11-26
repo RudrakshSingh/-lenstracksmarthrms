@@ -228,6 +228,16 @@ const loadRoutes = () => {
   }
   
   try {
+    const adminRoutes = require('./routes/admin.routes.js');
+    app.use('/api/admin', apiRateLimit, adminRoutes);
+    routesLoaded.push('admin.routes.js');
+    logger.info('admin.routes.js loaded successfully at /api/admin');
+  } catch (error) {
+    routesFailed.push({ route: 'admin.routes.js', error: error.message });
+    logger.error('admin.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
     const hrLetterRoutes = require('./routes/hrLetter.routes.js');
     app.use('/api/hr-letter', apiRateLimit, hrLetterRoutes);
     routesLoaded.push('hrLetter.routes.js');
@@ -452,6 +462,21 @@ const startServer = async () => {
       }
     } else {
       logger.info('Role seeding disabled - using real data from database');
+    }
+    
+    // Ensure super admin exists (always run, but only creates if doesn't exist)
+    if (dbConnected) {
+      try {
+        const { ensureSuperAdmin } = require('./services/superAdmin.service');
+        const superAdmin = await ensureSuperAdmin();
+        logger.info('Super admin verified/created', { 
+          email: superAdmin.email,
+          userId: superAdmin.user._id 
+        });
+      } catch (superAdminError) {
+        logger.warn('Failed to ensure super admin exists', { error: superAdminError.message });
+        // Don't fail startup if super admin creation fails
+      }
     }
     
     // Load routes BEFORE starting server

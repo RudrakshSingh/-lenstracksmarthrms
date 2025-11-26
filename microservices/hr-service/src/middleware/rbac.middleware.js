@@ -26,14 +26,17 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
 
       // Check role if roles are specified
       if (allowedRoles.length > 0) {
-        const userRole = (user.role || '').toLowerCase();
-        const normalizedAllowedRoles = allowedRoles.map(r => r.toLowerCase());
+        const userRole = (user.role || '').toLowerCase().replace(/-/g, ''); // Remove hyphens for comparison
+        const normalizedAllowedRoles = allowedRoles.map(r => r.toLowerCase().replace(/-/g, ''));
+        
+        // SuperAdmin and Admin bypass all role checks
+        if (userRole === 'superadmin' || userRole === 'admin') {
+          return next();
+        }
         
         // Check if user has required role
         const hasRole = normalizedAllowedRoles.some(role => 
           userRole === role || 
-          userRole === 'admin' || 
-          userRole === 'superadmin' ||
           // Also check for HR variations
           (role === 'hr' && userRole === 'hr') ||
           (role === 'manager' && userRole === 'manager')

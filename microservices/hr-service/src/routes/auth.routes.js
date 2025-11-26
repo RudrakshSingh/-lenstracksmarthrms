@@ -110,5 +110,90 @@ router.post(
   asyncHandler(authController.mockLogin)
 );
 
+/**
+ * @route POST /api/auth/change-password
+ * @desc Change user password
+ * @access Private
+ */
+const changePasswordSchema = {
+  body: Joi.object({
+    currentPassword: Joi.string().required().messages({
+      'any.required': 'Current password is required'
+    }),
+    newPassword: Joi.string()
+      .min(8)
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+      .required()
+      .messages({
+        'string.min': 'Password must be at least 8 characters',
+        'string.pattern.base': 'Password must contain uppercase, lowercase, number, and special character',
+        'any.required': 'New password is required'
+      })
+  })
+};
+
+router.post(
+  '/change-password',
+  authenticate,
+  validateRequest(changePasswordSchema),
+  asyncHandler(authController.changePassword)
+);
+
+/**
+ * @route POST /api/auth/forgot-password
+ * @desc Request password reset
+ * @access Public
+ */
+const forgotPasswordSchema = {
+  body: Joi.object({
+    email: Joi.string().email().required().messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email is required'
+    })
+  })
+};
+
+// Rate limit for forgot password (3 attempts per hour)
+const forgotPasswordRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3,
+  message: 'Too many password reset requests, please try again later'
+});
+
+router.post(
+  '/forgot-password',
+  forgotPasswordRateLimit,
+  validateRequest(forgotPasswordSchema),
+  asyncHandler(authController.forgotPassword)
+);
+
+/**
+ * @route POST /api/auth/reset-password
+ * @desc Reset password with token
+ * @access Public
+ */
+const resetPasswordSchema = {
+  body: Joi.object({
+    token: Joi.string().required().messages({
+      'any.required': 'Reset token is required'
+    }),
+    newPassword: Joi.string()
+      .min(8)
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+      .required()
+      .messages({
+        'string.min': 'Password must be at least 8 characters',
+        'string.pattern.base': 'Password must contain uppercase, lowercase, number, and special character',
+        'any.required': 'New password is required'
+      })
+  })
+};
+
+router.post(
+  '/reset-password',
+  validateRequest(resetPasswordSchema),
+  asyncHandler(authController.resetPassword)
+);
+
 module.exports = router;
 

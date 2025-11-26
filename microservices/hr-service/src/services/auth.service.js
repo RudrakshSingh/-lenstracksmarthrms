@@ -1,10 +1,12 @@
 const User = require('../models/User.model');
 const Role = require('../models/Role.model');
+const PasswordReset = require('../models/PasswordReset.model');
 const { generateAccessToken, generateRefreshToken } = require('../config/jwt');
 const auditUtils = require('../utils/audit');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
+const crypto = require('crypto');
 
 // Use logAuthEvent for audit logging
 const { logAuthEvent } = auditUtils;
@@ -307,10 +309,176 @@ const logout = async (userId) => {
   }
 };
 
+/**
+ * Change password service
+ * @param {string} userId - User ID
+ * @param {string} currentPassword - Current password
+ * @param {string} newPassword - New password
+ * @returns {Promise<void>}
+ */
+const changePassword = async (userId, currentPassword, newPassword) => {
+  try {
+    // Validate password requirements
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'VALIDATION_ERROR', 
+        'Password must be at least 8 characters with uppercase, lowercase, number, and special character');
+    }
+
+    const user = await User.findById(userId).select('+password');
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    // Verify current password
+    const isPasswordValid = await user.comparePassword(currentPassword);
+    if (!isPasswordValid) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_PASSWORD', 'Current password is incorrect');
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    // Log password change
+    try {
+      if (logAuthEvent) {
+        logAuthEvent('password_change', userId, {
+          email: user.email
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
+
+    logger.info('Password changed successfully', { userId, email: user.email });
+  } catch (error) {
+    logger.error('Change password error', { error: error.message, userId });
+    throw error;
+  }
+};
+
+/**
+ * Forgot password service - Generate reset token
+ * @param {string} email - User email
+ * @param {string} ipAddress - IP address
+ * @param {string} userAgent - User agent
+ * @returns {Promise<void>}
+ */
+const forgotPassword = async (email, ipAddress, userAgent) => {
+  try {
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    // Don't reveal if email exists (security best practice)
+    if (!user) {
+      logger.warn('Forgot password request for non-existent email', { email });
+      return; // Return success even if user doesn't exist
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour expiry
+
+    // Invalidate any existing reset tokens for this user
+    await PasswordReset.updateMany(
+      { userId: user._id, used: false },
+      { used: true, usedAt: new Date() }
+    );
+
+    // Create new reset token
+    await PasswordReset.create({
+      userId: user._id,
+      email: user.email,
+      token: resetToken,
+      expiresAt,
+      ipAddress,
+      userAgent
+    });
+
+    // TODO: Send email with reset link
+    // For now, just log it
+    logger.info('Password reset token generated', { 
+      userId: user._id, 
+      email: user.email,
+      token: resetToken // In production, don't log the token
+    });
+
+    // In production, send email here
+    // await emailService.sendPasswordResetEmail(user.email, resetToken);
+  } catch (error) {
+    logger.error('Forgot password error', { error: error.message, email });
+    throw error;
+  }
+};
+
+/**
+ * Reset password service
+ * @param {string} token - Reset token
+ * @param {string} newPassword - New password
+ * @returns {Promise<void>}
+ */
+const resetPassword = async (token, newPassword) => {
+  try {
+    // Validate password requirements
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'VALIDATION_ERROR', 
+        'Password must be at least 8 characters with uppercase, lowercase, number, and special character');
+    }
+
+    // Find reset token
+    const passwordReset = await PasswordReset.findOne({ 
+      token, 
+      used: false,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!passwordReset) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_TOKEN', 
+        'Password reset token is invalid or expired');
+    }
+
+    // Find user
+    const user = await User.findById(passwordReset.userId);
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    // Update password
+    user.password = newPassword;
+    await user.save();
+
+    // Mark token as used
+    passwordReset.used = true;
+    passwordReset.usedAt = new Date();
+    await passwordReset.save();
+
+    // Log password reset
+    try {
+      if (logAuthEvent) {
+        logAuthEvent('password_reset', user._id.toString(), {
+          email: user.email
+        });
+      }
+    } catch (auditError) {
+      logger.warn('Failed to record audit log', { error: auditError.message });
+    }
+
+    logger.info('Password reset successfully', { userId: user._id, email: user.email });
+  } catch (error) {
+    logger.error('Reset password error', { error: error.message });
+    throw error;
+  }
+};
+
 module.exports = {
   login,
   refreshAccessToken,
   logout,
-  getRedirectUrlForRole
+  getRedirectUrlForRole,
+  changePassword,
+  forgotPassword,
+  resetPassword
 };
 

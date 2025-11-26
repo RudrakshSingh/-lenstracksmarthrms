@@ -21,8 +21,12 @@ const login = async (req, res, next) => {
 
     const result = await authService.login(email, password, rememberMe);
 
-    // Return response in exact format as per frontend spec
-    res.status(200).json(result);
+    // Return response in exact format as per backend documentation
+    res.status(200).json({
+      success: true,
+      data: result,
+      message: 'Login successful'
+    });
   } catch (error) {
     logger.error('Login controller error', { error: error.message, email: req.body.email });
     next(error);
@@ -48,10 +52,13 @@ const refreshToken = async (req, res, next) => {
 
     const result = await authService.refreshAccessToken(refreshToken);
 
-    // Return response in format matching frontend spec
+    // Return response in format matching backend documentation
     res.status(200).json({
-      accessToken: result.accessToken,
-      expiresIn: result.expiresIn || 3600
+      success: true,
+      data: {
+        accessToken: result.accessToken,
+        expiresIn: result.expiresIn || 3600
+      }
     });
   } catch (error) {
     logger.error('Refresh token controller error', { error: error.message });
@@ -195,15 +202,21 @@ const getCurrentUser = async (req, res, next) => {
       }
     }
 
-    // Return response in format matching frontend spec
+    // Return response in format matching backend documentation
     res.status(200).json({
-      user: {
+      success: true,
+      data: {
         id: user._id.toString(),
         email: user.email,
         name: `${user.firstName} ${user.lastName}`.trim() || user.email,
         role: roleData?.name || 'employee',
         permissions: roleData?.permissions || [],
-        tenantId: tenantId
+        tenantId: tenantId,
+        employeeId: user.employeeId,
+        departmentId: user.department?.toString() || null,
+        status: user.status || 'ACTIVE',
+        avatar: user.avatar || null,
+        lastLogin: user.lastLogin || null
       }
     });
   } catch (error) {
@@ -239,11 +252,114 @@ const mockLogin = async (req, res, next) => {
   }
 };
 
+/**
+ * Change password controller
+ * @route POST /api/auth/change-password
+ * @access Private
+ */
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user?.id || req.user?._id || req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'AUTHENTICATION_REQUIRED',
+        message: 'Authentication required'
+      });
+    }
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'Current password and new password are required'
+      });
+    }
+
+    await authService.changePassword(userId, currentPassword, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    logger.error('Change password controller error', { error: error.message, userId: req.user?.id });
+    next(error);
+  }
+};
+
+/**
+ * Forgot password controller
+ * @route POST /api/auth/forgot-password
+ * @access Public
+ */
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'Email is required'
+      });
+    }
+
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+
+    await authService.forgotPassword(email, ipAddress, userAgent);
+
+    // Always return success (don't reveal if email exists)
+    res.status(200).json({
+      success: true,
+      message: 'Password reset email sent'
+    });
+  } catch (error) {
+    logger.error('Forgot password controller error', { error: error.message, email: req.body.email });
+    next(error);
+  }
+};
+
+/**
+ * Reset password controller
+ * @route POST /api/auth/reset-password
+ * @access Public
+ */
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'Token and new password are required'
+      });
+    }
+
+    await authService.resetPassword(token, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successful'
+    });
+  } catch (error) {
+    logger.error('Reset password controller error', { error: error.message });
+    next(error);
+  }
+};
+
 module.exports = {
   login,
   refreshToken,
   logout,
   getCurrentUser,
-  mockLogin
+  mockLogin,
+  changePassword,
+  forgotPassword,
+  resetPassword
 };
 

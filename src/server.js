@@ -213,7 +213,11 @@ const API_CACHE_TTL = 5000; // Cache /api endpoint for 5 seconds
 
 // Root route - cached response
 app.get('/', (req, res) => {
-  const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
+  // Use HTTPS in production, or respect X-Forwarded-Proto header if behind proxy
+  const protocol = isProduction 
+    ? 'https' 
+    : (req.headers['x-forwarded-proto'] || req.protocol || 'http');
+  const baseUrl = process.env.GATEWAY_URL || `${protocol}://${req.get('host')}`;
   res.json({
     service: 'Etelios API Gateway',
     version: '1.0.0',
@@ -296,7 +300,18 @@ sortedServices.forEach(([key, service]) => {
       // Log proxy request
       logger.info(`[Proxy] ${req.method} ${req.originalUrl} -> ${service.name} at ${targetUrl}${req.path}`);
     },
-    onProxyRes: (proxyRes, req) => {
+    onProxyRes: (proxyRes, req, res) => {
+      // Log error responses for debugging
+      if (proxyRes.statusCode >= 400) {
+        logger.error(`[Proxy Response Error] ${service.name} - ${req.method} ${req.originalUrl}:`, {
+          statusCode: proxyRes.statusCode,
+          service: service.name,
+          path: req.path,
+          method: req.method,
+          headers: proxyRes.headers
+        });
+      }
+      
       if (req.method === 'GET' && proxyRes.statusCode === 200) {
         if (!req.path.includes('/auth/') && !req.path.includes('/profile')) {
           proxyRes.headers['Cache-Control'] = 'public, max-age=60, s-maxage=60';
@@ -371,7 +386,13 @@ sortedServices.forEach(([key, service]) => {
     }
     
     // Log proxy request for debugging (always log for troubleshooting)
-    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.path}`);
+    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.path}`, {
+      body: req.method !== 'GET' ? req.body : undefined,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'authorization': req.headers['authorization'] ? '***' : undefined
+      }
+    });
     
     // Forward request to service via proxy middleware
     proxyMiddleware(req, res, next);
@@ -506,7 +527,11 @@ app.get('/api', async (req, res) => {
     if (!isProduction) logger.error('Error updating service statuses:', err);
   });
 
-  const baseUrl = process.env.GATEWAY_URL || `${req.protocol}://${req.get('host')}`;
+  // Use HTTPS in production, or respect X-Forwarded-Proto header if behind proxy
+  const protocol = isProduction 
+    ? 'https' 
+    : (req.headers['x-forwarded-proto'] || req.protocol || 'http');
+  const baseUrl = process.env.GATEWAY_URL || `${protocol}://${req.get('host')}`;
   
   const formattedServices = {};
   Object.entries(serviceRegistry).forEach(([key, service]) => {

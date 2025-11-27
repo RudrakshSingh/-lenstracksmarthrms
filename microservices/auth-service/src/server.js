@@ -76,8 +76,8 @@ const connectDB = async () => {
       logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
     }
     
-    // Determine if this is Cosmos DB (connection string contains documents.azure.com)
-    const isCosmosDB = mongoUri.includes('documents.azure.com');
+    // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)
+    const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
     
     const connectionOptions = {
       serverSelectionTimeoutMS: 30000, // Increased to 30s for Azure
@@ -86,7 +86,7 @@ const connectDB = async () => {
       maxPoolSize: 10, // Maximum number of connections in pool
       minPoolSize: 2, // Minimum number of connections in pool
       maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
-      retryWrites: true,
+      retryWrites: true, // Cosmos DB supports retrywrites (override connection string if needed)
       retryReads: true,
       // Optimize for performance
       bufferMaxEntries: 0, // Disable mongoose buffering
@@ -97,6 +97,9 @@ const connectDB = async () => {
     if (isCosmosDB) {
       connectionOptions.ssl = true;
       connectionOptions.sslValidate = true;
+      // Cosmos DB requires retrywrites=true for write operations
+      connectionOptions.retryWrites = true;
+      logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
     }
     
     await mongoose.connect(mongoUri, connectionOptions);

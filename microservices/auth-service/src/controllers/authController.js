@@ -26,6 +26,15 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { emailOrEmployeeId, password } = req.body;
+    
+    // Validate required fields
+    if (!emailOrEmployeeId || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email/Employee ID and password are required'
+      });
+    }
+    
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
     const result = await AuthService.login(emailOrEmployeeId, password, ip, userAgent);
@@ -36,7 +45,30 @@ const login = async (req, res, next) => {
       data: result
     });
   } catch (error) {
-    logger.error('Error in login controller', { error: error.message });
+    logger.error('Error in login controller', { 
+      error: error.message, 
+      stack: error.stack,
+      emailOrEmployeeId: req.body?.emailOrEmployeeId 
+    });
+    
+    // Handle specific error types
+    if (error.message.includes('Database connection unavailable')) {
+      return res.status(503).json({
+        success: false,
+        message: 'Service temporarily unavailable. Please try again later.',
+        error: 'Database connection error'
+      });
+    }
+    
+    // Handle authentication errors (400)
+    if (error.message.includes('Invalid') || error.message.includes('Account')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    // Default to 500 for unexpected errors
     next(error);
   }
 };

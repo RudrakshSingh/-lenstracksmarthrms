@@ -110,16 +110,26 @@ class AuthService {
    */
   async login(emailOrEmployeeId, password, ip, userAgent) {
     try {
+      // Check database connection first
+      const mongoose = require('mongoose');
+      if (mongoose.connection.readyState !== 1) {
+        logger.error('Database not connected', { readyState: mongoose.connection.readyState });
+        throw new Error('Database connection unavailable. Please try again later.');
+      }
+      
       // Find user by email or employee ID
       let user;
+      
       if (emailOrEmployeeId.includes('@')) {
         // Login with email
         user = await User.findOne({ email: emailOrEmployeeId.toLowerCase() })
+          .maxTimeMS(5000) // 5 second timeout for query
           .populate('stores', 'name code')
           .populate('reporting_manager', 'name employee_id');
       } else {
         // Login with employee ID
         user = await User.findOne({ employee_id: emailOrEmployeeId.toUpperCase() })
+          .maxTimeMS(5000) // 5 second timeout for query
           .populate('stores', 'name code')
           .populate('reporting_manager', 'name employee_id');
       }

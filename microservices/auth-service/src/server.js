@@ -76,7 +76,10 @@ const connectDB = async () => {
       logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
     }
     
-    await mongoose.connect(mongoUri, {
+    // Determine if this is Cosmos DB (connection string contains documents.azure.com)
+    const isCosmosDB = mongoUri.includes('documents.azure.com');
+    
+    const connectionOptions = {
       serverSelectionTimeoutMS: 30000, // Increased to 30s for Azure
       socketTimeoutMS: 60000, // Increased to 60s
       connectTimeoutMS: 30000, // Explicit connect timeout
@@ -88,10 +91,15 @@ const connectDB = async () => {
       // Optimize for performance
       bufferMaxEntries: 0, // Disable mongoose buffering
       bufferCommands: false, // Disable mongoose buffering
-      // Azure Cosmos DB specific options
-      ssl: true,
-      sslValidate: true
-    });
+    };
+    
+    // Azure Cosmos DB specific options (only if Cosmos DB)
+    if (isCosmosDB) {
+      connectionOptions.ssl = true;
+      connectionOptions.sslValidate = true;
+    }
+    
+    await mongoose.connect(mongoUri, connectionOptions);
     logger.info('auth-service: MongoDB connected successfully', {
       database: mongoose.connection.name,
       host: mongoose.connection.host
@@ -177,13 +185,21 @@ app.use((err, req, res, next) => {
     error: err.message,
     stack: err.stack,
     url: req.url,
-    method: req.method
+    method: req.method,
+    body: req.body
   });
+  
+  // Don't expose internal errors in production
+  const isProduction = process.env.NODE_ENV === 'production';
+  const message = isProduction && err.status >= 500 
+    ? 'Internal server error' 
+    : (err.message || 'Internal server error');
   
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal server error',
-    service: 'auth-service'
+    message: message,
+    service: 'auth-service',
+    ...(isProduction ? {} : { error: err.message, stack: err.stack })
   });
 });
 

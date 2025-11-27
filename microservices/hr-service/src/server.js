@@ -102,16 +102,34 @@ app.use(compression({
   }
 }));
 
-// Database connection with improved timeout handling
+// Database connection with improved timeout handling for Azure Cosmos DB
 const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'hr_service'}`;
+    // Get MONGO_URI from Azure Key Vault or environment variable
+    // Never hardcode connection strings in code!
+    let mongoUri = process.env.MONGO_URI;
     
-    // Set connection options with shorter timeouts to prevent hanging
+    // If not in environment, try Key Vault (only if enabled)
+    if (!mongoUri && process.env.USE_KEY_VAULT === 'true') {
+      try {
+        const keyVault = require('../../shared/utils/keyVault');
+        mongoUri = await keyVault.getSecret('MONGO_URI');
+      } catch (error) {
+        logger.warn('Key Vault not available, falling back to default');
+      }
+    }
+    
+    // Fallback to local MongoDB for development
+    if (!mongoUri) {
+      mongoUri = `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'hr_service'}`;
+      logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
+    }
+    
+    // Set connection options optimized for Azure Cosmos DB
     const connectionOptions = {
-      serverSelectionTimeoutMS: 10000, // Increased to 10s for Azure
-      socketTimeoutMS: 30000, // 30s socket timeout
-      connectTimeoutMS: 10000, // 10s connection timeout
+      serverSelectionTimeoutMS: 30000, // Increased to 30s for Azure
+      socketTimeoutMS: 60000, // 60s socket timeout for Azure
+      connectTimeoutMS: 30000, // 30s connection timeout for Azure
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
@@ -120,7 +138,10 @@ const connectDB = async () => {
       bufferMaxEntries: 0,
       bufferCommands: false,
       // Add heartbeat to detect dead connections
-      heartbeatFrequencyMS: 10000
+      heartbeatFrequencyMS: 10000,
+      // Azure Cosmos DB specific options
+      ssl: true,
+      sslValidate: true
     };
     
     // Add connection event handlers

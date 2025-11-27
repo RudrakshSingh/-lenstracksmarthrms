@@ -83,6 +83,13 @@ const loadRoutes = () => {
   } catch (error) {
     logger.error('productMaster.routes.js failed:', error.message);
   }
+  try {
+    const stockRoutes = require('./routes/stock.routes.js');
+    app.use('/api/inventory/stock', apiRateLimit, stockRoutes);
+    if (!isProduction) logger.info('stock.routes.js loaded');
+  } catch (error) {
+    logger.error('stock.routes.js failed:', error.message);
+  }
 };
 
 // Health check

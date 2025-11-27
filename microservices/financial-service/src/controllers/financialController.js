@@ -121,6 +121,78 @@ const getExpenses = async (req, res, next) => {
 };
 
 /**
+ * @desc Approve expense
+ * @route POST /api/financial/expenses/:id/approve
+ * @access Private (Admin, Manager)
+ */
+const approveExpense = async (req, res, next) => {
+  try {
+    const expense = await financialService.approveExpense(
+      req.params.id,
+      req.user.id,
+      req.body.comments
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: 'Expense approved successfully',
+      data: expense
+    });
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    logger.error('Error in approveExpense controller:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc Reject expense
+ * @route POST /api/financial/expenses/:id/reject
+ * @access Private (Admin, Manager)
+ */
+const rejectExpense = async (req, res, next) => {
+  try {
+    const expense = await financialService.rejectExpense(
+      req.params.id,
+      req.user.id,
+      req.body.reason
+    );
+    
+    res.status(200).json({
+      success: true,
+      message: 'Expense rejected successfully',
+      data: expense
+    });
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    logger.error('Error in rejectExpense controller:', error);
+    next(error);
+  }
+};
+
+/**
  * @desc Create ledger entry
  * @route POST /api/financial/ledger
  * @access Private (Admin, Manager)
@@ -316,6 +388,8 @@ const getFinancialDashboard = async (req, res, next) => {
 };
 
 module.exports = {
+  approveExpense,
+  rejectExpense,
   createOrUpdatePandL,
   getPandL,
   getPandLSummary,

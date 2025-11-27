@@ -783,6 +783,50 @@ class CRMService {
     }
   }
 
+  async convertLead(leadId, convertData) {
+    try {
+      const lead = await Customer.findOne({ _id: leadId, is_lead: true });
+      
+      if (!lead) {
+        throw new Error('Lead not found');
+      }
+
+      // Convert lead to customer
+      lead.is_lead = false;
+      lead.status = 'active';
+      if (convertData.customer_segment) {
+        lead.customer_segment = convertData.customer_segment;
+      }
+      
+      await lead.save();
+
+      // Create opportunity if requested
+      let opportunity = null;
+      if (convertData.create_opportunity) {
+        const Opportunity = require('../models/Opportunity.model');
+        opportunity = new Opportunity({
+          name: convertData.opportunity_name || `Opportunity for ${lead.name}`,
+          customer_id: lead._id,
+          lead_id: leadId,
+          stage: 'PROSPECTING',
+          value: convertData.opportunity_value || 0,
+          source: convertData.source || 'LEAD_CONVERSION',
+          assigned_to: convertData.assigned_to,
+          created_by: convertData.created_by
+        });
+        await opportunity.save();
+      }
+
+      return {
+        customer: lead,
+        opportunity: opportunity
+      };
+    } catch (error) {
+      logger.error('Error converting lead', { error: error.message });
+      throw error;
+    }
+  }
+
   // Interaction CRUD operations
   async getInteractions(query = {}) {
     try {

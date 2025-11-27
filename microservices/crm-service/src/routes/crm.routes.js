@@ -1,8 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const crmController = require('../controllers/crmController');
+const opportunityController = require('../controllers/opportunityController');
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole, requirePermission } = require('../middleware/rbac.middleware');
+const { validateRequest } = require('../middleware/validateRequest.middleware');
+const Joi = require('joi');
 
 // Apply authentication to all routes
 router.use(authenticate);
@@ -23,6 +26,7 @@ router.post('/leads', requirePermission('manage_leads'), crmController.createLea
 router.get('/leads/:id', requirePermission('view_leads'), crmController.getLead);
 router.patch('/leads/:id', requirePermission('manage_leads'), crmController.updateLead);
 router.delete('/leads/:id', requirePermission('manage_leads'), crmController.deleteLead);
+router.post('/leads/:id/convert', requirePermission('manage_leads'), crmController.convertLead);
 
 // Interaction Management
 router.get('/interactions', requirePermission('view_interactions'), crmController.getInteractions);
@@ -53,5 +57,54 @@ router.post('/subscriptions/redeem', requirePermission('manage_subscriptions'), 
 
 // Analytics
 router.get('/customers/:id/analytics', requirePermission('view_analytics'), crmController.getCustomerAnalytics);
+
+// Opportunity Management
+const createOpportunitySchema = {
+  body: Joi.object({
+    name: Joi.string().required().trim(),
+    customer_id: Joi.string().required(),
+    lead_id: Joi.string().optional(),
+    stage: Joi.string().valid('PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST').optional(),
+    probability: Joi.number().min(0).max(100).optional(),
+    value: Joi.number().required().min(0),
+    currency: Joi.string().default('INR'),
+    expected_close_date: Joi.date().optional(),
+    description: Joi.string().optional().max(2000),
+    source: Joi.string().valid('WEBSITE', 'REFERRAL', 'WALK_IN', 'CALL', 'EMAIL', 'SOCIAL_MEDIA', 'OTHER').optional(),
+    assigned_to: Joi.string().optional(),
+    store_id: Joi.string().optional(),
+    products: Joi.array().items(Joi.object({
+      product_id: Joi.string().required(),
+      quantity: Joi.number().min(1).required(),
+      unit_price: Joi.number().min(0).required()
+    })).optional()
+  })
+};
+
+const updateOpportunitySchema = {
+  body: Joi.object({
+    name: Joi.string().optional().trim(),
+    stage: Joi.string().valid('PROSPECTING', 'QUALIFICATION', 'PROPOSAL', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST').optional(),
+    probability: Joi.number().min(0).max(100).optional(),
+    value: Joi.number().optional().min(0),
+    expected_close_date: Joi.date().optional(),
+    description: Joi.string().optional().max(2000),
+    assigned_to: Joi.string().optional()
+  })
+};
+
+const closeOpportunitySchema = {
+  body: Joi.object({
+    reason: Joi.string().valid('WON', 'LOST', 'CANCELLED', 'ON_HOLD').required(),
+    notes: Joi.string().optional()
+  })
+};
+
+router.get('/opportunities', requirePermission('view_opportunities'), opportunityController.getOpportunities);
+router.post('/opportunities', requirePermission('manage_opportunities'), validateRequest(createOpportunitySchema), opportunityController.createOpportunity);
+router.get('/opportunities/stats', requirePermission('view_opportunities'), opportunityController.getOpportunityStats);
+router.get('/opportunities/:id', requirePermission('view_opportunities'), opportunityController.getOpportunityById);
+router.put('/opportunities/:id', requirePermission('manage_opportunities'), validateRequest(updateOpportunitySchema), opportunityController.updateOpportunity);
+router.post('/opportunities/:id/close', requirePermission('manage_opportunities'), validateRequest(closeOpportunitySchema), opportunityController.closeOpportunity);
 
 module.exports = router;

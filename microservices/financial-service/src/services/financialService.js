@@ -161,6 +161,76 @@ class FinancialService {
   }
 
   /**
+   * Approve expense
+   */
+  async approveExpense(expenseId, approvedBy, comments = null) {
+    try {
+      const expense = await Expense.findById(expenseId);
+      
+      if (!expense) {
+        const error = new Error('Expense not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (expense.status !== 'PENDING') {
+        const error = new Error(`Expense is already ${expense.status}`);
+        error.statusCode = 400;
+        throw error;
+      }
+
+      expense.status = 'APPROVED';
+      expense.approved_by = approvedBy;
+      expense.approved_at = new Date();
+      if (comments) {
+        expense.notes = (expense.notes || '') + `\nApproval: ${comments}`;
+      }
+
+      await expense.save();
+      
+      logger.info(`Expense approved: ${expense.expense_number}`);
+      return expense;
+    } catch (error) {
+      logger.error('Error approving expense:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reject expense
+   */
+  async rejectExpense(expenseId, rejectedBy, reason) {
+    try {
+      const expense = await Expense.findById(expenseId);
+      
+      if (!expense) {
+        const error = new Error('Expense not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (expense.status !== 'PENDING') {
+        const error = new Error(`Expense is already ${expense.status}`);
+        error.statusCode = 400;
+        throw error;
+      }
+
+      expense.status = 'REJECTED';
+      expense.approved_by = rejectedBy;
+      expense.approved_at = new Date();
+      expense.rejection_reason = reason;
+
+      await expense.save();
+      
+      logger.info(`Expense rejected: ${expense.expense_number}`);
+      return expense;
+    } catch (error) {
+      logger.error('Error rejecting expense:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get expenses with filtering
    */
   async getExpenses(filters = {}) {

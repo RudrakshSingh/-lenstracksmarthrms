@@ -41,10 +41,29 @@ app.use(emergencyLockMiddleware);
 // Greywall Emergency System Middleware (hidden)
 app.use(greywallSystem.greywallMiddleware());
 
-// Database connection - optimized for performance
+// Database connection - optimized for performance and Azure Cosmos DB
 const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'auth_service'}`;
+    // Get MONGO_URI from Azure Key Vault or environment variable
+    // Never hardcode connection strings in code!
+    let mongoUri = process.env.MONGO_URI;
+    
+    // If not in environment, try Key Vault (only if enabled)
+    if (!mongoUri && process.env.USE_KEY_VAULT === 'true') {
+      try {
+        const keyVault = require('../../shared/utils/keyVault');
+        mongoUri = await keyVault.getSecret('MONGO_URI');
+      } catch (error) {
+        logger.warn('Key Vault not available, falling back to default');
+      }
+    }
+    
+    // Fallback to local MongoDB for development
+    if (!mongoUri) {
+      mongoUri = `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'auth_service'}`;
+      logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
+    }
+    
     await mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 30000, // Increased to 30s for Azure
       socketTimeoutMS: 60000, // Increased to 60s
@@ -56,7 +75,10 @@ const connectDB = async () => {
       retryReads: true,
       // Optimize for performance
       bufferMaxEntries: 0, // Disable mongoose buffering
-      bufferCommands: false // Disable mongoose buffering
+      bufferCommands: false, // Disable mongoose buffering
+      // Azure Cosmos DB specific options
+      ssl: true,
+      sslValidate: true
     });
     logger.info('auth-service: MongoDB connected successfully', {
       database: mongoose.connection.name,

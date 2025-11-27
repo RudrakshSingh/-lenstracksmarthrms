@@ -17,6 +17,8 @@ const {
   upload
 } = require('../controllers/productMasterController');
 
+const { getLowStockItems } = require('../controllers/stockController');
+
 // Validation schemas
 const createProductSchema = {
   body: Joi.object({
@@ -149,6 +151,23 @@ router.put('/:id/image/:imageId/primary',
   authenticate,
   requireRole(['admin', 'manager', 'inventory_manager']),
   setPrimaryImage
+);
+
+// Low stock items (also accessible via /api/inventory/stock/low-stock)
+const getLowStockItemsSchema = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(25),
+    store_id: Joi.string().optional(),
+    category: Joi.string().optional()
+  })
+};
+
+router.get('/low-stock',
+  authenticate,
+  requireRole(['admin', 'manager', 'inventory_manager', 'store_manager']),
+  validateRequest(getLowStockItemsSchema),
+  getLowStockItems
 );
 
 module.exports = router;

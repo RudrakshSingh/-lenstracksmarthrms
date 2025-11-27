@@ -275,6 +275,29 @@ class CRMController {
     }
   }
 
+  // Convert Lead to Customer
+  async convertLead(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await crmService.convertLead(id, {
+        ...req.body,
+        created_by: req.user.id
+      });
+      
+      res.json({
+        success: true,
+        data: result,
+        message: 'Lead converted to customer successfully'
+      });
+    } catch (error) {
+      logger.error('Error converting lead', { error: error.message });
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
   // Customer CRUD operations
   async getCustomers(req, res) {
     try {

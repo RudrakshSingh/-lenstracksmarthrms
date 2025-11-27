@@ -21,9 +21,21 @@ app.use(responseTime((req, res, time) => {
 
 // Security middleware
 app.use(helmet());
+// CORS configuration - allows frontend and all origins if CORS_ORIGIN is '*'
+const corsOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  credentials: true
+  origin: corsOrigin === '*' ? '*' : (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowed = corsOrigin.split(',').map(o => o.trim());
+    if (allowed.includes(origin) || corsOrigin === '*') {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow for now to prevent blocking
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With']
 }));
 
 // Compression

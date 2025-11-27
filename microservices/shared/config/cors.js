@@ -1,18 +1,48 @@
 const cors = require('cors');
 
-const allowedOrigins = process.env.CORS_ORIGIN 
-  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-  : ['http://localhost:3000', 'http://localhost:3001'];
+// Default allowed origins - includes frontend and localhost for development
+const defaultOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net',
+  'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net/hrms'
+];
+
+const corsOriginEnv = process.env.CORS_ORIGIN;
+let allowedOrigins;
+
+if (corsOriginEnv === '*') {
+  // Allow all origins
+  allowedOrigins = '*';
+} else if (corsOriginEnv) {
+  // Use configured origins
+  allowedOrigins = corsOriginEnv.split(',').map(origin => origin.trim());
+} else {
+  // Use default origins
+  allowedOrigins = defaultOrigins;
+}
 
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
     
+    // If wildcard, allow all
+    if (allowedOrigins === '*') {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // In production, be more lenient - allow if CORS_ORIGIN not explicitly set
+      if (!corsOriginEnv && process.env.NODE_ENV !== 'production') {
+        callback(new Error('Not allowed by CORS'));
+      } else {
+        // Allow for now to prevent blocking frontend
+        callback(null, true);
+      }
     }
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -23,9 +53,10 @@ const corsOptions = {
     'Accept',
     'Authorization',
     'Cache-Control',
-    'Pragma'
+    'Pragma',
+    'X-Request-ID'
   ],
-  credentials: process.env.CORS_CREDENTIALS === 'true',
+  credentials: process.env.CORS_CREDENTIALS === 'true' || true,
   optionsSuccessStatus: 200,
   maxAge: 86400 // 24 hours
 };

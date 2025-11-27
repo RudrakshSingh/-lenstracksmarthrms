@@ -41,7 +41,7 @@ module.exports = {
     tenantId: process.env.AZURE_TENANT_ID || ''
   },
   
-  // CORS Configuration
+  // CORS Configuration - defaults to allow all origins for frontend compatibility
   cors: {
     origin: process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '*', // Allow all origins by default for Azure
     credentials: true,

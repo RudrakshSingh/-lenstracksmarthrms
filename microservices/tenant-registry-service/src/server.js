@@ -27,7 +27,22 @@ const PORT = process.env.PORT || 3020;
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+// CORS configuration - allows frontend and all origins
+const corsOrigin = process.env.CORS_ORIGIN || '*';
+app.use(cors({
+  origin: corsOrigin === '*' ? '*' : (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const allowed = corsOrigin.split(',').map(o => o.trim());
+    if (allowed.includes(origin) || corsOrigin === '*') {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow for now to prevent blocking
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With']
+}));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

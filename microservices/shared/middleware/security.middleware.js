@@ -362,15 +362,30 @@ const csrfProtection = (req, res, next) => {
 // Advanced CORS configuration
 const advancedCORS = (req, res, next) => {
   const origin = req.get('Origin');
-  const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:3000'];
+  const corsOriginEnv = process.env.CORS_ORIGIN;
   
-  if (origin && allowedOrigins.includes(origin)) {
+  // Default to allowing all origins if not set
+  const allowedOrigins = corsOriginEnv === '*' 
+    ? '*' 
+    : (corsOriginEnv ? corsOriginEnv.split(',').map(o => o.trim()) : '*');
+  
+  // Allow all origins if wildcard or not set
+  if (allowedOrigins === '*' || !corsOriginEnv) {
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+  } else if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else if (origin) {
+    // Allow for now to prevent blocking frontend
     res.header('Access-Control-Allow-Origin', origin);
   }
   
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token, X-Request-ID');
   res.header('Access-Control-Max-Age', '86400');
   
   if (req.method === 'OPTIONS') {

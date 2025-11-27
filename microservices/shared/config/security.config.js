@@ -71,12 +71,14 @@ class SecurityConfig {
         referrerPolicy: 'strict-origin-when-cross-origin'
       },
 
-      // CORS settings
+      // CORS settings - defaults to allow all origins for frontend compatibility
       cors: {
-        origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:3000'],
+        origin: process.env.CORS_ORIGIN === '*' 
+          ? '*' 
+          : (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : '*'),
         credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'X-CSRF-Token'],
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'X-CSRF-Token', 'X-Request-ID'],
         maxAge: 86400 // 24 hours
       },
 

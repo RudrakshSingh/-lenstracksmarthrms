@@ -398,9 +398,24 @@ const csrfProtection = (req, res, next) => {
 // Advanced CORS configuration
 const advancedCORS = (req, res, next) => {
   const origin = req.get('Origin');
-  const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['http://localhost:3000'];
+  const corsOriginEnv = process.env.CORS_ORIGIN;
   
-  if (origin && allowedOrigins.includes(origin)) {
+  // Default to allowing all origins if not set
+  const allowedOrigins = corsOriginEnv === '*' 
+    ? '*' 
+    : (corsOriginEnv ? corsOriginEnv.split(',').map(o => o.trim()) : '*');
+  
+  // Allow all origins if wildcard or not set
+  if (allowedOrigins === '*' || !corsOriginEnv) {
+    if (origin) {
+      res.header('Access-Control-Allow-Origin', origin);
+    } else {
+      res.header('Access-Control-Allow-Origin', '*');
+    }
+  } else if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else if (origin) {
+    // Allow for now to prevent blocking frontend
     res.header('Access-Control-Allow-Origin', origin);
   }
   

@@ -123,12 +123,14 @@ class AuthService {
       if (emailOrEmployeeId.includes('@')) {
         // Login with email
         user = await User.findOne({ email: emailOrEmployeeId.toLowerCase() })
+          .select('+password') // CRITICAL: Select password field for comparison
           .maxTimeMS(5000) // 5 second timeout for query
           .populate('stores', 'name code')
           .populate('reporting_manager', 'name employee_id');
       } else {
         // Login with employee ID
         user = await User.findOne({ employee_id: emailOrEmployeeId.toUpperCase() })
+          .select('+password') // CRITICAL: Select password field for comparison
           .maxTimeMS(5000) // 5 second timeout for query
           .populate('stores', 'name code')
           .populate('reporting_manager', 'name employee_id');

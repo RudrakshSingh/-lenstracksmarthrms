@@ -45,16 +45,31 @@ const login = async (req, res, next) => {
       data: result
     });
   } catch (error) {
+    // Enhanced error logging
     logger.error('Error in login controller', { 
-      error: error.message, 
+      error: error.message,
+      errorName: error.name,
       stack: error.stack,
-      emailOrEmployeeId: req.body?.emailOrEmployeeId 
+      emailOrEmployeeId: req.body?.emailOrEmployeeId,
+      body: req.body,
+      statusCode: error.statusCode || error.status
     });
     
+    // Handle validation errors (400)
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.message || 'Validation failed',
+        errors: error.errors,
+        service: 'auth-service'
+      });
+    }
+    
     // Handle specific error types
-    if (error.message.includes('Database connection unavailable') || 
+    if (error.message && (
+        error.message.includes('Database connection unavailable') || 
         error.message.includes('Database connection error') ||
-        error.message.includes('Database connection timeout')) {
+        error.message.includes('Database connection timeout'))) {
       return res.status(503).json({
         success: false,
         message: 'Service temporarily unavailable. Please try again later.',
@@ -64,11 +79,12 @@ const login = async (req, res, next) => {
     }
     
     // Handle authentication errors (400)
-    if (error.message.includes('Invalid') || 
+    if (error.message && (
+        error.message.includes('Invalid') || 
         error.message.includes('Account') ||
         error.message.includes('password') ||
         error.message.includes('inactive') ||
-        error.message.includes('suspended')) {
+        error.message.includes('suspended'))) {
       return res.status(400).json({
         success: false,
         message: error.message,
@@ -76,8 +92,18 @@ const login = async (req, res, next) => {
       });
     }
     
-    // Default to 500 for unexpected errors
-    next(error);
+    // Default to 500 for unexpected errors - but provide more details
+    const isProduction = process.env.NODE_ENV === 'production';
+    return res.status(500).json({
+      success: false,
+      message: isProduction ? 'Internal server error' : error.message,
+      service: 'auth-service',
+      ...(isProduction ? {} : { 
+        error: error.message,
+        errorName: error.name,
+        stack: error.stack 
+      })
+    });
   }
 };
 

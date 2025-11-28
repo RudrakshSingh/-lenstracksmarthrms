@@ -151,7 +151,12 @@ class AuthService {
         throw new Error('Account is suspended');
       }
 
-      // Verify password
+      // Verify password - ensure password field is available
+      if (!user.password) {
+        logger.error('Password field not available for user', { userId: user._id, emailOrEmployeeId });
+        throw new Error('Authentication error. Please contact support.');
+      }
+      
       const isPasswordValid = await user.comparePassword(password);
       if (!isPasswordValid) {
         logAuthEvent('failed_login', user._id, { emailOrEmployeeId, reason: 'invalid_password' }, ip, userAgent);

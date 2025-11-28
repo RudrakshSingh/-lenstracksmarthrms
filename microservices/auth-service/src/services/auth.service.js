@@ -182,7 +182,43 @@ class AuthService {
       };
 
     } catch (error) {
-      logger.error('User login failed', { error: error.message, emailOrEmployeeId });
+      // Check if it's a database connection error
+      const mongoose = require('mongoose');
+      if (mongoose.connection.readyState !== 1) {
+        logger.error('Database connection lost during login', {
+          readyState: mongoose.connection.readyState,
+          error: error.message,
+          emailOrEmployeeId
+        });
+        throw new Error('Database connection unavailable. Please try again later.');
+      }
+
+      // Check if it's a timeout error
+      if (error.name === 'MongoServerError' && error.message && error.message.includes('operation timed out')) {
+        logger.error('Database query timeout during login', {
+          error: error.message,
+          emailOrEmployeeId
+        });
+        throw new Error('Database connection timeout. Please try again later.');
+      }
+
+      // Check if it's a network error
+      if (error.name === 'MongoNetworkError' || error.name === 'MongoTimeoutError') {
+        logger.error('Database network error during login', {
+          error: error.message,
+          errorName: error.name,
+          emailOrEmployeeId
+        });
+        throw new Error('Database connection error. Please try again later.');
+      }
+
+      // For other errors (authentication errors, etc.), log and re-throw
+      logger.error('User login failed', { 
+        error: error.message, 
+        errorName: error.name,
+        stack: error.stack,
+        emailOrEmployeeId 
+      });
       throw error;
     }
   }

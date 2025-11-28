@@ -267,7 +267,8 @@ sortedServices.forEach(([key, service]) => {
     timeout: 10000,
     proxyTimeout: 10000,
     secure: false, // Allow self-signed certificates
-    // NO pathRewrite - forward full path: /api/hr/employees -> /api/hr/employees
+    // NO pathRewrite - forward full path: /api/auth/login -> /api/auth/login
+    // The target service should handle the full path
     headers: {
       'Connection': 'keep-alive',
       'Keep-Alive': 'timeout=5, max=1000'
@@ -297,8 +298,8 @@ sortedServices.forEach(([key, service]) => {
         proxyReq.setHeader('Authorization', req.headers.authorization);
       }
       
-      // Log proxy request
-      logger.info(`[Proxy] ${req.method} ${req.originalUrl} -> ${service.name} at ${targetUrl}${req.path}`);
+      // Log proxy request with full path
+      logger.info(`[Proxy] ${req.method} ${req.originalUrl} -> ${service.name} at ${targetUrl}${req.originalUrl}`);
     },
     onProxyRes: (proxyRes, req, res) => {
       // Log error responses for debugging
@@ -628,11 +629,17 @@ if (salesService) {
 
 // 404 handler
 app.use('*', (req, res) => {
+  logger.warn(`404 Not Found: ${req.method} ${req.originalUrl}`, {
+    path: req.path,
+    originalUrl: req.originalUrl,
+    baseUrl: req.baseUrl
+  });
   res.status(404).json({
     error: 'Not Found',
     message: 'The requested resource was not found',
-    path: req.path,
-    method: req.method
+    path: req.originalUrl || req.path,
+    method: req.method,
+    hint: 'Check /api endpoint for available services'
   });
 });
 

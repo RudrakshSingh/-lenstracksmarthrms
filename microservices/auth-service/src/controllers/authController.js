@@ -52,19 +52,27 @@ const login = async (req, res, next) => {
     });
     
     // Handle specific error types
-    if (error.message.includes('Database connection unavailable')) {
+    if (error.message.includes('Database connection unavailable') || 
+        error.message.includes('Database connection error') ||
+        error.message.includes('Database connection timeout')) {
       return res.status(503).json({
         success: false,
         message: 'Service temporarily unavailable. Please try again later.',
-        error: 'Database connection error'
+        error: 'Database connection error',
+        service: 'auth-service'
       });
     }
     
     // Handle authentication errors (400)
-    if (error.message.includes('Invalid') || error.message.includes('Account')) {
+    if (error.message.includes('Invalid') || 
+        error.message.includes('Account') ||
+        error.message.includes('password') ||
+        error.message.includes('inactive') ||
+        error.message.includes('suspended')) {
       return res.status(400).json({
         success: false,
-        message: error.message
+        message: error.message,
+        service: 'auth-service'
       });
     }
     

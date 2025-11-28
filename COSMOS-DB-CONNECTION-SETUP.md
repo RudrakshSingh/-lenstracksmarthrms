@@ -37,7 +37,7 @@ mongodb://etelios-mongo-db:h4cmg34pAbKZxyZRqwqxa2PhWoZ9ux5quvBZh2EqhSIaGrPMAaF8b
    az keyvault secret set \
      --vault-name <your-keyvault-name> \
      --name "kv-mongo-uri-hr-service" \
-     --value "mongodb://etelios-mongo-db:h4cmg34pAbKZxyRqwqxa2PhWoZ9ux5quvBZh2EqhSIaGrPMAaF8btIdgoMawHILafZBw8YgsddlACDbbpOoJQ==@etelios-mongo-db.mongo.cosmos.azure.com:10255/etelios_hr?ssl=true&replicaSet=globaldb&retrywrites=true&maxIdleTimeMS=120000&appName=@etelios-mongo-db@"
+     --value "mongodb://etelios-hr-service-server:jfoIoaQ4fg7Qn8P13HSwjqytvXM1BiCv3hq1k8gYGLwKIMsDwSXKSnJVdIqB8Twpcr4S6NCkS81nACDb0ttZfg==@etelios-hr-service-server.mongo.cosmos.azure.com:10255/etelios_hr?ssl=true&replicaSet=globaldb&retrywrites=true&maxIdleTimeMS=120000&appName=@etelios-hr-service-server@"
    ```
 
 3. **Configure App Services to Use Key Vault:**
@@ -90,7 +90,7 @@ az webapp config appsettings set \
   --name etelios-hr-service-backend-a4ayeqefdsbsc2g3 \
   --resource-group <your-resource-group> \
   --settings \
-    MONGO_URI="mongodb://etelios-mongo-db:h4cmg34pAbKZxyZRqwqxa2PhWoZ9ux5quvBZh2EqhSIaGrPMAaF8btIdgoMawHILafZBw8YgsddlACDbbpOoJQ==@etelios-mongo-db.mongo.cosmos.azure.com:10255/etelios_hr?ssl=true&replicaSet=globaldb&retrywrites=true&maxIdleTimeMS=120000&appName=@etelios-mongo-db@" \
+    MONGO_URI="mongodb://etelios-hr-service-server:jfoIoaQ4fg7Qn8P13HSwjqytvXM1BiCv3hq1k8gYGLwKIMsDwSXKSnJVdIqB8Twpcr4S6NCkS81nACDb0ttZfg==@etelios-hr-service-server.mongo.cosmos.azure.com:10255/etelios_hr?ssl=true&replicaSet=globaldb&retrywrites=true&maxIdleTimeMS=120000&appName=@etelios-hr-service-server@" \
     SERVICE_NAME=hr-service
 ```
 

@@ -249,11 +249,9 @@ sortedServices.forEach(([key, service]) => {
     return;
   }
   
-  // Ensure HTTPS for production URLs
+  // Use serviceUrl as-is (localhost for single App Service, or external URL if set via env var)
   let targetUrl = serviceUrl;
-  if (isProduction && serviceUrl.startsWith('http://') && !serviceUrl.includes('localhost')) {
-    targetUrl = serviceUrl.replace('http://', 'https://');
-  }
+  // Don't change localhost URLs - they're correct for single App Service architecture
   
   // Optimized proxy middleware - minimal logging with HTTPS support
   // IMPORTANT: Do NOT use pathRewrite - we want to forward the full path including basePath
@@ -374,17 +372,9 @@ sortedServices.forEach(([key, service]) => {
       });
     }
     
-    // Check if service URL is localhost in production (not deployed)
-    if (serviceUrl.includes('localhost') && isProduction) {
-      return res.status(503).json({
-        success: false,
-        message: `${service.name} is not available`,
-        service: service.name,
-        path: req.path,
-        method: req.method,
-        hint: `Please configure ${serviceConfig.envVar} environment variable or deploy the service`
-      });
-    }
+    // For single App Service: localhost is correct (services run in same container)
+    // Only check if service URL is localhost AND we're expecting external services
+    // Skip this check for single App Service architecture
     
     // Log proxy request for debugging (always log for troubleshooting)
     logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.path}`, {

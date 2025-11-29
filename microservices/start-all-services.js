@@ -67,12 +67,16 @@ class MicroservicesStarter {
       
       console.log(`🚀 Starting ${service.name} on port ${service.port}...`);
       
-      // Set environment variables
+      // Set environment variables - CRITICAL: Each service gets its own SERVICE_NAME
       const env = {
         ...process.env,
         PORT: service.port,
-        SERVICE_NAME: service.name,
-        NODE_ENV: 'development'
+        SERVICE_NAME: service.name,  // ← Each service gets correct SERVICE_NAME
+        NODE_ENV: process.env.NODE_ENV || 'development',
+        USE_KEY_VAULT: process.env.USE_KEY_VAULT || 'false',
+        AZURE_KEY_VAULT_URL: process.env.AZURE_KEY_VAULT_URL || '',
+        AZURE_KEY_VAULT_NAME: process.env.AZURE_KEY_VAULT_NAME || '',
+        CORS_ORIGIN: process.env.CORS_ORIGIN || '*'
       };
       
       const child = spawn('node', [serverPath], {

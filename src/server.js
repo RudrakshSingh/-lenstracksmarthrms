@@ -97,16 +97,24 @@ app.use(cors({
     }
     
     // Check if origin is in allowed list
-    if (Array.isArray(allowedOrigins) && allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      // In production, log but allow to prevent blocking
-      if (isProduction) {
-        logger.warn(`CORS: Origin not in allowed list: ${origin}, but allowing anyway`);
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+    if (Array.isArray(allowedOrigins)) {
+      // Check if origin matches any allowed origin
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       }
+      // Check if wildcard is in the array (allow all)
+      if (allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+    }
+    
+    // In production, always allow to prevent blocking (log warning)
+    if (isProduction) {
+      logger.warn(`CORS: Origin not in allowed list: ${origin}, but allowing anyway`);
+      return callback(null, true);
+    } else {
+      // In development, be more strict
+      callback(new Error(`Not allowed by CORS: ${origin}`));
     }
   },
   credentials: true,

@@ -50,30 +50,70 @@ const { applyProductionSecurity } = require('./middleware/production-security');
 const securityConfig = applyProductionSecurity(app);
 
 // CORS configuration - optimized
-// Allow frontend domain and all origins for flexibility
-const allowedOrigins = process.env.CORS_ORIGIN 
-  ? (process.env.CORS_ORIGIN === '*' ? '*' : process.env.CORS_ORIGIN.split(',').map(o => o.trim()))
-  : [
-      'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net',
-      'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net/hrms',
-      '*'
-    ];
+// Allow frontend domains and all origins for flexibility
+const corsOriginEnv = process.env.CORS_ORIGIN;
+let allowedOrigins;
+
+if (corsOriginEnv === '*') {
+  // Allow all origins
+  allowedOrigins = '*';
+} else if (corsOriginEnv) {
+  // Use configured origins
+  allowedOrigins = corsOriginEnv.split(',').map(o => o.trim());
+} else {
+  // Default: Allow all origins for flexibility (can be restricted via env var)
+  allowedOrigins = '*';
+}
 
 app.use(cors({
-  origin: allowedOrigins === '*' ? '*' : (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, etc.)
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Postman, etc.)
     if (!origin) return callback(null, true);
-    if (allowedOrigins === '*' || allowedOrigins.includes(origin)) {
+    
+    // If wildcard, allow all origins
+    if (allowedOrigins === '*') {
+      return callback(null, true);
+    }
+    
+    // Check if origin is in allowed list
+    if (Array.isArray(allowedOrigins) && allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // In production, log but allow to prevent blocking
+      if (isProduction) {
+        logger.warn(`CORS: Origin not in allowed list: ${origin}, but allowing anyway`);
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
     }
   },
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Request-ID', 
+    'X-Requested-With',
+    'Origin',
+    'Accept',
+    'Cache-Control',
+    'Pragma'
+  ],
+  exposedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+  maxAge: 86400 // 24 hours for preflight cache
 }));
+
+// Handle OPTIONS requests explicitly for CORS preflight (before other routes)
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400');
+  res.sendStatus(200);
+});
 
 // Compression - only for responses > 1KB
 app.use(compression({
@@ -312,6 +352,25 @@ sortedServices.forEach(([key, service]) => {
           method: req.method,
           headers: proxyRes.headers
         });
+      }
+      
+      // Ensure CORS headers are present in proxy response
+      // If target service doesn't set CORS headers, add them here
+      const origin = req.headers.origin;
+      if (origin) {
+        // Check if CORS headers are already set by target service
+        if (!proxyRes.headers['access-control-allow-origin']) {
+          proxyRes.headers['Access-Control-Allow-Origin'] = origin;
+        }
+        if (!proxyRes.headers['access-control-allow-credentials']) {
+          proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
+        }
+        if (!proxyRes.headers['access-control-allow-methods']) {
+          proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD';
+        }
+        if (!proxyRes.headers['access-control-allow-headers']) {
+          proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept';
+        }
       }
       
       if (req.method === 'GET' && proxyRes.statusCode === 200) {

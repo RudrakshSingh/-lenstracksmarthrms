@@ -48,8 +48,10 @@ app.use(responseTime((req, res, time) => {
 // CORS configuration - MUST be before security middleware to handle preflight
 // Handle OPTIONS requests FIRST before any other middleware
 app.options('*', (req, res) => {
-  const origin = req.headers.origin || '*';
-  res.header('Access-Control-Allow-Origin', origin);
+  const origin = req.headers.origin;
+  // Always allow the request origin if present, otherwise allow all
+  const allowedOrigin = origin || '*';
+  res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
   res.header('Access-Control-Allow-Credentials', 'true');
@@ -73,8 +75,15 @@ if (corsOriginEnv === '*') {
   // Use configured origins
   allowedOrigins = corsOriginEnv.split(',').map(o => o.trim());
 } else {
-  // Default: Allow all origins for flexibility (can be restricted via env var)
-  allowedOrigins = '*';
+  // Default: Allow specific frontend URLs and all origins for flexibility
+  allowedOrigins = [
+    'https://etelios-shell-appservice-ewgde3dpewhubzhs.centralindia-01.azurewebsites.net',
+    'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net',
+    'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net/hrms',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    '*' // Allow all origins as fallback
+  ];
 }
 
 app.use(cors({

@@ -254,19 +254,22 @@ sortedServices.forEach(([key, service]) => {
   // Don't change localhost URLs - they're correct for single App Service architecture
   
   // Optimized proxy middleware - minimal logging with HTTPS support
-  // IMPORTANT: Do NOT use pathRewrite - we want to forward the full path including basePath
+  // IMPORTANT: Forward the full path including basePath to the target service
+  // Services expect full paths like /api/hr/employees, not just /employees
   const proxyMiddleware = createProxyMiddleware({
-    pathFilter: (pathname, req) => {
-      // Only proxy requests that match the basePath
-      return pathname.startsWith(basePath);
-    },
     target: targetUrl,
     changeOrigin: true,
     timeout: 10000,
     proxyTimeout: 10000,
     secure: false, // Allow self-signed certificates
-    // NO pathRewrite - forward full path: /api/auth/login -> /api/auth/login
-    // The target service should handle the full path
+    // Use pathRewrite to ensure full path is forwarded
+    // When app.use(basePath, ...) is used, req.path is stripped, so we need to restore it
+    pathRewrite: (path, req) => {
+      // req.originalUrl contains the full path including basePath
+      // Extract just the path part (without query string)
+      const fullPath = req.originalUrl.split('?')[0];
+      return fullPath;
+    },
     headers: {
       'Connection': 'keep-alive',
       'Keep-Alive': 'timeout=5, max=1000'
@@ -352,13 +355,8 @@ sortedServices.forEach(([key, service]) => {
   });
   
   // Register proxy middleware for all HTTP methods (GET, POST, PUT, PATCH, DELETE, etc.)
-  // Use basePath without wildcard - Express will match all sub-paths automatically
+  // Use basePath - Express will match all sub-paths automatically (e.g., /api/hr matches /api/hr/employees)
   app.use(basePath, (req, res, next) => {
-    // Safety check: ensure request path starts with basePath
-    if (!req.path.startsWith(basePath) && req.path !== basePath) {
-      return next(); // Let other routes handle it
-    }
-    
     const registryService = serviceRegistry[key];
     
     // Check if service is offline (only in production)
@@ -367,7 +365,7 @@ sortedServices.forEach(([key, service]) => {
         success: false,
         message: `${service.name} is currently offline`,
         service: service.name,
-        path: req.path,
+        path: req.originalUrl,
         method: req.method
       });
     }
@@ -375,9 +373,13 @@ sortedServices.forEach(([key, service]) => {
     // For single App Service: localhost is correct (services run in same container)
     // Only check if service URL is localhost AND we're expecting external services
     // Skip this check for single App Service architecture
+    // However, if we're in production and service URL is localhost without proper setup, warn
+    if (serviceUrl.includes('localhost') && isProduction && !process.env.SINGLE_APP_SERVICE) {
+      logger.warn(`Service ${service.name} is configured with localhost in production. This may indicate a misconfiguration.`);
+    }
     
     // Log proxy request for debugging (always log for troubleshooting)
-    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.path}`, {
+    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.originalUrl}`, {
       body: req.method !== 'GET' ? req.body : undefined,
       headers: {
         'content-type': req.headers['content-type'],
@@ -386,6 +388,7 @@ sortedServices.forEach(([key, service]) => {
     });
     
     // Forward request to service via proxy middleware
+    // Note: req.originalUrl contains the full path including basePath, which is what we want to forward
     proxyMiddleware(req, res, next);
   });
 });

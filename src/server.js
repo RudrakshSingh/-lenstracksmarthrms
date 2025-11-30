@@ -45,6 +45,18 @@ app.use(responseTime((req, res, time) => {
   res.setHeader('X-Response-Time', `${time.toFixed(2)}ms`);
 }));
 
+// CORS configuration - MUST be before security middleware to handle preflight
+// Handle OPTIONS requests FIRST before any other middleware
+app.options('*', (req, res) => {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400');
+  return res.sendStatus(200);
+});
+
 // Production-grade security middleware
 const { applyProductionSecurity } = require('./middleware/production-security');
 const securityConfig = applyProductionSecurity(app);
@@ -104,16 +116,6 @@ app.use(cors({
   exposedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
   maxAge: 86400 // 24 hours for preflight cache
 }));
-
-// Handle OPTIONS requests explicitly for CORS preflight (before other routes)
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Max-Age', '86400');
-  res.sendStatus(200);
-});
 
 // Compression - only for responses > 1KB
 app.use(compression({
@@ -413,9 +415,31 @@ sortedServices.forEach(([key, service]) => {
     logLevel: isProduction ? 'warn' : 'debug'
   });
   
+  // Handle OPTIONS requests for this service path BEFORE proxy
+  app.options(basePath + '*', (req, res) => {
+    const origin = req.headers.origin || '*';
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400');
+    res.sendStatus(200);
+  });
+  
   // Register proxy middleware for all HTTP methods (GET, POST, PUT, PATCH, DELETE, etc.)
   // Use basePath - Express will match all sub-paths automatically (e.g., /api/hr matches /api/hr/employees)
   app.use(basePath, (req, res, next) => {
+    // Handle OPTIONS requests directly (don't proxy them)
+    if (req.method === 'OPTIONS') {
+      const origin = req.headers.origin || '*';
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Max-Age', '86400');
+      return res.sendStatus(200);
+    }
+    
     const registryService = serviceRegistry[key];
     
     // Check if service is offline (only in production)

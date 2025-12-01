@@ -150,7 +150,24 @@ const connectDB = async () => {
       connectionOptions.sslValidate = true;
       // Cosmos DB requires retrywrites=true for write operations
       connectionOptions.retryWrites = true;
-      logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
+      // Cosmos DB requires specific connection string format
+      // Ensure connection string has proper format: mongodb://account:key@host:10255/?ssl=true&replicaSet=globaldb
+      if (!mongoUri.includes('retrywrites=true')) {
+        // Add retrywrites if not present
+        mongoUri = mongoUri.includes('?') 
+          ? `${mongoUri}&retrywrites=true` 
+          : `${mongoUri}?retrywrites=true`;
+      }
+      if (!mongoUri.includes('replicaSet=globaldb')) {
+        // Add replicaSet for Cosmos DB
+        mongoUri = mongoUri.includes('?') 
+          ? `${mongoUri}&replicaSet=globaldb` 
+          : `${mongoUri}?replicaSet=globaldb`;
+      }
+      logger.info('Connecting to Azure Cosmos DB (MongoDB API)', {
+        host: mongoUri.split('@')[1]?.split('/')[0] || 'unknown',
+        database: mongoUri.split('/').pop()?.split('?')[0] || 'unknown'
+      });
     }
     
     // Add connection event handlers

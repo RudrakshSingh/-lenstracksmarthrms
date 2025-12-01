@@ -47,15 +47,20 @@ app.use(responseTime((req, res, time) => {
 
 // CORS configuration - MUST be before security middleware to handle preflight
 // Handle OPTIONS requests FIRST before any other middleware
-app.options('*', (req, res) => {
+// This MUST be the very first route handler to catch all OPTIONS requests
+app.options('*', (req, res, next) => {
   const origin = req.headers.origin;
   // Always allow the request origin if present, otherwise allow all
   const allowedOrigin = origin || '*';
+  
+  // Set all CORS headers
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Max-Age', '86400');
+  
+  // Send 200 OK immediately - don't call next()
   return res.sendStatus(200);
 });
 
@@ -433,27 +438,37 @@ sortedServices.forEach(([key, service]) => {
   });
   
   // Handle OPTIONS requests for this service path BEFORE proxy
-  app.options(basePath + '*', (req, res) => {
+  // This is a more specific handler for service paths
+  app.options(basePath + '*', (req, res, next) => {
     const origin = req.headers.origin || '*';
+    
+    // Set all CORS headers
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Max-Age', '86400');
-    res.sendStatus(200);
+    
+    // Send 200 OK immediately - don't call next()
+    return res.sendStatus(200);
   });
   
   // Register proxy middleware for all HTTP methods (GET, POST, PUT, PATCH, DELETE, etc.)
   // Use basePath - Express will match all sub-paths automatically (e.g., /api/hr matches /api/hr/employees)
   app.use(basePath, (req, res, next) => {
     // Handle OPTIONS requests directly (don't proxy them)
+    // This is a fallback in case the app.options() handler above didn't catch it
     if (req.method === 'OPTIONS') {
       const origin = req.headers.origin || '*';
+      
+      // Set all CORS headers
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Access-Control-Max-Age', '86400');
+      
+      // Send 200 OK immediately - don't call next()
       return res.sendStatus(200);
     }
     

@@ -13,13 +13,15 @@ module.exports = {
       script: 'src/server.js',
       instances: 1,
       exec_mode: 'fork',
+      cwd: process.cwd(),
       env: {
-        NODE_ENV: 'production',
+        NODE_ENV: process.env.NODE_ENV || 'production',
         PORT: process.env.PORT || process.env.WEBSITES_PORT || 3002,
         SERVICE_NAME: 'hr-service'
       },
-      error_file: './logs/hr-error.log',
-      out_file: './logs/hr-out.log',
+      // Use absolute paths or disable file logging if directory doesn't exist
+      error_file: '/dev/stderr',  // Use stderr instead of file
+      out_file: '/dev/stdout',    // Use stdout instead of file
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       autorestart: true,
@@ -28,8 +30,12 @@ module.exports = {
       max_memory_restart: '1G',
       // Wait for graceful shutdown
       kill_timeout: 5000,
-      wait_ready: true,
-      listen_timeout: 10000
+      wait_ready: false,  // Disable wait_ready to avoid timeout issues
+      listen_timeout: 30000,  // Increase timeout
+      // Ignore watch for production
+      watch: false,
+      // Ignore signals that might cause issues
+      ignore_watch: ['node_modules', 'logs', 'storage']
     }
   ]
 };

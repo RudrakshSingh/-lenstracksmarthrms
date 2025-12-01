@@ -46,10 +46,13 @@ EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
+# Make start.sh executable
+RUN chmod +x start.sh
+
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application - Use PM2 for Azure App Service compatibility
 # Azure App Service will use this if no startup command is set
 # If Azure has a startup command, it will override this
-CMD ["pm2-runtime", "ecosystem.config.js"]
+CMD ["sh", "start.sh"]

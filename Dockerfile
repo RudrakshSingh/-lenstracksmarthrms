@@ -56,7 +56,23 @@ COPY --from=builder /app/ecosystem.config.js ./ecosystem.config.js
 # Copy public directory (directory exists in builder stage, even if empty)
 COPY --from=builder /app/public ./public
 
-# Create necessary directories
+# Install dependencies for each microservice that has a package.json
+# This ensures all microservices have their required dependencies
+RUN for dir in microservices/*/; do \
+      if [ -f "$dir/package.json" ]; then \
+        echo "Installing dependencies for $dir"; \
+        cd "$dir" && \
+        if [ -f "package-lock.json" ]; then \
+          npm ci --omit=dev || npm install --omit=dev; \
+        else \
+          npm install --omit=dev; \
+        fi && \
+        npm cache clean --force && \
+        cd /app; \
+      fi; \
+    done
+
+# Create necessary directories and set ownership
 RUN mkdir -p logs storage/documents storage/images storage/backups storage/temp \
     && chown -R nodejs:nodejs /app
 

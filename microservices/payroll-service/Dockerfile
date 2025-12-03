@@ -1,5 +1,5 @@
 # Multi-stage build for Payroll Service
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -14,7 +14,7 @@ RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; f
 COPY . .
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 
 # Set working directory
 WORKDIR /app

@@ -1,5 +1,5 @@
 # Multi-stage build for HRMS Service
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -11,7 +11,7 @@ COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Production stage
-FROM node:18-alpine
+FROM node:22-alpine
 
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init

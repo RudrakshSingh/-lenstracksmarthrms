@@ -3,15 +3,46 @@
  * Uses in-memory cache with TTL for service status and frequently accessed data
  */
 
-const NodeCache = require('node-cache');
+let cache;
 
-// Create cache instance with default TTL of 5 minutes
-const cache = new NodeCache({
-  stdTTL: 300, // 5 minutes default TTL
-  checkperiod: 60, // Check for expired keys every 60 seconds
-  useClones: false, // Don't clone values for better performance
-  maxKeys: 1000 // Maximum number of keys
-});
+try {
+  // Prefer node-cache when available
+  // eslint-disable-next-line global-require
+  const NodeCache = require('node-cache');
+
+  // Create cache instance with default TTL of 5 minutes
+  cache = new NodeCache({
+    stdTTL: 300, // 5 minutes default TTL
+    checkperiod: 60, // Check for expired keys every 60 seconds
+    useClones: false, // Don't clone values for better performance
+    maxKeys: 1000 // Maximum number of keys
+  });
+} catch (error) {
+  // Fallback: minimal in-memory cache using Map (no TTL enforcement)
+  // This prevents the app from crashing if node-cache is not installed
+  // or not present in the deployment container.
+  // eslint-disable-next-line no-console
+  console.warn('node-cache not found, falling back to basic in-memory cache:', error.message);
+
+  const store = new Map();
+
+  cache = {
+    get: (key) => store.get(key),
+    set: (key, value) => {
+      store.set(key, value);
+      return true;
+    },
+    del: (key) => store.delete(key),
+    flushAll: () => store.clear(),
+    getStats: () => ({
+      keys: store.size,
+      hits: 0,
+      misses: 0,
+      ksize: 0,
+      vsize: 0
+    })
+  };
+}
 
 /**
  * Get value from cache

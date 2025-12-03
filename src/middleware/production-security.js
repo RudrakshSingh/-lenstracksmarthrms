@@ -73,10 +73,6 @@ const {
   performanceMetrics
 } = performanceMiddleware;
 
-const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
-const hpp = require('hpp');
-
 /**
  * Apply all production security middleware
  */
@@ -109,31 +105,17 @@ const applyProductionSecurity = (app) => {
   // 9. Cache control
   app.use(cacheControl);
   
-  // 10. NoSQL injection prevention
-  app.use(mongoSanitize({
-    replaceWith: '_',
-    onSanitize: ({ req, key }) => {
-      console.warn(`NoSQL injection attempt detected: ${key} in ${req.path}`);
-    }
-  }));
-  
-  // 11. XSS protection
-  app.use(xss());
-  
-  // 12. HTTP Parameter Pollution prevention
-  app.use(hpp());
-  
-  // 13. Security event logging
+  // 10. Security event logging
   app.use(securityEventLogger);
   
-  // 14. IP filtering (if enabled)
+  // 11. IP filtering (if enabled)
   if (process.env.IP_FILTER_ENABLED === 'true') {
     const whitelist = process.env.IP_WHITELIST ? process.env.IP_WHITELIST.split(',') : [];
     const blacklist = process.env.IP_BLACKLIST ? process.env.IP_BLACKLIST.split(',') : [];
     app.use(ipFilter({ whitelist, blacklist, enabled: true }));
   }
   
-  // 15. Input validation and sanitization
+  // 12. Input validation and sanitization
   app.use(validateAndSanitizeInput);
   
   return {

@@ -7,7 +7,7 @@
     "build": "npm run lint:fix && echo 'Build completed - Node.js application ready'",
     "build:prod": "npm run lint:fix && npm run test:health && echo 'Production build completed'",
     "test:health": "jest tests/unit/health.test.js",
-    "start": "pm2-runtime ecosystem.config.js",
+    "start": "node src/server.js",
     "start:dev": "node src/server.js",
     "start:pm2": "pm2 start ecosystem.config.js",
     "start:pm2:dev": "pm2 start ecosystem.config.js --env development",

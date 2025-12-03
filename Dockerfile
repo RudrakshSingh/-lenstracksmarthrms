@@ -12,11 +12,11 @@ RUN apk add --no-cache \
     && adduser -S nodejs -u 1001
 
 # Copy package files
-COPY package.json package-lock.json* ./
+# COPY package.json package-lock.json* ./
 
 # Install all dependencies (including dev dependencies for build)
 # Use npm install as fallback if package-lock.json is missing or incompatible
-RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi && npm cache clean --force
+# RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi && npm cache clean --force
 
 # Copy source code
 COPY . .

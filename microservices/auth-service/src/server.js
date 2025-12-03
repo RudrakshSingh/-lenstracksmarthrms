@@ -1,4 +1,13 @@
-require('dotenv').config();
+// Load environment variables from .env in development; ignore missing module in production
+try {
+  // eslint-disable-next-line global-require
+  require('dotenv').config();
+} catch (err) {
+  // eslint-disable-next-line no-console
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('dotenv not available for auth-service, skipping .env loading:', err.message);
+  }
+}
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');

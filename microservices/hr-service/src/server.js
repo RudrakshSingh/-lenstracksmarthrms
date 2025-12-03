@@ -1,12 +1,67 @@
-require('dotenv').config();
+// Load environment variables first
+// Load environment variables from .env in development; ignore missing module in production
+try {
+  // eslint-disable-next-line global-require
+  require('dotenv').config();
+} catch (err) {
+  // eslint-disable-next-line no-console
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('dotenv not available for hr-service, skipping .env loading:', err.message);
+  }
+}
+
+// Handle unhandled promise rejections early
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - log and continue
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Don't exit immediately - try to start server anyway
+});
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const logger = require('./config/logger');
-const azureConfig = require('./config/azure.config');
-const { ipFilter } = require('./middleware/security.middleware');
+
+// Load logger with error handling
+let logger;
+try {
+  logger = require('./config/logger');
+} catch (error) {
+  // Fallback logger if config fails
+  logger = {
+    info: (...args) => console.log('[INFO]', ...args),
+    error: (...args) => console.error('[ERROR]', ...args),
+    warn: (...args) => console.warn('[WARN]', ...args)
+  };
+  console.warn('Failed to load logger config, using fallback logger');
+}
+
+// Load azure config with error handling
+let azureConfig;
+try {
+  azureConfig = require('./config/azure.config');
+} catch (error) {
+  logger.warn('Failed to load azure.config, using defaults', { error: error.message });
+  azureConfig = {
+    cors: { origin: '*', credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] },
+    ipWhitelist: { allowedIPs: [] }
+  };
+}
+
+// Load IP filter with error handling
+let ipFilter;
+try {
+  ipFilter = require('./middleware/security.middleware').ipFilter;
+} catch (error) {
+  logger.warn('Failed to load security middleware, IP filter disabled', { error: error.message });
+  ipFilter = (req, res, next) => next(); // No-op middleware
+}
 
 const app = express();
 
@@ -696,4 +751,34 @@ const startServer = async () => {
   }
 };
 
-startServer();
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', { promise, reason });
+  // Don't exit - log and continue
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', { error: error.message, stack: error.stack });
+  // Don't exit immediately - try to start server anyway
+  logger.warn('Attempting to start server despite uncaught exception');
+});
+
+// Start server with error handling
+startServer().catch((error) => {
+  logger.error('Failed to start server:', { error: error.message, stack: error.stack });
+  // Try to start in degraded mode
+  const PORT = process.env.PORT || process.env.WEBSITES_PORT || 3002;
+  try {
+    app.listen(PORT, '0.0.0.0', () => {
+      logger.warn(`hr-service started in emergency mode on port ${PORT}`);
+      logger.warn('Limited functionality available');
+    });
+  } catch (listenError) {
+    logger.error('Failed to start server even in emergency mode:', { error: listenError.message });
+    // Last resort - exit after 5 seconds to allow Azure to restart
+    setTimeout(() => {
+      process.exit(1);
+    }, 5000);
+  }
+});

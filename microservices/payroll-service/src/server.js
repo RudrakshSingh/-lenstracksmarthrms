@@ -1,4 +1,13 @@
-require('dotenv').config();
+// Load environment variables from .env in development; ignore missing module in production
+try {
+  // eslint-disable-next-line global-require
+  require('dotenv').config();
+} catch (err) {
+  // eslint-disable-next-line no-console
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('dotenv not available for payroll-service, skipping .env loading:', err.message);
+  }
+}
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -76,7 +85,7 @@ const loadRoutes = () => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -90,7 +99,7 @@ app.get('/health', (req, res) => {
 
 // Business API Routes
 app.get('/api/payroll/status', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     status: 'operational',
     timestamp: new Date().toISOString(),
@@ -99,7 +108,7 @@ app.get('/api/payroll/status', (req, res) => {
 });
 
 app.get('/api/payroll/health', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -109,7 +118,7 @@ app.get('/api/payroll/health', (req, res) => {
 
 
 app.get('/api/payroll/salaries', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     endpoint: '/api/payroll/salaries',
     method: 'GET',
@@ -120,7 +129,7 @@ app.get('/api/payroll/salaries', (req, res) => {
 });
 
 app.post('/api/payroll/salaries', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     endpoint: '/api/payroll/salaries',
     method: 'POST',
@@ -131,7 +140,7 @@ app.post('/api/payroll/salaries', (req, res) => {
 });
 
 app.post('/api/payroll/process', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     endpoint: '/api/payroll/process',
     method: 'POST',
@@ -142,7 +151,7 @@ app.post('/api/payroll/process', (req, res) => {
 });
 
 app.get('/api/payroll/reports', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     endpoint: '/api/payroll/reports',
     method: 'GET',
@@ -153,7 +162,7 @@ app.get('/api/payroll/reports', (req, res) => {
 });
 
 app.get('/api/payroll/compensation', (req, res) => {
-  res.json({
+  return res.json({
     service: 'payroll-service',
     endpoint: '/api/payroll/compensation',
     method: 'GET',
@@ -161,7 +170,7 @@ app.get('/api/payroll/compensation', (req, res) => {
     message: 'Get compensation profiles',
     timestamp: new Date().toISOString()
   });
-});});
+});
 
 
 // Enhanced 404 handler with route information

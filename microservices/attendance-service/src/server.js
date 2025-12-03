@@ -1,4 +1,13 @@
-require('dotenv').config();
+// Load environment variables from .env in development; ignore missing module in production
+try {
+  // eslint-disable-next-line global-require
+  require('dotenv').config();
+} catch (err) {
+  // eslint-disable-next-line no-console
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('dotenv not available for attendance-service, skipping .env loading:', err.message);
+  }
+}
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -66,7 +75,9 @@ const connectDB = async () => {
       bufferMaxEntries: 0,
       bufferCommands: false
     });
-    if (!isProduction) if (!isProduction) logger.info('attendance-service: MongoDB connected successfully');
+    if (!isProduction) {
+      logger.info('attendance-service: MongoDB connected successfully');
+    }
   } catch (error) {
     logger.error('attendance-service: Database connection failed', { error: error.message });
     process.exit(1);
@@ -100,7 +111,7 @@ const loadRoutes = () => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -115,7 +126,7 @@ app.get('/health', (req, res) => {
 
 // Business API Routes
 app.get('/api/attendance/status', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     status: 'operational',
     timestamp: new Date().toISOString(),
@@ -124,7 +135,7 @@ app.get('/api/attendance/status', (req, res) => {
 });
 
 app.get('/api/attendance/health', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -134,7 +145,7 @@ app.get('/api/attendance/health', (req, res) => {
 
 
 app.post('/api/attendance/checkin', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     endpoint: '/api/attendance/checkin',
     method: 'POST',
@@ -145,7 +156,7 @@ app.post('/api/attendance/checkin', (req, res) => {
 });
 
 app.post('/api/attendance/checkout', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     endpoint: '/api/attendance/checkout',
     method: 'POST',
@@ -156,7 +167,7 @@ app.post('/api/attendance/checkout', (req, res) => {
 });
 
 app.get('/api/attendance/records', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     endpoint: '/api/attendance/records',
     method: 'GET',
@@ -167,7 +178,7 @@ app.get('/api/attendance/records', (req, res) => {
 });
 
 app.get('/api/attendance/reports', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     endpoint: '/api/attendance/reports',
     method: 'GET',
@@ -178,7 +189,7 @@ app.get('/api/attendance/reports', (req, res) => {
 });
 
 app.get('/api/attendance/geofencing', (req, res) => {
-  res.json({
+  return res.json({
     service: 'attendance-service',
     endpoint: '/api/attendance/geofencing',
     method: 'GET',
@@ -186,7 +197,7 @@ app.get('/api/attendance/geofencing', (req, res) => {
     message: 'Get geofencing data',
     timestamp: new Date().toISOString()
   });
-});});
+});
 
 
 // Enhanced 404 handler with route information

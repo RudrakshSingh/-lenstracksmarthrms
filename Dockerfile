@@ -16,7 +16,7 @@ RUN apk add --no-cache \
 
 # Install all dependencies (including dev dependencies for build)
 # Use npm install as fallback if package-lock.json is missing or incompatible
-RUN npm ci || npm install; fi && npm cache clean --force
+RUN npm ci || npm install && npm cache clean --force
 
 # Copy source code
 COPY . .

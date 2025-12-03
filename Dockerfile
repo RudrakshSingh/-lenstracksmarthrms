@@ -50,6 +50,8 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=de
 # Copy application code from builder stage
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/microservices ./microservices
+COPY --from=builder /app/ecosystem.config.js ./ecosystem.config.js
 
 # Copy public directory (directory exists in builder stage, even if empty)
 COPY --from=builder /app/public ./public

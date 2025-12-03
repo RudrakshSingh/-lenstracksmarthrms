@@ -1,5 +1,5 @@
 # Multi-stage build for Azure deployment
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -28,7 +28,7 @@ RUN mkdir -p public
 RUN npm run build || echo "No build script found, skipping build step"
 
 # Production stage
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 
 # Set working directory
 WORKDIR /app

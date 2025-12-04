@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const logger = require('../config/logger'));
+const logger = require('../config/logger');
 
 /**
  * Greywall Emergency Lock System

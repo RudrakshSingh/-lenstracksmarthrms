@@ -1,63 +1,103 @@
-# Multi-stage build for Azure deployment
-FROM node:22-alpine AS builder
+###############################################
+# Etelios Smart HRMS – API Gateway Dockerfile #
+# Using Node.js 22 + PM2 + Production Build    #
+###############################################
 
-# Set working directory
+# -----------------------------
+# 1️⃣ Base Builder Stage
+# -----------------------------
+FROM node:22-slim AS builder
+
 WORKDIR /app
 
-# Install system dependencies
-RUN apk add --no-cache \
-    dumb-init \
-    curl \
-    && addgroup -g 1001 -S nodejs \
-    && adduser -S nodejs -u 1001
-
-# Copy package files
- COPY package.json /
-
-# Install all dependencies (including dev dependencies for build)
-# Use npm install as fallback if package-lock.json is missing or incompatible
-RUN npm ci || npm install && npm cache clean --force
-
-# Copy source code
-COPY . .
-
-# Ensure public directory exists (create if missing)
-RUN mkdir -p public
-
-# Build application (if needed)
-RUN npm run build || echo "No build script found, skipping build step"
-
-# Production stage
-FROM node:22-alpine AS production
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
-RUN apk add --no-cache \
-    dumb-init \
-    curl \
-    && addgroup -g 1001 -S nodejs \
-    && adduser -S nodejs -u 1001
-
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files first for caching
+COPY package.json ./
 
 # Install only production dependencies
-# Use npm install as fallback if package-lock.json is missing or incompatible
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
+RUN npm ci --only=production
 
-# Copy application code from builder stage
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/microservices ./microservices
-COPY --from=builder /app/ecosystem.config.js ./ecosystem.config.js
+# Copy API Gateway source code
+COPY src ./src
+COPY ecosystem.config.js ./
 
-# Copy public directory (directory exists in builder stage, even if empty)
-COPY --from=builder /app/public ./public
+# Copy etelios-microservices and install its dependencies
+COPY etelios-microservices ./etelios-microservices
+
+# Install dependencies for etelios-microservices shared package
+RUN if [ -f "etelios-microservices/shared/package.json" ]; then \
+      echo "Installing dependencies for etelios-microservices/shared"; \
+      cd etelios-microservices/shared && \
+      if [ -f "package-lock.json" ]; then \
+        npm ci --omit=dev || npm install --omit=dev; \
+      else \
+        npm install --omit=dev; \
+      fi && \
+      npm cache clean --force && \
+      cd /app; \
+    fi
+
+# Install dependencies for each etelios-microservices service
+RUN for dir in etelios-microservices/services/*/; do \
+      if [ -f "$dir/package.json" ]; then \
+        echo "Installing dependencies for $dir"; \
+        cd "$dir" && \
+        if [ -f "package-lock.json" ]; then \
+          npm ci --omit=dev || npm install --omit=dev; \
+        else \
+          npm install --omit=dev; \
+        fi && \
+        npm cache clean --force && \
+        cd /app; \
+      fi; \
+    done
+
+# Copy microservices directory
+COPY microservices ./microservices
+
+# Create required directories
+RUN mkdir -p logs storage/documents storage/images storage/backups storage/temp public
+
+# -----------------------------
+# 2️⃣ Runtime Stage
+# -----------------------------
+FROM node:22-slim
+
+WORKDIR /app
+
+# Install PM2 globally
+RUN npm install -g pm2
+
+# Copy built app from builder stage
+COPY --from=builder /app /app
+
+# Install dependencies for etelios-microservices (runtime stage)
+RUN if [ -f "etelios-microservices/shared/package.json" ]; then \
+      echo "Installing dependencies for etelios-microservices/shared (runtime)"; \
+      cd etelios-microservices/shared && \
+      if [ -f "package-lock.json" ]; then \
+        npm ci --omit=dev || npm install --omit=dev; \
+      else \
+        npm install --omit=dev; \
+      fi && \
+      npm cache clean --force && \
+      cd /app; \
+    fi
+
+RUN for dir in etelios-microservices/services/*/; do \
+      if [ -f "$dir/package.json" ]; then \
+        echo "Installing dependencies for $dir (runtime)"; \
+        cd "$dir" && \
+        if [ -f "package-lock.json" ]; then \
+          npm ci --omit=dev || npm install --omit=dev; \
+        else \
+          npm install --omit=dev; \
+        fi && \
+        npm cache clean --force && \
+        cd /app; \
+      fi; \
+    done
 
 # Install dependencies for each microservice that has a package.json
-# This ensures all microservices have their required dependencies
 RUN for dir in microservices/*/; do \
       if [ -f "$dir/package.json" ]; then \
         echo "Installing dependencies for $dir"; \
@@ -72,22 +112,18 @@ RUN for dir in microservices/*/; do \
       fi; \
     done
 
-# Create necessary directories and set ownership
-RUN mkdir -p logs storage/documents storage/images storage/backups storage/temp \
-    && chown -R nodejs:nodejs /app
+# Expose the API Gateway port
+EXPOSE 8080
 
-# Switch to non-root user
-USER nodejs
+# Environment variables (override in K8s or Docker Compose)
+ENV NODE_ENV=production \
+    PORT=8080
 
-# Expose port
-EXPOSE 3000
+# Healthcheck for container monitoring
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:8080/health', res => { if(res.statusCode!==200) process.exit(1); })"
 
-# Health check - use PORT env var or default to 3000
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "const port = process.env.PORT || process.env.WEBSITES_PORT || 3000; require('http').get('http://localhost:' + port + '/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
-
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["dumb-init", "--"]
-
-# Start the application
-CMD ["node", "src/server.js"]
+# -----------------------------
+# Start the API Gateway
+# -----------------------------
+CMD ["pm2-runtime", "ecosystem.config.js"]

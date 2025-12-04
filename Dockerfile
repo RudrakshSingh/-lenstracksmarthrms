@@ -15,7 +15,13 @@ WORKDIR /app
 COPY package.json ./
 
 # Install only production dependencies
-RUN npm ci --only=production
+# npm ci doesn't support --only=production, use --omit=dev instead
+RUN if [ -f "package-lock.json" ]; then \
+      npm ci --omit=dev || npm install --omit=dev; \
+    else \
+      npm install --omit=dev; \
+    fi && \
+    npm cache clean --force
 
 # Copy API Gateway source code
 COPY src ./src

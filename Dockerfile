@@ -1,6 +1,7 @@
 ###############################################
 # Etelios Smart HRMS – API Gateway Dockerfile #
 # Using Node.js 22 + PM2 + Production Build    #
+# CI/CD and Production Only                    #
 ###############################################
 
 # -----------------------------

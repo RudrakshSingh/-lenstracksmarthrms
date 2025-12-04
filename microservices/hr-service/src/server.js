@@ -193,8 +193,6 @@ const connectDB = async () => {
       maxIdleTimeMS: 30000,
       retryWrites: true, // Cosmos DB supports retrywrites (override connection string if needed)
       retryReads: true,
-      bufferMaxEntries: 0,
-      bufferCommands: false,
       // Add heartbeat to detect dead connections
       heartbeatFrequencyMS: 10000
     };

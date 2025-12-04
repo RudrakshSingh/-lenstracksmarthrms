@@ -55,8 +55,6 @@ const connectDB = async () => {
       maxIdleTimeMS: 30000,
       retryWrites: true,
       retryReads: true,
-      bufferMaxEntries: 0,
-      bufferCommands: false
     });
     if (!isProduction) logger.info('inventory-service: MongoDB connected successfully');
   } catch (error) {

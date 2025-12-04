@@ -20,8 +20,6 @@ const connectDB = async () => {
       maxIdleTimeMS: 30000,
       retryWrites: true,
       retryReads: true,
-      bufferMaxEntries: 0,
-      bufferCommands: false
     };
 
     await mongoose.connect(mongoUri, options);

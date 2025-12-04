@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const logger = require('../utils/logger');
+const logger = require('../config/logger');
 const nodemailer = require('nodemailer');
 
 class RecoveryKeyManagementService {

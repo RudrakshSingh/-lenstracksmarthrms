@@ -72,8 +72,6 @@ const connectDB = async () => {
       maxIdleTimeMS: 30000,
       retryWrites: true,
       retryReads: true,
-      bufferMaxEntries: 0,
-      bufferCommands: false
     });
     if (!isProduction) {
       logger.info('attendance-service: MongoDB connected successfully');

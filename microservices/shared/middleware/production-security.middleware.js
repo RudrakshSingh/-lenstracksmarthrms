@@ -6,9 +6,7 @@
 
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
-const xss = require('xss-clean');
-const hpp = require('hpp');
+// Removed express-mongo-sanitize, xss-clean, hpp - deprecated/not needed
 const validator = require('validator');
 const crypto = require('crypto');
 const winston = require('winston');

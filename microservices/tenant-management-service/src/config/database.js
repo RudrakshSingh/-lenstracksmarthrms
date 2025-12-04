@@ -13,8 +13,6 @@ const connectDB = async () => {
       maxIdleTimeMS: 30000,
       retryWrites: true,
       retryReads: true,
-      bufferMaxEntries: 0,
-      bufferCommands: false
     });
 
     logger.info('MongoDB connected successfully', {

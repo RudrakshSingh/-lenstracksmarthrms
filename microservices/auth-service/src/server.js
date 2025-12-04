@@ -98,8 +98,6 @@ const connectDB = async () => {
       retryWrites: true, // Cosmos DB supports retrywrites (override connection string if needed)
       retryReads: true,
       // Optimize for performance
-      bufferMaxEntries: 0, // Disable mongoose buffering
-      bufferCommands: false, // Disable mongoose buffering
     };
     
     // Azure Cosmos DB specific options (only if Cosmos DB)

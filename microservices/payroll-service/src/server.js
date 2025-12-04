@@ -50,6 +50,7 @@ app.use(express.urlencoded({ extended: true }));
 const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'payroll_service'}`;
+    const isProduction = process.env.NODE_ENV === 'production';
     await mongoose.connect(mongoUri);
     if (!isProduction) logger.info('payroll-service: MongoDB connected successfully');
   } catch (error) {
@@ -96,6 +97,7 @@ app.get('/health', (req, res) => {
     models: 3,
     services: 2
   });
+});
 
 // Business API Routes
 app.get('/api/payroll/status', (req, res) => {

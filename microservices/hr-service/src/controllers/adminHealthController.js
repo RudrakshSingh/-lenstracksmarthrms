@@ -4,7 +4,7 @@ const Role = require('../models/Role.model');
 const Tenant = require('../models/Tenant.model');
 const SystemSettings = require('../models/SystemSettings.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../shared/utils/response.util');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util.js'));
 
 /**
  * Get admin health status

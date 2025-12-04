@@ -199,8 +199,9 @@ const connectDB = async () => {
     
     // Azure Cosmos DB specific options (only if Cosmos DB)
     if (isCosmosDB) {
-      connectionOptions.ssl = true;
-      connectionOptions.sslValidate = true;
+      // Use tls options instead of deprecated sslValidate for Node.js 22
+      connectionOptions.tls = true;
+      connectionOptions.tlsInsecure = false; // Validate certificates
       // Cosmos DB requires retrywrites=true for write operations
       connectionOptions.retryWrites = true;
       // Cosmos DB requires specific connection string format

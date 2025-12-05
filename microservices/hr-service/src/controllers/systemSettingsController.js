@@ -5,7 +5,7 @@ const {
   sendError, 
   sendNotFound,
   parseFilters
-} = require('../../shared/utils/response.util.js'));
+} = require('../../../shared/utils/response.util.js').js'));
 
 /**
  * Get all settings

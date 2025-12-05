@@ -1,5 +1,5 @@
 const greywallSystem = require('../services/greywallEmergency.service');
-const logger = require('../config/logger'));
+const logger = require('../config/logger');
 
 /**
  * Greywall Emergency Controller

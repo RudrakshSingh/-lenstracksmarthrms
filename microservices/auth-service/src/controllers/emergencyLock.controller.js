@@ -1,5 +1,5 @@
 const EmergencyLock = require('../models/EmergencyLock.model');
-const logger = require('../config/logger'));
+const logger = require('../config/logger');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 

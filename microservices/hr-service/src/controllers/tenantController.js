@@ -7,7 +7,7 @@ const {
   createPagination,
   parsePagination,
   parseFilters
-} = require('../../shared/utils/response.util.js'));
+} = require('../../../shared/utils/response.util.js').js'));
 
 /**
  * Get all tenants

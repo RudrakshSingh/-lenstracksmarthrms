@@ -206,8 +206,10 @@ const checkServiceStatus = async (serviceUrl) => {
     return cached;
   }
   
-  // Skip health check for localhost in production
-  if (serviceUrl.includes('localhost') && isProduction) {
+  // For single App Service architecture, services run on localhost in same container
+  // Always check localhost services - they should be accessible
+  // Only skip if explicitly configured to skip localhost checks
+  if (serviceUrl.includes('localhost') && isProduction && process.env.SKIP_LOCALHOST_HEALTH_CHECK === 'true') {
     const status = 'offline';
     cache.set(cacheKey, status, 300); // Cache for 5 minutes
     return status;

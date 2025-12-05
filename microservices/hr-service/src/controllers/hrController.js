@@ -10,7 +10,7 @@ const {
   parseFilters,
   formatEmployee,
   validateRequired
-} = require('../../shared/utils/response.util.js');
+} = require('../../../shared/utils/response.util.js');
 
 /**
  * Get all employees

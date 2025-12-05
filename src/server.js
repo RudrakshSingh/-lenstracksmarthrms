@@ -199,6 +199,7 @@ app.get('/health', (req, res) => {
 const cache = require('./utils/cache');
 
 // Optimized service status check with aggressive caching and HTTPS support
+// For single App Service architecture, all microservices run on localhost in the same container
 const checkServiceStatus = async (serviceUrl) => {
   const cacheKey = `service_status:${serviceUrl}`;
   const cached = cache.get(cacheKey);
@@ -206,33 +207,30 @@ const checkServiceStatus = async (serviceUrl) => {
     return cached;
   }
   
-  // For single App Service architecture, services run on localhost in same container
-  // Always check localhost services - they should be accessible
-  // Only skip if explicitly configured to skip localhost checks
-  if (serviceUrl.includes('localhost') && isProduction && process.env.SKIP_LOCALHOST_HEALTH_CHECK === 'true') {
-    const status = 'offline';
-    cache.set(cacheKey, status, 300); // Cache for 5 minutes
-    return status;
-  }
-  
   try {
-    // Ensure HTTPS for production URLs
+    // For localhost services (single container architecture), use http://localhost
+    // For external services, use HTTPS in production
     let healthUrl = serviceUrl;
-    if (isProduction && serviceUrl.startsWith('http://') && !serviceUrl.includes('localhost')) {
+    const isLocalhost = serviceUrl.includes('localhost') || serviceUrl.includes('127.0.0.1');
+    
+    // Don't convert localhost to HTTPS - services run on HTTP internally
+    if (isProduction && !isLocalhost && serviceUrl.startsWith('http://')) {
       healthUrl = serviceUrl.replace('http://', 'https://');
     }
     
     const response = await axios.get(`${healthUrl}/health`, { 
-      timeout: 2000, // Increased timeout for HTTPS
+      timeout: 3000, // Increased timeout for localhost services
       validateStatus: () => true,
       headers: { 
         'Connection': 'keep-alive',
         'Accept': 'application/json'
       },
-      httpsAgent: isProduction ? new (require('https').Agent)({
+      // Only use HTTPS agent for external services, not localhost
+      httpsAgent: (isProduction && !isLocalhost) ? new (require('https').Agent)({
         rejectUnauthorized: false // Allow self-signed certs in development
       }) : undefined
     });
+    
     const status = response.status === 200 ? 'online' : 'unhealthy';
     cache.set(cacheKey, status, 30); // Cache for 30 seconds
     return status;
@@ -265,15 +263,26 @@ function initializeServiceRegistry() {
 }
 
 // Optimized status update - non-blocking
+// Updates all microservice statuses in parallel
 async function updateServiceStatuses() {
   const updatePromises = Object.entries(serviceRegistry).map(async ([key, service]) => {
-    if (!service.isWebSocket) {
-      const status = await checkServiceStatus(service.url);
-      serviceRegistry[key].status = status;
+    try {
+      if (!service.isWebSocket) {
+        const status = await checkServiceStatus(service.url);
+        serviceRegistry[key].status = status;
+        serviceRegistry[key].lastChecked = Date.now();
+      } else {
+        // WebSocket services - mark as unknown (health check not applicable)
+        serviceRegistry[key].status = 'unknown';
+        serviceRegistry[key].lastChecked = Date.now();
+      }
+    } catch (error) {
+      // If status check fails, mark as offline
+      serviceRegistry[key].status = 'offline';
       serviceRegistry[key].lastChecked = Date.now();
-    } else {
-      serviceRegistry[key].status = 'unknown';
-      serviceRegistry[key].lastChecked = Date.now();
+      if (!isProduction) {
+        logger.debug(`Failed to update status for ${service.name}:`, error.message);
+      }
     }
   });
   await Promise.all(updatePromises);
@@ -485,23 +494,21 @@ sortedServices.forEach(([key, service]) => {
     
     const registryService = serviceRegistry[key];
     
-    // Check if service is offline (only in production)
-    if (registryService && registryService.status === 'offline' && isProduction) {
-      return res.status(503).json({
-        success: false,
-        message: `${service.name} is currently offline`,
-        service: service.name,
-        path: req.originalUrl,
-        method: req.method
-      });
-    }
-    
-    // For single App Service: localhost is correct (services run in same container)
-    // Only check if service URL is localhost AND we're expecting external services
-    // Skip this check for single App Service architecture
-    // However, if we're in production and service URL is localhost without proper setup, warn
-    if (serviceUrl.includes('localhost') && isProduction && !process.env.SINGLE_APP_SERVICE) {
-      logger.warn(`Service ${service.name} is configured with localhost in production. This may indicate a misconfiguration.`);
+    // Check if service is offline - allow retry for localhost services (they may be starting up)
+    if (registryService && registryService.status === 'offline') {
+      // For localhost services, still try to proxy (service may be starting)
+      // For external services, return 503 immediately
+      const isLocalhost = serviceUrl.includes('localhost') || serviceUrl.includes('127.0.0.1');
+      if (!isLocalhost) {
+        return res.status(503).json({
+          success: false,
+          message: `${service.name} is currently offline`,
+          service: service.name,
+          path: req.originalUrl,
+          method: req.method,
+          hint: 'Check service status at /api endpoint'
+        });
+      }
     }
     
     // Log proxy request for debugging (always log for troubleshooting)

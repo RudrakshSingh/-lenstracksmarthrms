@@ -2,7 +2,50 @@
  * Microservices Configuration
  * Maps service names to their App Service URLs
  * Can be overridden via environment variables
+ * 
+ * Architecture:
+ * - Each microservice has its own Azure App Service URL
+ * - Services are interconnected and can communicate with each other
+ * - API Gateway routes requests to appropriate microservice
  */
+
+// Helper function to generate Azure App Service URL
+// Format: https://{service-name}-{suffix}.{region}.azurewebsites.net
+function getAzureServiceUrl(serviceName, port = null) {
+  // Check if we're in Azure App Service
+  const isAzure = process.env.WEBSITE_SITE_NAME || process.env.AZURE_ENV === 'true';
+  
+  if (!isAzure) {
+    // Development: use localhost
+    return port ? `http://localhost:${port}` : `http://localhost:3001`;
+  }
+  
+  // Production: Use Azure App Service URLs
+  // Each service should have its own App Service
+  // Format: https://{service-name}-{suffix}.{region}.azurewebsites.net
+  const baseUrl = process.env.AZURE_APP_SERVICE_BASE_URL || 'https://etelios-app-service-cxf6hvgjb7gah7dr.centralindia-01.azurewebsites.net';
+  const region = process.env.AZURE_REGION || 'centralindia-01';
+  
+  // For separate App Services, each service has its own URL
+  // Check if service-specific URL is set via environment variable
+  const serviceEnvVar = `${serviceName.toUpperCase().replace(/-/g, '_')}_SERVICE_URL`;
+  if (process.env[serviceEnvVar]) {
+    return process.env[serviceEnvVar];
+  }
+  
+  // If all services are in same App Service (single container), use localhost
+  // Otherwise, construct separate App Service URL
+  const useSeparateServices = process.env.USE_SEPARATE_APP_SERVICES === 'true';
+  
+  if (useSeparateServices) {
+    // Each service has its own App Service
+    const serviceSuffix = serviceName.replace(/-service$/, '').replace(/-/g, '');
+    return `https://etelios-${serviceSuffix}-service.${region}.azurewebsites.net`;
+  }
+  
+  // Single App Service: services run on localhost in same container
+  return port ? `http://localhost:${port}` : `http://localhost:3001`;
+}
 
 const servicesConfig = {
   services: {
@@ -10,10 +53,12 @@ const servicesConfig = {
       name: 'auth-service',
       port: 3001,
       basePath: '/api/auth',
-      // For single App Service: use localhost (services run in same container)
-      // For separate services: use AUTH_SERVICE_URL env var or separate App Service URL
-      defaultUrl: process.env.AUTH_SERVICE_URL || 'http://localhost:3001',
-      envVar: 'AUTH_SERVICE_URL'
+      // Can be overridden via AUTH_SERVICE_URL environment variable
+      // For separate App Services: https://etelios-auth-service.centralindia-01.azurewebsites.net
+      // For single App Service: http://localhost:3001
+      defaultUrl: process.env.AUTH_SERVICE_URL || getAzureServiceUrl('auth-service', 3001),
+      envVar: 'AUTH_SERVICE_URL',
+      internalUrl: 'http://localhost:3001' // Internal communication URL
     },
     'hr': {
       name: 'hr-service',
@@ -171,11 +216,19 @@ const servicesConfig = {
 
   /**
    * Get service URL from environment variable or default
-   * In Kubernetes, uses service names (e.g., http://auth-service:3001)
+   * Supports:
+   * - Separate Azure App Services (each service has its own URL)
+   * - Single App Service (all services on localhost)
+   * - Kubernetes (uses service names)
    */
-  getServiceUrl(serviceKey) {
+  getServiceUrl(serviceKey, useInternal = false) {
     const service = this.services[serviceKey];
     if (!service) return null;
+    
+    // For internal service-to-service communication, use internal URL if available
+    if (useInternal && service.internalUrl) {
+      return service.internalUrl;
+    }
     
     // Check if running in Kubernetes
     const isKubernetes = process.env.KUBERNETES_SERVICE_HOST || process.env.K8S_ENV === 'true';
@@ -185,7 +238,16 @@ const servicesConfig = {
       return `http://${service.name}:${service.port}`;
     }
     
+    // Use environment variable if set, otherwise use default URL
     return process.env[service.envVar] || service.defaultUrl;
+  },
+  
+  /**
+   * Get internal URL for service-to-service communication
+   * Uses localhost for services in same container, or external URL for separate services
+   */
+  getInternalServiceUrl(serviceKey) {
+    return this.getServiceUrl(serviceKey, true);
   },
 
   /**

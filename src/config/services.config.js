@@ -33,12 +33,14 @@ function getAzureServiceUrl(serviceName, port = null) {
     return process.env[serviceEnvVar];
   }
   
-  // If all services are in same App Service (single container), use localhost
-  // Otherwise, construct separate App Service URL
-  const useSeparateServices = process.env.USE_SEPARATE_APP_SERVICES === 'true';
+  // Check if services are running independently (each in its own container)
+  // Default to separate services unless explicitly set to single container
+  const useSeparateServices = process.env.USE_SEPARATE_APP_SERVICES !== 'false';
+  const runOnlyGateway = process.env.RUN_ONLY_GATEWAY === 'true';
   
-  if (useSeparateServices) {
-    // Each service has its own App Service
+  // If API Gateway is running alone, services must be external
+  if (runOnlyGateway || useSeparateServices) {
+    // Each service has its own App Service/Container
     const serviceSuffix = serviceName.replace(/-service$/, '').replace(/-/g, '');
     return `https://etelios-${serviceSuffix}-service.${region}.azurewebsites.net`;
   }
@@ -217,16 +219,23 @@ const servicesConfig = {
   /**
    * Get service URL from environment variable or default
    * Supports:
-   * - Separate Azure App Services (each service has its own URL)
-   * - Single App Service (all services on localhost)
+   * - Separate Azure App Services (each service has its own URL) - DEFAULT
+   * - Single App Service (all services on localhost) - Set USE_SEPARATE_APP_SERVICES=false
    * - Kubernetes (uses service names)
+   * 
+   * IMPORTANT: By default, assumes services run independently in separate containers.
+   * Set USE_SEPARATE_APP_SERVICES=false to use localhost (single container mode).
    */
   getServiceUrl(serviceKey, useInternal = false) {
     const service = this.services[serviceKey];
     if (!service) return null;
     
     // For internal service-to-service communication, use internal URL if available
-    if (useInternal && service.internalUrl) {
+    // Only use internal URL if services are in same container
+    const useSeparateServices = process.env.USE_SEPARATE_APP_SERVICES !== 'false';
+    const runOnlyGateway = process.env.RUN_ONLY_GATEWAY === 'true';
+    
+    if (useInternal && service.internalUrl && !useSeparateServices && !runOnlyGateway) {
       return service.internalUrl;
     }
     
@@ -238,7 +247,7 @@ const servicesConfig = {
       return `http://${service.name}:${service.port}`;
     }
     
-    // Use environment variable if set, otherwise use default URL
+    // Priority: Environment variable > Default URL (which respects USE_SEPARATE_APP_SERVICES)
     return process.env[service.envVar] || service.defaultUrl;
   },
   

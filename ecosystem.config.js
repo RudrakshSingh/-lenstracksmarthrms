@@ -1,39 +1,56 @@
 /**
  * PM2 Ecosystem Configuration for Etelios Microservices
- * Manages all microservices in a single App Service
+ * 
+ * IMPORTANT: This file is ONLY for running all services together in a single container.
+ * For independent service deployment, each service should be run separately using its own Dockerfile.
+ * 
+ * Architecture Options:
+ * 1. Single Container (All Services): Use this ecosystem.config.js with PM2
+ * 2. Independent Services: Each service runs in its own container with its own Dockerfile
  * 
  * Usage:
- *   pm2 start ecosystem.config.js
- *   pm2-runtime ecosystem.config.js  (for production)
+ *   - Single Container: pm2-runtime ecosystem.config.js
+ *   - Independent: Each service runs independently via its Dockerfile
+ * 
+ * To run only API Gateway (without microservices):
+ *   Set environment variable: RUN_ONLY_GATEWAY=true
  */
 
-module.exports = {
-  apps: [
-    // API Gateway - Routes requests to microservices
-    {
-      name: 'api-gateway',
-      script: 'src/server.js',
-      cwd: './',
-      instances: 1,
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 3000,
-        USE_KEY_VAULT: 'true',
-        AZURE_KEY_VAULT_URL: 'https://etelios-keyvault.vault.azure.net/',
-        AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
-        CORS_ORIGIN: '*'
-        // NO SERVICE_NAME - API Gateway doesn't need it
-      },
-      error_file: './logs/gateway-error.log',
-      out_file: './logs/gateway-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: true,
-      autorestart: true,
-      max_restarts: 10,
-      min_uptime: '10s'
+// Check if we should only run the API Gateway
+const runOnlyGateway = process.env.RUN_ONLY_GATEWAY === 'true';
+const runAllServices = process.env.RUN_ALL_SERVICES === 'true' || !runOnlyGateway;
+
+// Base apps array - always includes API Gateway
+const apps = [
+  // API Gateway - Routes requests to microservices (OPTIONAL - can run independently)
+  {
+    name: 'api-gateway',
+    script: 'src/server.js',
+    cwd: './',
+    instances: 1,
+    exec_mode: 'fork',
+    env: {
+      NODE_ENV: 'production',
+      PORT: process.env.PORT || 3000,
+      USE_KEY_VAULT: 'true',
+      AZURE_KEY_VAULT_URL: 'https://etelios-keyvault.vault.azure.net/',
+      AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
+      CORS_ORIGIN: '*'
+      // NO SERVICE_NAME - API Gateway doesn't need it
     },
-    
+    error_file: './logs/gateway-error.log',
+    out_file: './logs/gateway-out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    merge_logs: true,
+    autorestart: true,
+    max_restarts: 10,
+    min_uptime: '10s'
+  }
+];
+
+// Only add microservices if RUN_ALL_SERVICES is true or RUN_ONLY_GATEWAY is false
+if (runAllServices) {
+  apps.push(
     // Auth Service - Authentication & User Management
     {
       name: 'auth-service',
@@ -150,33 +167,8 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '10s'
     }
-    
-    // Add more services as needed...
-    // Uncomment and configure when ready to deploy:
-    
-    /*
-    {
-      name: 'inventory-service',
-      script: 'src/server.js',
-      cwd: './microservices/inventory-service',
-      instances: 1,
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 3006,
-        SERVICE_NAME: 'inventory-service',
-        USE_KEY_VAULT: 'true',
-        AZURE_KEY_VAULT_URL: 'https://etelios-keyvault.vault.azure.net/',
-        AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
-        CORS_ORIGIN: '*'
-      },
-      error_file: './logs/inventory-error.log',
-      out_file: './logs/inventory-out.log',
-      autorestart: true,
-      max_restarts: 10,
-      min_uptime: '10s'
-    }
-    */
-  ]
-};
+  );
+}
+
+module.exports = { apps };
 

@@ -12,7 +12,7 @@ FROM node:22-slim AS builder
 WORKDIR /app
 
 # Copy package files first for caching
-COPY package.json ./
+COPY package.json package-lock.json* ./
 
 # Install only production dependencies
 # npm ci doesn't support --only=production, use --omit=dev instead
@@ -124,13 +124,16 @@ EXPOSE 8080
 
 # Environment variables (override in K8s or Docker Compose)
 ENV NODE_ENV=production \
-    PORT=8080
+    PORT=8080 \
+    RUN_ONLY_GATEWAY=true
 
 # Healthcheck for container monitoring
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD node -e "require('http').get('http://localhost:8080/health', res => { if(res.statusCode!==200) process.exit(1); })"
 
 # -----------------------------
-# Start the API Gateway
+# Start the API Gateway ONLY (not microservices)
+# Microservices run independently in their own containers
+# To run all services together, set RUN_ALL_SERVICES=true
 # -----------------------------
 CMD ["pm2-runtime", "ecosystem.config.js"]

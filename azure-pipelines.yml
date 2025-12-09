@@ -45,20 +45,44 @@ stages:
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           
-          # Login to ACR using Azure CLI (uses service principal authentication)
-          echo "Logging in to ACR: $ACR_NAME"
-          az acr login --name $ACR_NAME
-          echo "✅ Successfully logged in to ACR: $ACR_LOGIN_SERVER"
+          # Enable admin user on ACR (if not already enabled)
+          echo "Enabling admin user on ACR: $ACR_NAME"
+          az acr update --name $ACR_NAME --admin-enabled true
           
-          # Verify login by testing access
-          echo "Verifying ACR access..."
-          az acr repository list --name $ACR_NAME --output table || echo "Note: Could not list repositories, but login may still work"
+          # Get ACR admin credentials
+          echo "Retrieving ACR admin credentials..."
+          ACR_USERNAME=$(az acr credential show --name $ACR_NAME --query username --output tsv)
+          ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query passwords[0].value --output tsv)
+          
+          if [ -z "$ACR_USERNAME" ] || [ -z "$ACR_PASSWORD" ]; then
+            echo "❌ Error: Failed to retrieve ACR credentials"
+            exit 1
+          fi
+          
+          # Login to ACR using admin credentials
+          echo "Logging in to ACR using admin credentials..."
+          echo "$ACR_PASSWORD" | docker login $ACR_LOGIN_SERVER -u $ACR_USERNAME --password-stdin
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Error: Failed to login to ACR"
+            exit 1
+          fi
+          
+          echo "✅ Successfully logged in to ACR: $ACR_LOGIN_SERVER"
           
           # Build and push API Gateway
           echo "Building and pushing API Gateway..."
           docker build -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
+          
+          echo "Pushing API Gateway images..."
           docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
           docker push $ACR_LOGIN_SERVER/api-gateway:latest
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Error: Failed to push API Gateway images"
+            exit 1
+          fi
+          
           echo "✅ API Gateway pushed successfully"
           
           # Build and push all microservices
@@ -86,8 +110,16 @@ stages:
           for SERVICE in "${SERVICES[@]}"; do
             echo "Building and pushing $SERVICE..."
             docker build -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+            
+            echo "Pushing $SERVICE images..."
             docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
             docker push $ACR_LOGIN_SERVER/$SERVICE:latest
+            
+            if [ $? -ne 0 ]; then
+              echo "❌ Error: Failed to push $SERVICE images"
+              exit 1
+            fi
+            
             echo "✅ $SERVICE pushed successfully"
           done
           

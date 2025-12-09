@@ -34,22 +34,19 @@ stages:
       vmImage: 'ubuntu-latest'
     steps:
     - task: AzureCLI@2
-      displayName: 'Login to ACR using Admin Credentials'
+      displayName: 'Login to ACR using Azure CLI'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          # Enable admin user on ACR (if not already enabled)
-          az acr update --name $(ACR_NAME) --admin-enabled true || true
+          # Login to ACR using Azure CLI (uses service principal authentication)
+          echo "Logging in to ACR: $(ACR_NAME)"
+          az acr login --name $(ACR_NAME)
+          echo "✅ Successfully logged in to ACR: $(ACR_LOGIN_SERVER)"
           
-          # Get ACR admin credentials and login
-          ACR_USERNAME=$(az acr credential show --name $(ACR_NAME) --query username --output tsv)
-          ACR_PASSWORD=$(az acr credential show --name $(ACR_NAME) --query passwords[0].value --output tsv)
-          
-          # Login to ACR using admin credentials
-          echo $ACR_PASSWORD | docker login $(ACR_LOGIN_SERVER) -u $ACR_USERNAME --password-stdin
-          echo "✅ Logged in to ACR: $(ACR_LOGIN_SERVER)"
+          # Verify login by checking if we can access the registry
+          az acr repository list --name $(ACR_NAME) --output table || echo "Warning: Could not list repositories, but login may still work"
     
     - script: |
         # Build and push API Gateway

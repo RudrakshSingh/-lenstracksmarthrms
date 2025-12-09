@@ -34,57 +34,64 @@ stages:
       vmImage: 'ubuntu-latest'
     steps:
     - task: AzureCLI@2
-      displayName: 'Login to ACR using Azure CLI'
+      displayName: 'Build and Push All Images to ACR'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          # Login to ACR using Azure CLI (uses service principal authentication)
-          echo "Logging in to ACR: $(ACR_NAME)"
-          az acr login --name $(ACR_NAME)
-          echo "✅ Successfully logged in to ACR: $(ACR_LOGIN_SERVER)"
+          # Set variables from pipeline variables
+          ACR_NAME="$(ACR_NAME)"
+          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
+          IMAGE_TAG="$(IMAGE_TAG)"
           
-          # Verify login by checking if we can access the registry
-          az acr repository list --name $(ACR_NAME) --output table || echo "Warning: Could not list repositories, but login may still work"
-    
-    - script: |
-        # Build and push API Gateway
-        docker build -t $(ACR_LOGIN_SERVER)/api-gateway:$(IMAGE_TAG) -t $(ACR_LOGIN_SERVER)/api-gateway:latest -f Dockerfile .
-        docker push $(ACR_LOGIN_SERVER)/api-gateway:$(IMAGE_TAG)
-        docker push $(ACR_LOGIN_SERVER)/api-gateway:latest
-      displayName: 'Build and Push API Gateway'
-    
-    - script: |
-        # Build and push all microservices
-        SERVICES=(
-          "auth-service"
-          "hr-service"
-          "attendance-service"
-          "payroll-service"
-          "crm-service"
-          "inventory-service"
-          "sales-service"
-          "purchase-service"
-          "financial-service"
-          "document-service"
-          "service-management"
-          "cpp-service"
-          "prescription-service"
-          "analytics-service"
-          "notification-service"
-          "monitoring-service"
-          "tenant-registry-service"
-          "realtime-service"
-        )
-        
-        for SERVICE in "${SERVICES[@]}"; do
-          echo "Building $SERVICE..."
-          docker build -t $(ACR_LOGIN_SERVER)/$SERVICE:$(IMAGE_TAG) -t $(ACR_LOGIN_SERVER)/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
-          docker push $(ACR_LOGIN_SERVER)/$SERVICE:$(IMAGE_TAG)
-          docker push $(ACR_LOGIN_SERVER)/$SERVICE:latest
-        done
-      displayName: 'Build and Push All Microservices'
+          # Login to ACR using Azure CLI (uses service principal authentication)
+          echo "Logging in to ACR: $ACR_NAME"
+          az acr login --name $ACR_NAME
+          echo "✅ Successfully logged in to ACR: $ACR_LOGIN_SERVER"
+          
+          # Verify login by testing access
+          echo "Verifying ACR access..."
+          az acr repository list --name $ACR_NAME --output table || echo "Note: Could not list repositories, but login may still work"
+          
+          # Build and push API Gateway
+          echo "Building and pushing API Gateway..."
+          docker build -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
+          docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
+          docker push $ACR_LOGIN_SERVER/api-gateway:latest
+          echo "✅ API Gateway pushed successfully"
+          
+          # Build and push all microservices
+          SERVICES=(
+            "auth-service"
+            "hr-service"
+            "attendance-service"
+            "payroll-service"
+            "crm-service"
+            "inventory-service"
+            "sales-service"
+            "purchase-service"
+            "financial-service"
+            "document-service"
+            "service-management"
+            "cpp-service"
+            "prescription-service"
+            "analytics-service"
+            "notification-service"
+            "monitoring-service"
+            "tenant-registry-service"
+            "realtime-service"
+          )
+          
+          for SERVICE in "${SERVICES[@]}"; do
+            echo "Building and pushing $SERVICE..."
+            docker build -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+            docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
+            docker push $ACR_LOGIN_SERVER/$SERVICE:latest
+            echo "✅ $SERVICE pushed successfully"
+          done
+          
+          echo "✅ All images built and pushed successfully"
 
 - stage: Deploy
   displayName: 'Deploy to AKS'

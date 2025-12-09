@@ -2,14 +2,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: etelios-config
-  namespace: etelios
+  namespace: etelios-backend-prod
 data:
   NODE_ENV: "production"
   # CORS Configuration - Allow all origins for frontend compatibility
   # Can be set to specific frontend URL(s) for better security
+  # Example: CORS_ORIGIN: "https://your-frontend-domain.com,https://another-domain.com"
   CORS_ORIGIN: "*"
-  # Example with specific origins:
-  # CORS_ORIGIN: "https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net"
   LOG_LEVEL: "info"
   
   # Service URLs (using Kubernetes service names)

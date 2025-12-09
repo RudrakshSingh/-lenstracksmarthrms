@@ -7,7 +7,7 @@ set -e
 
 ACR_NAME="${ACR_NAME:-eteliosacr}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-NAMESPACE="${NAMESPACE:-etelios}"
+NAMESPACE="${NAMESPACE:-etelios-backend-prod}"
 REPLICAS="${REPLICAS:-2}"
 
 # Service configurations (compatible with bash 3.x)

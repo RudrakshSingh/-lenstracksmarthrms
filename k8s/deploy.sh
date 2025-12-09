@@ -7,10 +7,10 @@ set -e
 
 ENVIRONMENT="${1:-production}"
 SERVICE="${2:-all}"
-NAMESPACE="etelios"
+NAMESPACE="etelios-backend-prod"
 ACR_NAME="${ACR_NAME:-eteliosacr}"
-AKS_RESOURCE_GROUP="${AKS_RESOURCE_GROUP:-Etelios-rg}"
-AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-etelios-aks}"
+AKS_RESOURCE_GROUP="${AKS_RESOURCE_GROUP:-Etelios-AKS-RG}"
+AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-Etelios-AKS}"
 
 echo "🚀 Deploying to AKS..."
 echo "Environment: ${ENVIRONMENT}"

@@ -1,11 +1,10 @@
 const cors = require('cors');
 
-// Default allowed origins - includes frontend and localhost for development
+// Default allowed origins - localhost for development
+// In production, set CORS_ORIGIN environment variable via ConfigMap
 const defaultOrigins = [
   'http://localhost:3000',
-  'http://localhost:3001',
-  'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net',
-  'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net/hrms'
+  'http://localhost:3001'
 ];
 
 const corsOriginEnv = process.env.CORS_ORIGIN;

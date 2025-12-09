@@ -89,14 +89,12 @@ if (corsOriginEnv === '*') {
   // Use configured origins
   allowedOrigins = corsOriginEnv.split(',').map(o => o.trim());
 } else {
-  // Default: Allow specific frontend URLs and all origins for flexibility
+  // Default: Allow localhost for development
+  // In production, set CORS_ORIGIN environment variable via ConfigMap
   allowedOrigins = [
-    'https://etelios-shell-appservice-ewgde3dpewhubzhs.centralindia-01.azurewebsites.net',
-    'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net',
-    'https://etelios-frontend-appservice-eedgc2bmb7h5fzfy.centralindia-01.azurewebsites.net/hrms',
     'http://localhost:3000',
     'http://localhost:3001',
-    '*' // Allow all origins as fallback
+    '*' // Allow all origins as fallback (configure via CORS_ORIGIN in production)
   ];
 }
 

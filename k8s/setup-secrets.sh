@@ -5,7 +5,7 @@
 
 set -e
 
-NAMESPACE="${NAMESPACE:-etelios}"
+NAMESPACE="${NAMESPACE:-etelios-backend-prod}"
 SECRETS_FILE="k8s/secrets.yaml"
 
 echo "🔐 Setting up Kubernetes Secrets for Etelios"

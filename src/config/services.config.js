@@ -1,52 +1,26 @@
 /**
  * Microservices Configuration
- * Maps service names to their App Service URLs
+ * Maps service names to their Kubernetes service URLs
  * Can be overridden via environment variables
  * 
  * Architecture:
- * - Each microservice has its own Azure App Service URL
- * - Services are interconnected and can communicate with each other
+ * - Services deployed on Azure Kubernetes Service (AKS)
+ * - Services communicate using Kubernetes service names
  * - API Gateway routes requests to appropriate microservice
  */
 
-// Helper function to generate Azure App Service URL
-// Format: https://{service-name}-{suffix}.{region}.azurewebsites.net
-function getAzureServiceUrl(serviceName, port = null) {
-  // Check if we're in Azure App Service
-  const isAzure = process.env.WEBSITE_SITE_NAME || process.env.AZURE_ENV === 'true';
+// Helper function to get service URL based on environment
+function getServiceUrl(serviceName, port) {
+  // Check if running in Kubernetes
+  const isKubernetes = process.env.KUBERNETES_SERVICE_HOST || process.env.K8S_ENV === 'true';
   
-  if (!isAzure) {
-    // Development: use localhost
-    return port ? `http://localhost:${port}` : `http://localhost:3001`;
+  if (isKubernetes) {
+    // Kubernetes: Use service name for internal communication
+    return `http://${serviceName}:${port}`;
   }
   
-  // Production: Use Azure App Service URLs
-  // Each service should have its own App Service
-  // Format: https://{service-name}-{suffix}.{region}.azurewebsites.net
-  const baseUrl = process.env.AZURE_APP_SERVICE_BASE_URL || 'https://etelios-app-service-cxf6hvgjb7gah7dr.centralindia-01.azurewebsites.net';
-  const region = process.env.AZURE_REGION || 'centralindia-01';
-  
-  // For separate App Services, each service has its own URL
-  // Check if service-specific URL is set via environment variable
-  const serviceEnvVar = `${serviceName.toUpperCase().replace(/-/g, '_')}_SERVICE_URL`;
-  if (process.env[serviceEnvVar]) {
-    return process.env[serviceEnvVar];
-  }
-  
-  // Check if services are running independently (each in its own container)
-  // Default to separate services unless explicitly set to single container
-  const useSeparateServices = process.env.USE_SEPARATE_APP_SERVICES !== 'false';
-  const runOnlyGateway = process.env.RUN_ONLY_GATEWAY === 'true';
-  
-  // If API Gateway is running alone, services must be external
-  if (runOnlyGateway || useSeparateServices) {
-    // Each service has its own App Service/Container
-    const serviceSuffix = serviceName.replace(/-service$/, '').replace(/-/g, '');
-    return `https://etelios-${serviceSuffix}-service.${region}.azurewebsites.net`;
-  }
-  
-  // Single App Service: services run on localhost in same container
-  return port ? `http://localhost:${port}` : `http://localhost:3001`;
+  // Development: use localhost
+  return `http://localhost:${port}`;
 }
 
 const servicesConfig = {
@@ -56,19 +30,19 @@ const servicesConfig = {
       port: 3001,
       basePath: '/api/auth',
       // Can be overridden via AUTH_SERVICE_URL environment variable
-      // For separate App Services: https://etelios-auth-service.centralindia-01.azurewebsites.net
-      // For single App Service: http://localhost:3001
-      defaultUrl: process.env.AUTH_SERVICE_URL || getAzureServiceUrl('auth-service', 3001),
+      // Kubernetes: http://auth-service:3001
+      // Development: http://localhost:3001
+      defaultUrl: process.env.AUTH_SERVICE_URL || getServiceUrl('auth-service', 3001),
       envVar: 'AUTH_SERVICE_URL',
-      internalUrl: 'http://localhost:3001' // Internal communication URL
+      internalUrl: 'http://localhost:3001' // Internal communication URL for local development
     },
     'hr': {
       name: 'hr-service',
       port: 3002,
       basePath: '/api/hr',
-      // For single App Service: use localhost (services run in same container)
-      // For separate services: use HR_SERVICE_URL env var or separate App Service URL
-      defaultUrl: process.env.HR_SERVICE_URL || 'http://localhost:3002',
+      // Kubernetes: http://hr-service:3002
+      // Development: http://localhost:3002
+      defaultUrl: process.env.HR_SERVICE_URL || getServiceUrl('hr-service', 3002),
       envVar: 'HR_SERVICE_URL',
       subRoutes: ['/api/transfers', '/api/hr-letter'] // Additional HR service routes mounted at different paths
     },
@@ -219,24 +193,21 @@ const servicesConfig = {
   /**
    * Get service URL from environment variable or default
    * Supports:
-   * - Separate Azure App Services (each service has its own URL) - DEFAULT
-   * - Single App Service (all services on localhost) - Set USE_SEPARATE_APP_SERVICES=false
-   * - Kubernetes (uses service names)
+   * - Kubernetes (uses service names) - Production
+   * - Localhost (for local development)
    * 
-   * IMPORTANT: By default, assumes services run independently in separate containers.
-   * Set USE_SEPARATE_APP_SERVICES=false to use localhost (single container mode).
+   * Priority: Environment variable > Kubernetes service name > localhost
    */
   getServiceUrl(serviceKey, useInternal = false) {
     const service = this.services[serviceKey];
     if (!service) return null;
     
-    // For internal service-to-service communication, use internal URL if available
-    // Only use internal URL if services are in same container
-    const useSeparateServices = process.env.USE_SEPARATE_APP_SERVICES !== 'false';
-    const runOnlyGateway = process.env.RUN_ONLY_GATEWAY === 'true';
-    
-    if (useInternal && service.internalUrl && !useSeparateServices && !runOnlyGateway) {
-      return service.internalUrl;
+    // For internal service-to-service communication in local development
+    if (useInternal && service.internalUrl) {
+      const isKubernetes = process.env.KUBERNETES_SERVICE_HOST || process.env.K8S_ENV === 'true';
+      if (!isKubernetes) {
+        return service.internalUrl;
+      }
     }
     
     // Check if running in Kubernetes
@@ -247,13 +218,13 @@ const servicesConfig = {
       return `http://${service.name}:${service.port}`;
     }
     
-    // Priority: Environment variable > Default URL (which respects USE_SEPARATE_APP_SERVICES)
+    // Priority: Environment variable > Default URL
     return process.env[service.envVar] || service.defaultUrl;
   },
   
   /**
    * Get internal URL for service-to-service communication
-   * Uses localhost for services in same container, or external URL for separate services
+   * Uses Kubernetes service names in production, localhost for local development
    */
   getInternalServiceUrl(serviceKey) {
     return this.getServiceUrl(serviceKey, true);

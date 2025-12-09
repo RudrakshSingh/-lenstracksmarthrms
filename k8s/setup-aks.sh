@@ -6,10 +6,10 @@
 set -e
 
 # Configuration
-RESOURCE_GROUP="${RESOURCE_GROUP:-Etelios-rg}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-Etelios-AKS-RG}"
 LOCATION="${LOCATION:-centralindia}"
 ACR_NAME="${ACR_NAME:-eteliosacr}"
-AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-etelios-aks}"
+AKS_CLUSTER_NAME="${AKS_CLUSTER_NAME:-Etelios-AKS}"
 NODE_COUNT="${NODE_COUNT:-3}"
 NODE_VM_SIZE="${NODE_VM_SIZE:-Standard_D4s_v3}"
 

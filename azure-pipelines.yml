@@ -33,11 +33,16 @@ stages:
     pool:
       vmImage: 'ubuntu-latest'
     steps:
-    - task: Docker@2
-      displayName: 'Login to ACR'
+    - task: AzureCLI@2
+      displayName: 'Login to ACR using Azure CLI'
       inputs:
-        command: login
-        containerRegistry: 'AzureContainerRegistry'
+        azureSubscription: 'AKS-Service-Connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Login to ACR using Azure CLI
+          az acr login --name $(ACR_NAME)
+          echo "✅ Logged in to ACR: $(ACR_LOGIN_SERVER)"
     
     - script: |
         # Build and push API Gateway

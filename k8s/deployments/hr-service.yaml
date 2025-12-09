@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: hr-service
-        image: eteliosacr.azurecr.io/hr-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/hr-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3002

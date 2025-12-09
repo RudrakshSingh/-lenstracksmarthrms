@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: crm-service
-        image: eteliosacr.azurecr.io/crm-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/crm-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3005

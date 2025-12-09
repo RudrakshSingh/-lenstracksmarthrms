@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: payroll-service
-        image: eteliosacr.azurecr.io/payroll-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/payroll-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3004

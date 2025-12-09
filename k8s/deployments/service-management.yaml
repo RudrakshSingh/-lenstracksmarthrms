@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: service-management
-        image: eteliosacr.azurecr.io/service-management:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/service-management:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3011

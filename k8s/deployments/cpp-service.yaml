@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: cpp-service
-        image: eteliosacr.azurecr.io/cpp-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/cpp-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3012

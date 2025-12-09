@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: auth-service
-        image: eteliosacr.azurecr.io/auth-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3001

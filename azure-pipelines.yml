@@ -1,66 +1,187 @@
-# Docker
-# Build and push an image to Azure Container Registry
-# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
-
+# Azure DevOps Pipeline for AKS Deployment
+# This pipeline builds Docker images and deploys to Azure Kubernetes Service (AKS)
 trigger:
-- main
-
-resources:
-- repo: self
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    exclude:
+      - '*.md'
+      - 'docs/*'
 
 variables:
-  # Container registry service connection - use name instead of GUID for consistency
-  dockerRegistryServiceConnection: 'c405786f-9b3e-4c33-92a4-75a3522f83a7'
-  imageRepository: 'eteliosbackend'
-  containerRegistry: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'
-  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
-  tag: '$(Build.BuildId)'
-
-  # Agent VM image name
-  vmImageName: 'ubuntu-latest'
+  - name: ACR_NAME
+    value: 'eteliosacr'
+  - name: AKS_RESOURCE_GROUP
+    value: 'Etelios-AKS-RG'
+  - name: AKS_CLUSTER_NAME
+    value: 'Etelios-AKS'
+  - name: NAMESPACE
+    value: 'etelios-backend-prod'
+  - name: IMAGE_TAG
+    value: '$(Build.BuildId)'
 
 stages:
 - stage: Build
-  displayName: Build and push stage
+  displayName: 'Build and Push Docker Images'
   jobs:
-  - job: Build
-    displayName: Build
+  - job: BuildImages
+    displayName: 'Build All Service Images'
     pool:
-      vmImage: $(vmImageName)
+      vmImage: 'ubuntu-latest'
     steps:
     - task: Docker@2
-      displayName: Build and push an image to container registry
+      displayName: 'Login to ACR'
       inputs:
-        command: buildAndPush
-        repository: $(imageRepository)
-        dockerfile: $(dockerfilePath)
-        containerRegistry: $(dockerRegistryServiceConnection)
-        tags: |
-          latest
+        command: login
+        containerRegistry: 'eteliosacr-connection'
+    
+    - script: |
+        # Build and push API Gateway
+        docker build -t $(ACR_NAME).azurecr.io/api-gateway:$(IMAGE_TAG) -t $(ACR_NAME).azurecr.io/api-gateway:latest -f Dockerfile .
+        docker push $(ACR_NAME).azurecr.io/api-gateway:$(IMAGE_TAG)
+        docker push $(ACR_NAME).azurecr.io/api-gateway:latest
+      displayName: 'Build and Push API Gateway'
+    
+    - script: |
+        # Build and push all microservices
+        SERVICES=(
+          "auth-service"
+          "hr-service"
+          "attendance-service"
+          "payroll-service"
+          "crm-service"
+          "inventory-service"
+          "sales-service"
+          "purchase-service"
+          "financial-service"
+          "document-service"
+          "service-management"
+          "cpp-service"
+          "prescription-service"
+          "analytics-service"
+          "notification-service"
+          "monitoring-service"
+          "tenant-registry-service"
+          "realtime-service"
+        )
+        
+        for SERVICE in "${SERVICES[@]}"; do
+          echo "Building $SERVICE..."
+          docker build -t $(ACR_NAME).azurecr.io/$SERVICE:$(IMAGE_TAG) -t $(ACR_NAME).azurecr.io/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+          docker push $(ACR_NAME).azurecr.io/$SERVICE:$(IMAGE_TAG)
+          docker push $(ACR_NAME).azurecr.io/$SERVICE:latest
+        done
+      displayName: 'Build and Push All Microservices'
 
 - stage: Deploy
-  displayName: Deploy to Azure App Service
+  displayName: 'Deploy to AKS'
   dependsOn: Build
   condition: succeeded()
   jobs:
-  - deployment: Deploy
-    displayName: Deploy Main API Gateway
-    environment: 'production'
+  - deployment: DeployToAKS
+    displayName: 'Deploy to AKS Cluster'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'etelios-aks-production'
     strategy:
       runOnce:
         deploy:
           steps:
-          - task: AzureWebAppContainer@1
-            displayName: 'Deploy to Azure App Service'
+          - task: AzureCLI@2
+            displayName: 'Configure kubectl'
             inputs:
-              azureSubscription: 'Azure-Service-Connection'
-              appName: 'Etelios-app-service'
-              containers: '$(containerRegistry)/$(imageRepository):latest'
-              appSettings: '-WEBSITES_PORT "3000" -PORT "3000" -NODE_ENV "production" -SCM_DO_BUILD_DURING_DEPLOYMENT "false"'
-
-          - task: AzureAppServiceManage@0
-            displayName: 'Restart App Service to apply changes'
+              azureSubscription: 'AKS-Service-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials --resource-group $(AKS_RESOURCE_GROUP) --name $(AKS_CLUSTER_NAME) --overwrite-existing
+                kubectl version --client
+          
+          - task: Bash@3
+            displayName: 'Generate Kubernetes Manifests'
             inputs:
-              azureSubscription: 'Azure-Service-Connection'
-              Action: 'Restart Azure App Service'
-              WebAppName: 'Etelios-app-service'
+              targetType: 'inline'
+              script: |
+                chmod +x k8s/generate-manifests.sh
+                export ACR_NAME=$(ACR_NAME)
+                export IMAGE_TAG=$(IMAGE_TAG)
+                export NAMESPACE=$(NAMESPACE)
+                ./k8s/generate-manifests.sh
+          
+          - task: Kubernetes@1
+            displayName: 'Create Namespace'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: 'AKS-Service-Connection'
+              azureResourceGroup: '$(AKS_RESOURCE_GROUP)'
+              kubernetesCluster: '$(AKS_CLUSTER_NAME)'
+              command: 'apply'
+              arguments: '-f k8s/namespace.yaml'
+              secretType: 'generic'
+          
+          - task: Kubernetes@1
+            displayName: 'Apply ConfigMap'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: 'AKS-Service-Connection'
+              azureResourceGroup: '$(AKS_RESOURCE_GROUP)'
+              kubernetesCluster: '$(AKS_CLUSTER_NAME)'
+              command: 'apply'
+              arguments: '-f k8s/configmap.yaml'
+              secretType: 'generic'
+          
+          - task: Kubernetes@1
+            displayName: 'Apply Secrets'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: 'AKS-Service-Connection'
+              azureResourceGroup: '$(AKS_RESOURCE_GROUP)'
+              kubernetesCluster: '$(AKS_CLUSTER_NAME)'
+              command: 'apply'
+              arguments: '-f k8s/secrets.yaml'
+              secretType: 'generic'
+          
+          - task: Kubernetes@1
+            displayName: 'Deploy API Gateway'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: 'AKS-Service-Connection'
+              azureResourceGroup: '$(AKS_RESOURCE_GROUP)'
+              kubernetesCluster: '$(AKS_CLUSTER_NAME)'
+              command: 'apply'
+              arguments: '-f k8s/api-gateway.yaml'
+              secretType: 'generic'
+          
+          - task: Kubernetes@1
+            displayName: 'Deploy All Microservices'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: 'AKS-Service-Connection'
+              azureResourceGroup: '$(AKS_RESOURCE_GROUP)'
+              kubernetesCluster: '$(AKS_CLUSTER_NAME)'
+              command: 'apply'
+              arguments: '-f k8s/deployments/'
+              secretType: 'generic'
+          
+          - task: Kubernetes@1
+            displayName: 'Apply Ingress'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: 'AKS-Service-Connection'
+              azureResourceGroup: '$(AKS_RESOURCE_GROUP)'
+              kubernetesCluster: '$(AKS_CLUSTER_NAME)'
+              command: 'apply'
+              arguments: '-f k8s/ingress.yaml'
+              secretType: 'generic'
+          
+          - task: Bash@3
+            displayName: 'Wait for Deployments'
+            inputs:
+              targetType: 'inline'
+              script: |
+                kubectl wait --for=condition=available --timeout=300s deployment --all -n $(NAMESPACE) || true
+                kubectl get deployments -n $(NAMESPACE)
+                kubectl get services -n $(NAMESPACE)
+                kubectl get ingress -n $(NAMESPACE)

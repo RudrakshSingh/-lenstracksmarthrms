@@ -84,7 +84,6 @@ stages:
     displayName: 'Deploy to AKS Cluster'
     pool:
       vmImage: 'ubuntu-latest'
-    environment: 'etelios-aks-production'
     strategy:
       runOnce:
         deploy:

@@ -12,7 +12,9 @@ trigger:
 
 variables:
   - name: ACR_NAME
-    value: 'eteliosacr'
+    value: 'eteliosacr-hvawabdbgge7e0fu'
+  - name: ACR_LOGIN_SERVER
+    value: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'
   - name: AKS_RESOURCE_GROUP
     value: 'Etelios-AKS-RG'
   - name: AKS_CLUSTER_NAME
@@ -35,13 +37,13 @@ stages:
       displayName: 'Login to ACR'
       inputs:
         command: login
-        containerRegistry: 'eteliosacr-connection'
+        containerRegistry: 'AzureContainerRegistry'
     
     - script: |
         # Build and push API Gateway
-        docker build -t $(ACR_NAME).azurecr.io/api-gateway:$(IMAGE_TAG) -t $(ACR_NAME).azurecr.io/api-gateway:latest -f Dockerfile .
-        docker push $(ACR_NAME).azurecr.io/api-gateway:$(IMAGE_TAG)
-        docker push $(ACR_NAME).azurecr.io/api-gateway:latest
+        docker build -t $(ACR_LOGIN_SERVER)/api-gateway:$(IMAGE_TAG) -t $(ACR_LOGIN_SERVER)/api-gateway:latest -f Dockerfile .
+        docker push $(ACR_LOGIN_SERVER)/api-gateway:$(IMAGE_TAG)
+        docker push $(ACR_LOGIN_SERVER)/api-gateway:latest
       displayName: 'Build and Push API Gateway'
     
     - script: |
@@ -69,9 +71,9 @@ stages:
         
         for SERVICE in "${SERVICES[@]}"; do
           echo "Building $SERVICE..."
-          docker build -t $(ACR_NAME).azurecr.io/$SERVICE:$(IMAGE_TAG) -t $(ACR_NAME).azurecr.io/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
-          docker push $(ACR_NAME).azurecr.io/$SERVICE:$(IMAGE_TAG)
-          docker push $(ACR_NAME).azurecr.io/$SERVICE:latest
+          docker build -t $(ACR_LOGIN_SERVER)/$SERVICE:$(IMAGE_TAG) -t $(ACR_LOGIN_SERVER)/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+          docker push $(ACR_LOGIN_SERVER)/$SERVICE:$(IMAGE_TAG)
+          docker push $(ACR_LOGIN_SERVER)/$SERVICE:latest
         done
       displayName: 'Build and Push All Microservices'
 

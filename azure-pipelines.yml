@@ -34,7 +34,7 @@ stages:
       vmImage: 'ubuntu-latest'
     steps:
     - task: AzureCLI@2
-      displayName: 'Login to ACR and Build/Push All Images'
+      displayName: 'Clean Docker Cache and Build/Push All Images'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
@@ -44,6 +44,15 @@ stages:
           ACR_NAME="$(ACR_NAME)"
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
+          
+          # Clean Docker cache and system to free up space
+          echo "🧹 Cleaning Docker cache and system..."
+          docker system prune -af --volumes || echo "⚠️  Warning: Docker prune failed, continuing..."
+          docker builder prune -af || echo "⚠️  Warning: Docker builder prune failed, continuing..."
+          
+          # Show disk space
+          echo "📊 Current disk usage:"
+          df -h / || echo "⚠️  Could not check disk usage"
           
           # Verify Azure CLI is authenticated
           echo "Verifying Azure CLI authentication..."
@@ -114,7 +123,19 @@ stages:
             docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
             docker push $ACR_LOGIN_SERVER/$SERVICE:latest
             echo "✅ $SERVICE pushed successfully"
+            
+            # Clean up local image after push to save space
+            echo "Cleaning up local image for $SERVICE..."
+            docker rmi $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG $ACR_LOGIN_SERVER/$SERVICE:latest 2>/dev/null || true
           done
+          
+          # Final cleanup of Docker cache
+          echo "🧹 Final Docker cache cleanup..."
+          docker system prune -af || echo "⚠️  Warning: Final cleanup failed"
+          
+          # Show final disk space
+          echo "📊 Final disk usage:"
+          df -h / || echo "⚠️  Could not check disk usage"
           
           echo "✅ All images built and pushed successfully"
 

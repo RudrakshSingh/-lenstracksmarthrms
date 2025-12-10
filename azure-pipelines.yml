@@ -94,6 +94,10 @@ stages:
           docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
           docker push $ACR_LOGIN_SERVER/api-gateway:latest
           echo "✅ API Gateway pushed successfully"
+          
+          # Clean up local API Gateway image after push to save space
+          echo "Cleaning up local API Gateway image..."
+          docker rmi $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG $ACR_LOGIN_SERVER/api-gateway:latest 2>/dev/null || true
     
           # Build and push all microservices
           SERVICES=(

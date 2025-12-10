@@ -33,214 +33,61 @@ stages:
     pool:
       vmImage: 'ubuntu-latest'
     steps:
-    - task: Docker@2
-      displayName: 'Build and Push API Gateway'
+    - task: AzureCLI@2
+      displayName: 'Login to ACR and Build/Push All Images'
       inputs:
-        command: buildAndPush
-        repository: api-gateway
-        dockerfile: Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
+        azureSubscription: 'Azure-Service-Connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          # Set variables
+          ACR_NAME="$(ACR_NAME)"
+          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
+          IMAGE_TAG="$(IMAGE_TAG)"
+          
+          # Login to ACR using Azure CLI
+          echo "Logging in to ACR: $ACR_NAME"
+          az acr login --name $ACR_NAME
+          echo "✅ Successfully logged in to ACR: $ACR_LOGIN_SERVER"
+          
+          # Build and push API Gateway
+          echo "Building and pushing API Gateway..."
+          docker build -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
+          docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
+          docker push $ACR_LOGIN_SERVER/api-gateway:latest
+          echo "✅ API Gateway pushed successfully"
     
-    - task: Docker@2
-      displayName: 'Build and Push Auth Service'
-      inputs:
-        command: buildAndPush
-        repository: auth-service
-        dockerfile: microservices/auth-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push HR Service'
-      inputs:
-        command: buildAndPush
-        repository: hr-service
-        dockerfile: microservices/hr-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Attendance Service'
-      inputs:
-        command: buildAndPush
-        repository: attendance-service
-        dockerfile: microservices/attendance-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Payroll Service'
-      inputs:
-        command: buildAndPush
-        repository: payroll-service
-        dockerfile: microservices/payroll-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push CRM Service'
-      inputs:
-        command: buildAndPush
-        repository: crm-service
-        dockerfile: microservices/crm-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Inventory Service'
-      inputs:
-        command: buildAndPush
-        repository: inventory-service
-        dockerfile: microservices/inventory-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Sales Service'
-      inputs:
-        command: buildAndPush
-        repository: sales-service
-        dockerfile: microservices/sales-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Purchase Service'
-      inputs:
-        command: buildAndPush
-        repository: purchase-service
-        dockerfile: microservices/purchase-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Financial Service'
-      inputs:
-        command: buildAndPush
-        repository: financial-service
-        dockerfile: microservices/financial-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Document Service'
-      inputs:
-        command: buildAndPush
-        repository: document-service
-        dockerfile: microservices/document-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Service Management'
-      inputs:
-        command: buildAndPush
-        repository: service-management
-        dockerfile: microservices/service-management/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push CPP Service'
-      inputs:
-        command: buildAndPush
-        repository: cpp-service
-        dockerfile: microservices/cpp-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Prescription Service'
-      inputs:
-        command: buildAndPush
-        repository: prescription-service
-        dockerfile: microservices/prescription-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Analytics Service'
-      inputs:
-        command: buildAndPush
-        repository: analytics-service
-        dockerfile: microservices/analytics-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Notification Service'
-      inputs:
-        command: buildAndPush
-        repository: notification-service
-        dockerfile: microservices/notification-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Monitoring Service'
-      inputs:
-        command: buildAndPush
-        repository: monitoring-service
-        dockerfile: microservices/monitoring-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Tenant Registry Service'
-      inputs:
-        command: buildAndPush
-        repository: tenant-registry-service
-        dockerfile: microservices/tenant-registry-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
-    
-    - task: Docker@2
-      displayName: 'Build and Push Realtime Service'
-      inputs:
-        command: buildAndPush
-        repository: realtime-service
-        dockerfile: microservices/realtime-service/Dockerfile
-        containerRegistry: 'AzureContainerRegistry'
-        tags: |
-          $(IMAGE_TAG)
-          latest
+          # Build and push all microservices
+          SERVICES=(
+            "auth-service"
+            "hr-service"
+            "attendance-service"
+            "payroll-service"
+            "crm-service"
+            "inventory-service"
+            "sales-service"
+            "purchase-service"
+            "financial-service"
+            "document-service"
+            "service-management"
+            "cpp-service"
+            "prescription-service"
+            "analytics-service"
+            "notification-service"
+            "monitoring-service"
+            "tenant-registry-service"
+            "realtime-service"
+          )
+          
+          for SERVICE in "${SERVICES[@]}"; do
+            echo "Building and pushing $SERVICE..."
+            docker build -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+            docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
+            docker push $ACR_LOGIN_SERVER/$SERVICE:latest
+            echo "✅ $SERVICE pushed successfully"
+          done
+          
+          echo "✅ All images built and pushed successfully"
 
 - stage: Deploy
   displayName: 'Deploy to AKS'

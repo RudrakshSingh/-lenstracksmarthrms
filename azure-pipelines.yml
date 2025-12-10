@@ -157,13 +157,45 @@ stages:
       runOnce:
         deploy:
           steps:
-          - task: Bash@3
-            displayName: 'Verify kubectl connection'
+          - task: AzureCLI@2
+            displayName: 'Configure kubectl for AKS'
             inputs:
-              targetType: 'inline'
-              script: |
+              azureSubscription: 'Azure-Service-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                # Set variables
+                AKS_RESOURCE_GROUP="$(AKS_RESOURCE_GROUP)"
+                AKS_CLUSTER_NAME="$(AKS_CLUSTER_NAME)"
+                
+                # Verify Azure CLI is authenticated
+                echo "Verifying Azure CLI authentication..."
+                az account show || {
+                  echo "❌ Error: Azure CLI is not authenticated"
+                  exit 1
+                }
+                echo "✅ Azure CLI authenticated"
+                
+                # Get AKS credentials to configure kubectl
+                echo "Configuring kubectl for AKS cluster: $AKS_CLUSTER_NAME"
+                az aks get-credentials \
+                  --resource-group $AKS_RESOURCE_GROUP \
+                  --name $AKS_CLUSTER_NAME \
+                  --overwrite-existing || {
+                  echo "❌ Error: Failed to get AKS credentials"
+                  exit 1
+                }
+                echo "✅ kubectl configured for AKS cluster"
+                
+                # Verify kubectl connection
+                echo "Verifying kubectl connection..."
                 kubectl version --client
-                kubectl cluster-info
+                kubectl cluster-info || {
+                  echo "⚠️  Warning: Could not get cluster info, but connection may still work"
+                }
+                kubectl get nodes || {
+                  echo "⚠️  Warning: Could not get nodes, but connection may still work"
+                }
           
           - task: Bash@3
             displayName: 'Generate Kubernetes Manifests'

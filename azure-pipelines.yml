@@ -45,10 +45,39 @@ stages:
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           
+          # Verify Azure CLI is authenticated
+          echo "Verifying Azure CLI authentication..."
+          az account show || {
+            echo "❌ Error: Azure CLI is not authenticated"
+            exit 1
+          }
+          echo "✅ Azure CLI authenticated"
+          
+          # Verify ACR exists and is accessible
+          echo "Verifying ACR access: $ACR_NAME"
+          az acr show --name $ACR_NAME --query name -o tsv || {
+            echo "❌ Error: Cannot access ACR $ACR_NAME"
+            echo "Please verify:"
+            echo "  1. ACR name is correct: $ACR_NAME"
+            echo "  2. Service principal has 'Reader' role on ACR"
+            exit 1
+          }
+          echo "✅ ACR is accessible"
+          
           # Login to ACR using Azure CLI
           echo "Logging in to ACR: $ACR_NAME"
-          az acr login --name $ACR_NAME
+          az acr login --name $ACR_NAME || {
+            echo "❌ Error: Failed to login to ACR"
+            echo "Please verify service principal has 'AcrPush' role on ACR"
+            echo "Grant permission with:"
+            echo "  az role assignment create --assignee <service-principal-id> --role AcrPush --scope /subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.ContainerRegistry/registries/$ACR_NAME"
+            exit 1
+          }
           echo "✅ Successfully logged in to ACR: $ACR_LOGIN_SERVER"
+          
+          # Test ACR access by listing repositories
+          echo "Testing ACR push permissions..."
+          az acr repository list --name $ACR_NAME --output table || echo "⚠️  Warning: Cannot list repositories, but push may still work"
           
           # Build and push API Gateway
           echo "Building and pushing API Gateway..."

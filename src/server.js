@@ -23,25 +23,28 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Optimized logger - only log errors in production
+// Logger - Always show all logs (info level) for better debugging
+// Set LOG_LEVEL env var to 'error' if you want to reduce logging
+const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'info');
 const logger = winston.createLogger({
-  level: isProduction ? 'error' : 'info',
+  level: logLevel,
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.errors({ stack: true }),
     winston.format.json()
   ),
-  transports: isProduction ? [
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' })
-  ] : [
+  transports: [
+    // Always log to console (visible in PM2 logs and Docker logs)
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.simple()
       )
     }),
+    // Always log errors to file
     new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
+    // Log all messages to combined log file
+    new winston.transports.File({ filename: 'logs/combined.log', level: 'info' })
   ]
 });
 
@@ -189,8 +192,15 @@ app.get('/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'Etelios Main Server',
-    version: '1.0.0'
+    version: '1.0.0',
+    port: process.env.PORT || process.env.WEBSITES_PORT || 3000,
+    environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Handle common typo: /hralth -> /health (redirect)
+app.get('/hralth', (req, res) => {
+  res.redirect(301, '/health');
 });
 
 // Cache utility
@@ -510,12 +520,10 @@ sortedServices.forEach(([key, service]) => {
     }
     
     // Log proxy request for debugging (always log for troubleshooting)
-    logger.info(`[Gateway] Proxying ${req.method} ${req.originalUrl} to ${service.name} at ${targetUrl}${req.originalUrl}`, {
-      body: req.method !== 'GET' ? req.body : undefined,
-      headers: {
-        'content-type': req.headers['content-type'],
-        'authorization': req.headers['authorization'] ? '***' : undefined
-      }
+    logger.info(`[Gateway] ${req.method} ${req.originalUrl} -> ${service.name}`, {
+      target: `${targetUrl}${req.originalUrl}`,
+      hasBody: req.method !== 'GET' && req.body,
+      hasAuth: !!req.headers['authorization']
     });
     
     // Forward request to service via proxy middleware
@@ -768,15 +776,31 @@ app.use('*', (req, res) => {
 });
 
 // Start server
-const SERVER_PORT = process.env.PORT || process.env.WEBSITES_PORT || PORT;
+// Priority: PORT > WEBSITES_PORT > default 3000
+// In Kubernetes, PORT should be set to 3000
+const SERVER_PORT = process.env.PORT || process.env.WEBSITES_PORT || 3000;
+
+// Always log startup (even in production) for debugging
+console.log('='.repeat(60));
+console.log('🚀 Starting Etelios API Gateway Server');
+console.log(`📡 Port: ${SERVER_PORT}`);
+console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+console.log(`🔧 PORT env var: ${process.env.PORT || 'not set'}`);
+console.log(`🔧 WEBSITES_PORT env var: ${process.env.WEBSITES_PORT || 'not set'}`);
+console.log('='.repeat(60));
 
 let server;
 try {
   server = app.listen(SERVER_PORT, '0.0.0.0', async () => {
-    if (!isProduction) {
-      logger.info(`Etelios Main Server started on port ${SERVER_PORT}`);
-      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    }
+    // Always log successful startup
+    console.log(`✅ Etelios Main Server started successfully on port ${SERVER_PORT}`);
+    console.log(`📍 Server listening on http://0.0.0.0:${SERVER_PORT}`);
+    console.log(`🏥 Health check: http://localhost:${SERVER_PORT}/health`);
+    console.log(`📋 API endpoint: http://localhost:${SERVER_PORT}/api`);
+    
+    // Also log to winston logger
+    logger.info(`Etelios Main Server started on port ${SERVER_PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     
     await updateServiceStatuses();
     
@@ -790,6 +814,13 @@ try {
   });
 
   server.on('error', (error) => {
+    console.error('❌ Server startup error:', error.message);
+    console.error(`   Code: ${error.code}`);
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${SERVER_PORT} is already in use!`);
+      console.error(`   Please check if another process is using port ${SERVER_PORT}`);
+      console.error(`   Or set PORT environment variable to a different port`);
+    }
     logger.error('Server error:', error);
     if (error.code === 'EADDRINUSE') {
       logger.error(`Port ${SERVER_PORT} is already in use`);
@@ -797,6 +828,7 @@ try {
     process.exit(1);
   });
 } catch (error) {
+  console.error('❌ Failed to start server:', error.message);
   logger.error('Failed to start server:', error);
   process.exit(1);
 }

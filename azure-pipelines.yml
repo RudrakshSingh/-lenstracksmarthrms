@@ -198,15 +198,47 @@ stages:
                 }
           
           - task: Bash@3
-            displayName: 'Generate Kubernetes Manifests'
+            displayName: 'Generate Kubernetes Manifests (if needed)'
             inputs:
               targetType: 'inline'
               script: |
-                chmod +x k8s/generate-manifests.sh
-                export ACR_NAME=$(ACR_NAME)
-                export IMAGE_TAG=$(IMAGE_TAG)
-                export NAMESPACE=$(NAMESPACE)
-                ./k8s/generate-manifests.sh
+                # Check if generate-manifests.sh exists and manifests need to be generated
+                if [ -f "k8s/generate-manifests.sh" ]; then
+                  echo "Generating Kubernetes manifests..."
+                  chmod +x k8s/generate-manifests.sh
+                  export ACR_NAME=$(ACR_NAME)
+                  export IMAGE_TAG=$(IMAGE_TAG)
+                  export NAMESPACE=$(NAMESPACE)
+                  ./k8s/generate-manifests.sh
+                  echo "✅ Manifests generated successfully"
+                elif [ -d "k8s/deployments" ] && [ "$(ls -A k8s/deployments/*.yaml 2>/dev/null)" ]; then
+                  echo "✅ Using existing manifests in k8s/deployments/"
+                  echo "Manifests found:"
+                  ls -la k8s/deployments/*.yaml
+                else
+                  echo "⚠️  Warning: No generate-manifests.sh found and no existing manifests"
+                  echo "Manifests should already exist in k8s/deployments/"
+                fi
+                
+                # Verify required manifests exist
+                echo "Verifying required manifests..."
+                if [ ! -f "k8s/namespace.yaml" ]; then
+                  echo "❌ Error: k8s/namespace.yaml not found"
+                  exit 1
+                fi
+                if [ ! -f "k8s/configmap.yaml" ]; then
+                  echo "❌ Error: k8s/configmap.yaml not found"
+                  exit 1
+                fi
+                if [ ! -f "k8s/api-gateway.yaml" ]; then
+                  echo "❌ Error: k8s/api-gateway.yaml not found"
+                  exit 1
+                fi
+                if [ ! -d "k8s/deployments" ]; then
+                  echo "❌ Error: k8s/deployments directory not found"
+                  exit 1
+                fi
+                echo "✅ All required manifests verified"
           
           - task: Kubernetes@1
             displayName: 'Create Namespace'

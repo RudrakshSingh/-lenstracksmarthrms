@@ -2,7 +2,7 @@
   "name": "etelios-hrms-backend",
   "version": "1.0.0",
   "description": "Etelios HRMS Backend API - Production-grade HRMS for retail and field sales",
-  "main": "src/server.js",
+  "main": "app.js",
   "scripts": {
     "build": "npm run lint:fix && echo 'Build completed - Node.js application ready'",
     "build:prod": "npm run lint:fix && npm run test:health && echo 'Production build completed'",

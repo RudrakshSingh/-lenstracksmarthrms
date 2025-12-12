@@ -130,14 +130,26 @@ const loadRoutes = () => {
     app.use('/api/auth', apiRateLimit, authRoutes);
     if (!isProduction) logger.info('auth.routes.js loaded');
   } catch (error) {
-    logger.error('auth.routes.js failed:', error.message);
+    logger.error('auth.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ auth.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const realUsersRoutes = require('./routes/realUsers.routes.js');
     app.use('/api/real-users', apiRateLimit, realUsersRoutes);
     if (!isProduction) logger.info('realUsers.routes.js loaded');
   } catch (error) {
-    logger.error('realUsers.routes.js failed:', error.message);
+    logger.error('realUsers.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ realUsers.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const permissionRoutes = require('./routes/permission.routes.js');
@@ -145,20 +157,38 @@ const loadRoutes = () => {
     app.use('/api/user', apiRateLimit, permissionRoutes);
     if (!isProduction) logger.info('permission.routes.js loaded');
   } catch (error) {
-    logger.error('permission.routes.js failed:', error.message);
+    logger.error('permission.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ permission.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const emergencyLockRoutes = require('./routes/emergencyLock.routes.js');
     app.use('/api/auth/emergency', apiRateLimit, emergencyLockRoutes);
     if (!isProduction) logger.info('emergencyLock.routes.js loaded');
   } catch (error) {
-    logger.error('emergencyLock.routes.js failed:', error.message);
+    logger.error('emergencyLock.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ emergencyLock.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const greywallRoutes = require('./routes/greywall.routes.js');
     app.use('/api/internal', apiRateLimit, greywallRoutes);
   } catch (error) {
-    logger.error('greywall.routes.js failed:', error.message);
+    logger.error('greywall.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ greywall.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const greywallAdminRoutes = require('./routes/greywallAdmin.routes.js');
@@ -167,7 +197,13 @@ const loadRoutes = () => {
     app.use('/api/debug', apiRateLimit, greywallAdminRoutes);
     app.use('/api/health', apiRateLimit, greywallAdminRoutes);
   } catch (error) {
-    logger.error('greywallAdmin.routes.js failed:', error.message);
+    logger.error('greywallAdmin.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ greywallAdmin.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

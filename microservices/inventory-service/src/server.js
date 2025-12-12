@@ -70,35 +70,65 @@ const loadRoutes = () => {
     app.use('/api/erp', apiRateLimit, erpRoutes);
     if (!isProduction) logger.info('erp.routes.js loaded');
   } catch (error) {
-    logger.error('erp.routes.js failed:', error.message);
+    logger.error('erp.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ erp.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const assetsRoutes = require('./routes/assets.routes.js');
     app.use('/api/assets', apiRateLimit, assetsRoutes);
     if (!isProduction) logger.info('assets.routes.js loaded');
   } catch (error) {
-    logger.error('assets.routes.js failed:', error.message);
+    logger.error('assets.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ assets.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const assetRegisterRoutes = require('./routes/assetRegister.routes.js');
     app.use('/api/asset-register', apiRateLimit, assetRegisterRoutes);
     if (!isProduction) logger.info('assetRegister.routes.js loaded');
   } catch (error) {
-    logger.error('assetRegister.routes.js failed:', error.message);
+    logger.error('assetRegister.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ assetRegister.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const productMasterRoutes = require('./routes/productMaster.routes.js');
     app.use('/api/inventory/products', apiRateLimit, productMasterRoutes);
     if (!isProduction) logger.info('productMaster.routes.js loaded');
   } catch (error) {
-    logger.error('productMaster.routes.js failed:', error.message);
+    logger.error('productMaster.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ productMaster.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const stockRoutes = require('./routes/stock.routes.js');
     app.use('/api/inventory/stock', apiRateLimit, stockRoutes);
     if (!isProduction) logger.info('stock.routes.js loaded');
   } catch (error) {
-    logger.error('stock.routes.js failed:', error.message);
+    logger.error('stock.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ stock.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

@@ -7,7 +7,7 @@ const {
   createPagination,
   parsePagination,
   parseFilters
-} = require('../../../shared/utils/response.util.js').js'));
+} = require('../../../shared/utils/response.util.js');
 
 /**
  * Get all roles

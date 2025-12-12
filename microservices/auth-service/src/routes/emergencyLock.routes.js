@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const EmergencyLockController = require('../controllers/emergencyLock.controller');
-const { auth } = require('../middleware/auth.middleware');
+const { authenticate } = require('../middleware/auth.middleware');
 const { sosLockMiddleware, recoveryKeyMiddleware } = require('../middleware/emergencyLock.middleware');
 
 /**
@@ -9,7 +9,7 @@ const { sosLockMiddleware, recoveryKeyMiddleware } = require('../middleware/emer
  * @desc    Trigger emergency lock (SOS button)
  * @access  Private (Admin, Store Manager only)
  */
-router.post('/sos', auth, sosLockMiddleware, EmergencyLockController.triggerEmergencyLock);
+router.post('/sos', authenticate, sosLockMiddleware, EmergencyLockController.triggerEmergencyLock);
 
 /**
  * @route   GET /api/auth/emergency/status

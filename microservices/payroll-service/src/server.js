@@ -66,21 +66,39 @@ const loadRoutes = () => {
     app.use('/api/salary', apiRateLimit, salaryRoutes);
     if (!isProduction) logger.info('salary.routes.js loaded');
   } catch (error) {
-    logger.error('salary.routes.js failed:', error.message);
+    logger.error('salary.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ salary.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const unifiedPayrollRoutes = require('./routes/unifiedPayroll.routes.js');
     app.use('/api/unified-payroll', apiRateLimit, unifiedPayrollRoutes);
     if (!isProduction) logger.info('unifiedPayroll.routes.js loaded');
   } catch (error) {
-    logger.error('unifiedPayroll.routes.js failed:', error.message);
+    logger.error('unifiedPayroll.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ unifiedPayroll.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const deductionRoutes = require('./routes/deduction.routes.js');
     app.use('/api/payroll', apiRateLimit, deductionRoutes);
     if (!isProduction) logger.info('deduction.routes.js loaded');
   } catch (error) {
-    logger.error('deduction.routes.js failed:', error.message);
+    logger.error('deduction.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ deduction.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

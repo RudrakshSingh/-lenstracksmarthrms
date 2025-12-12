@@ -7,7 +7,7 @@ const {
   createPagination,
   parsePagination,
   parseFilters
-} = require('../../shared/utils/response.util');
+} = require('../../../shared/utils/response.util');
 
 /**
  * Get stock movements

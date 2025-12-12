@@ -70,21 +70,39 @@ const loadRoutes = () => {
     app.use('/api/service', apiRateLimit, serviceRoutes);
     if (!isProduction) logger.info('service.routes.js loaded');
   } catch (error) {
-    logger.error('service.routes.js failed:', error.message);
+    logger.error('service.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ service.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const serviceSLARoutes = require('./routes/serviceSLA.routes.js');
     app.use('/api/service-sla', apiRateLimit, serviceSLARoutes);
     if (!isProduction) logger.info('serviceSLA.routes.js loaded');
   } catch (error) {
-    logger.error('serviceSLA.routes.js failed:', error.message);
+    logger.error('serviceSLA.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ serviceSLA.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const complianceRoutes = require('./routes/compliance.routes.js');
     app.use('/api/compliance', apiRateLimit, complianceRoutes);
     if (!isProduction) logger.info('compliance.routes.js loaded');
   } catch (error) {
-    logger.error('compliance.routes.js failed:', error.message);
+    logger.error('compliance.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ compliance.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

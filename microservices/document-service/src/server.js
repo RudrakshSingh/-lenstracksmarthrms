@@ -70,28 +70,52 @@ const loadRoutes = () => {
     app.use('/api/documents', apiRateLimit, documentsRoutes);
     if (!isProduction) logger.info('documents.routes.js loaded');
   } catch (error) {
-    logger.error('documents.routes.js failed:', error.message);
+    logger.error('documents.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ documents.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const esignRoutes = require('./routes/esign.routes.js');
     app.use('/api/esign', apiRateLimit, esignRoutes);
     if (!isProduction) logger.info('esign.routes.js loaded');
   } catch (error) {
-    logger.error('esign.routes.js failed:', error.message);
+    logger.error('esign.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ esign.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const contractsVaultRoutes = require('./routes/contractsVault.routes.js');
     app.use('/api/contracts-vault', apiRateLimit, contractsVaultRoutes);
     if (!isProduction) logger.info('contractsVault.routes.js loaded');
   } catch (error) {
-    logger.error('contractsVault.routes.js failed:', error.message);
+    logger.error('contractsVault.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ contractsVault.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const documentVerificationRoutes = require('./routes/documentVerification.routes.js');
     app.use('/api/document-verification', apiRateLimit, documentVerificationRoutes);
     if (!isProduction) logger.info('documentVerification.routes.js loaded');
   } catch (error) {
-    logger.error('documentVerification.routes.js failed:', error.message);
+    logger.error('documentVerification.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ documentVerification.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

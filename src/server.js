@@ -778,7 +778,8 @@ app.use('*', (req, res) => {
 // Start server
 // Priority: PORT > WEBSITES_PORT > default 3000
 // In Kubernetes, PORT should be set to 3000
-const SERVER_PORT = process.env.PORT || process.env.WEBSITES_PORT || 3000;
+// IMPORTANT: Default to 3000, NOT 8080
+const SERVER_PORT = parseInt(process.env.PORT || process.env.WEBSITES_PORT || '3000', 10);
 
 // Always log startup (even in production) for debugging
 console.log('='.repeat(60));

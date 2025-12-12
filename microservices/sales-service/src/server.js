@@ -70,21 +70,39 @@ const loadRoutes = () => {
     app.use('/api/sales', apiRateLimit, salesRoutes);
     if (!isProduction) logger.info('sales.routes.js loaded');
   } catch (error) {
-    logger.error('sales.routes.js failed:', error.message);
+    logger.error('sales.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ sales.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const posRoutes = require('./routes/pos.routes.js');
     app.use('/api/pos', apiRateLimit, posRoutes);
     if (!isProduction) logger.info('pos.routes.js loaded');
   } catch (error) {
-    logger.error('pos.routes.js failed:', error.message);
+    logger.error('pos.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ pos.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const discountRoutes = require('./routes/discount.routes.js');
     app.use('/api/discount', apiRateLimit, discountRoutes);
     if (!isProduction) logger.info('discount.routes.js loaded');
   } catch (error) {
-    logger.error('discount.routes.js failed:', error.message);
+    logger.error('discount.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ discount.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 
   };

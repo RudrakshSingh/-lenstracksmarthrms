@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const { AppError } = require('./errorHandler.middleware');
+const ApiError = require('../utils/ApiError');
 
 function validateRequest(req, res, next) {
   const errors = validationResult(req);
@@ -11,7 +11,7 @@ function validateRequest(req, res, next) {
       value: error.value
     }));
 
-    throw new AppError('Validation failed', 400);
+    throw new ApiError(400, 'Validation failed');
   }
 
   next();

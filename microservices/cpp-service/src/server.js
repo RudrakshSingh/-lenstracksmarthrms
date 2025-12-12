@@ -70,7 +70,13 @@ const loadRoutes = () => {
     app.use('/api/cpp', apiRateLimit, cppRoutes);
     if (!isProduction) logger.info('cpp.routes.js loaded');
   } catch (error) {
-    logger.error('cpp.routes.js failed:', error.message);
+    logger.error('cpp.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ cpp.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

@@ -77,14 +77,26 @@ const loadRoutes = () => {
     app.use('/api/manual-registration', apiRateLimit, manualRegistrationRoutes);
     if (!isProduction) logger.info('manualRegistration.routes.js loaded');
   } catch (error) {
-    logger.error('manualRegistration.routes.js failed:', error.message);
+    logger.error('manualRegistration.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ manualRegistration.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const manualRegisterRoutes = require('./routes/manualRegister.routes.js');
     app.use('/api/manual-register', apiRateLimit, manualRegisterRoutes);
     if (!isProduction) logger.info('manualRegister.routes.js loaded');
   } catch (error) {
-    logger.error('manualRegister.routes.js failed:', error.message);
+    logger.error('manualRegister.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ manualRegister.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

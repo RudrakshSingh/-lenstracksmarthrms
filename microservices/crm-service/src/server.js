@@ -79,21 +79,39 @@ const loadRoutes = () => {
     app.use('/api/crm', apiRateLimit, crmRoutes);
     if (!isProduction) logger.info('crm.routes.js loaded');
   } catch (error) {
-    logger.error('crm.routes.js failed:', error.message);
+    logger.error('crm.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ crm.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const engagementRoutes = require('./routes/engagement.routes.js');
     app.use('/api/engagement', apiRateLimit, engagementRoutes);
     if (!isProduction) logger.info('engagement.routes.js loaded');
   } catch (error) {
-    logger.error('engagement.routes.js failed:', error.message);
+    logger.error('engagement.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ engagement.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const incentiveRoutes = require('./routes/incentive.routes.js');
     app.use('/api/incentive', apiRateLimit, incentiveRoutes);
     if (!isProduction) logger.info('incentive.routes.js loaded');
   } catch (error) {
-    logger.error('incentive.routes.js failed:', error.message);
+    logger.error('incentive.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ incentive.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 
   };

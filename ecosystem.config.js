@@ -31,7 +31,7 @@ const apps = [
     exec_mode: 'fork',
     env: {
       NODE_ENV: 'production',
-      PORT: process.env.PORT || 3000,
+      PORT: 3000, // Always use port 3000 for API Gateway
       USE_KEY_VAULT: 'true',
       AZURE_KEY_VAULT_URL: 'https://etelios-keyvault.vault.azure.net/',
       AZURE_KEY_VAULT_NAME: 'etelios-keyvault',

@@ -70,14 +70,26 @@ const loadRoutes = () => {
     app.use('/api/financial', apiRateLimit, financialRoutes);
     if (!isProduction) logger.info('financial.routes.js loaded');
   } catch (error) {
-    logger.error('financial.routes.js failed:', error.message);
+    logger.error('financial.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ financial.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
   try {
     const reportsRoutes = require('./routes/reports.routes.js');
     app.use('/api/reports', apiRateLimit, reportsRoutes);
     if (!isProduction) logger.info('reports.routes.js loaded');
   } catch (error) {
-    logger.error('reports.routes.js failed:', error.message);
+    logger.error('reports.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ reports.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

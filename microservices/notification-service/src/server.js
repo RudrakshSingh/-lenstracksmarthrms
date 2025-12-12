@@ -70,7 +70,13 @@ const loadRoutes = () => {
     app.use('/api/notification', apiRateLimit, notificationRoutes);
     if (!isProduction) logger.info('notification.routes.js loaded');
   } catch (error) {
-    logger.error('notification.routes.js failed:', error.message);
+    logger.error('notification.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ notification.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

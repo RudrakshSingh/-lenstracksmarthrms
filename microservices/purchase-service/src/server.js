@@ -70,7 +70,13 @@ const loadRoutes = () => {
     app.use('/api/purchase', apiRateLimit, purchaseRoutes);
     if (!isProduction) logger.info('purchase.routes.js loaded');
   } catch (error) {
-    logger.error('purchase.routes.js failed:', error.message);
+    logger.error('purchase.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ purchase.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 

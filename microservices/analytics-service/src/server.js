@@ -92,7 +92,13 @@ const loadRoutes = () => {
     app.use('/api/expiry-reports', apiRateLimit, expiryReportsRoutes);
     if (!isProduction) logger.info('expiryReports.routes.js loaded');
   } catch (error) {
-    logger.error('expiryReports.routes.js failed:', error.message);
+    logger.error('expiryReports.routes.js failed:', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ expiryReports.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
   }
 };
 
@@ -173,7 +179,7 @@ app.get('/api/analytics/metrics', (req, res) => {
     message: 'Get business metrics',
     timestamp: new Date().toISOString()
   });
-});});
+});
 
 
 // Enhanced 404 handler with route information

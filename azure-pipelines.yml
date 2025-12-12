@@ -33,6 +33,86 @@ stages:
     pool:
       vmImage: 'ubuntu-latest'
     steps:
+    - task: Bash@3
+      displayName: 'Initial Disk Cleanup'
+      inputs:
+        targetType: 'inline'
+        script: |
+          echo "🧹 AGGRESSIVE DISK CLEANUP - Starting..."
+          
+          # Check disk space and fail if too low
+          echo "📊 Checking initial disk space..."
+          DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+          AVAILABLE_GB=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
+          
+          echo "Disk usage: ${DISK_USAGE}%"
+          echo "Available space: ${AVAILABLE_GB}GB"
+          
+          # Fail if disk usage is above 90% or less than 5GB available
+          if [ "$DISK_USAGE" -gt 90 ] || [ "$AVAILABLE_GB" -lt 5 ]; then
+            echo "❌ ERROR: Disk space critically low!"
+            echo "   Usage: ${DISK_USAGE}%"
+            echo "   Available: ${AVAILABLE_GB}GB"
+            echo "   Performing emergency cleanup..."
+            
+            # Emergency cleanup
+            docker system prune -af --volumes 2>/dev/null || true
+            docker builder prune -af 2>/dev/null || true
+            sudo find /var/log -type f -name "*.log" -delete 2>/dev/null || true
+            sudo find /tmp -type f -delete 2>/dev/null || true
+            
+            # Recheck
+            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+            AVAILABLE_GB=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
+            echo "After cleanup - Usage: ${DISK_USAGE}%, Available: ${AVAILABLE_GB}GB"
+            
+            if [ "$DISK_USAGE" -gt 90 ] || [ "$AVAILABLE_GB" -lt 5 ]; then
+              echo "❌ ERROR: Still insufficient disk space after cleanup!"
+              exit 1
+            fi
+          fi
+          
+          # Show initial disk space
+          echo "📊 Initial disk usage:"
+          df -h / || echo "⚠️  Could not check disk usage"
+          
+          # Clean up system logs and temporary files
+          echo "Cleaning system logs and temp files..."
+          sudo find /var/log -type f -name "*.log" -mtime +0 -delete 2>/dev/null || true
+          sudo find /tmp -type f -mtime +0 -delete 2>/dev/null || true
+          sudo find /home/vsts -type f -name "*.log" -mtime +0 -delete 2>/dev/null || true
+          
+          # Clean up Docker aggressively
+          echo "Cleaning Docker system..."
+          docker system prune -af --volumes --filter "until=1h" 2>/dev/null || true
+          docker builder prune -af --filter "until=1h" 2>/dev/null || true
+          
+          # Remove all stopped containers
+          docker container prune -f 2>/dev/null || true
+          
+          # Remove all unused images (not just dangling)
+          docker image prune -af --filter "until=1h" 2>/dev/null || true
+          
+          # Clean up Docker build cache
+          docker builder prune -af 2>/dev/null || true
+          
+          # Clean up Azure CLI cache
+          echo "Cleaning Azure CLI cache..."
+          az cache purge 2>/dev/null || true
+          rm -rf ~/.azure/logs/* 2>/dev/null || true
+          
+          # Clean up npm/node cache if exists
+          npm cache clean --force 2>/dev/null || true
+          
+          # Clean up pip cache if exists
+          pip cache purge 2>/dev/null || true
+          
+          # Show disk space after cleanup
+          echo "📊 Disk usage after cleanup:"
+          df -h / || echo "⚠️  Could not check disk usage"
+          
+          echo "✅ Initial cleanup complete"
+    
     - task: AzureCLI@2
       displayName: 'Clean Docker Cache and Build/Push All Images'
       inputs:
@@ -45,10 +125,10 @@ stages:
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           
-          # Clean Docker cache and system to free up space
-          echo "🧹 Cleaning Docker cache and system..."
-          docker system prune -af --volumes || echo "⚠️  Warning: Docker prune failed, continuing..."
-          docker builder prune -af || echo "⚠️  Warning: Docker builder prune failed, continuing..."
+          # Additional Docker cleanup before starting
+          echo "🧹 Pre-build Docker cleanup..."
+          docker system prune -af --volumes --filter "until=30m" 2>/dev/null || true
+          docker builder prune -af --filter "until=30m" 2>/dev/null || true
           
           # Show disk space
           echo "📊 Current disk usage:"
@@ -90,7 +170,7 @@ stages:
           
           # Build and push API Gateway
           echo "Building and pushing API Gateway..."
-          docker build -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
+          docker build --rm --no-cache -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
           docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
           docker push $ACR_LOGIN_SERVER/api-gateway:latest
           echo "✅ API Gateway pushed successfully"
@@ -98,6 +178,9 @@ stages:
           # Clean up local API Gateway image after push to save space
           echo "Cleaning up local API Gateway image..."
           docker rmi $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG $ACR_LOGIN_SERVER/api-gateway:latest 2>/dev/null || true
+          
+          # Clean up build cache after each major build
+          docker builder prune -af --filter "until=10m" 2>/dev/null || true
     
           # Build and push all microservices
           SERVICES=(
@@ -121,21 +204,42 @@ stages:
             "realtime-service"
           )
           
+          SERVICE_COUNT=0
           for SERVICE in "${SERVICES[@]}"; do
-            echo "Building and pushing $SERVICE..."
-            docker build -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+            SERVICE_COUNT=$((SERVICE_COUNT + 1))
+            echo "Building and pushing $SERVICE ($SERVICE_COUNT/${#SERVICES[@]})..."
+            
+            # Build without cache to save disk space (images are pushed immediately)
+            docker build --rm --no-cache -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
             docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
             docker push $ACR_LOGIN_SERVER/$SERVICE:latest
             echo "✅ $SERVICE pushed successfully"
             
-            # Clean up local image after push to save space
+            # Clean up local image immediately after push to save space
             echo "Cleaning up local image for $SERVICE..."
             docker rmi $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG $ACR_LOGIN_SERVER/$SERVICE:latest 2>/dev/null || true
+            
+            # Clean up build cache every 3 services to prevent disk fill
+            if [ $((SERVICE_COUNT % 3)) -eq 0 ]; then
+              echo "🧹 Periodic cleanup after $SERVICE_COUNT services..."
+              docker builder prune -af --filter "until=10m" 2>/dev/null || true
+              docker system prune -f --filter "until=10m" 2>/dev/null || true
+              echo "📊 Disk usage after $SERVICE_COUNT services:"
+              df -h / | head -2 || echo "⚠️  Could not check disk usage"
+            fi
           done
           
-          # Final cleanup of Docker cache
-          echo "🧹 Final Docker cache cleanup..."
-          docker system prune -af || echo "⚠️  Warning: Final cleanup failed"
+          # Final aggressive cleanup of Docker cache
+          echo "🧹 Final aggressive Docker cache cleanup..."
+          docker system prune -af --volumes --filter "until=1h" 2>/dev/null || true
+          docker builder prune -af --filter "until=1h" 2>/dev/null || true
+          docker container prune -f 2>/dev/null || true
+          docker image prune -af --filter "until=1h" 2>/dev/null || true
+          
+          # Clean up any remaining temporary files
+          echo "Cleaning up temporary files..."
+          find /tmp -type f -mtime +0 -delete 2>/dev/null || true
+          find ~/.azure/logs -type f -mtime +0 -delete 2>/dev/null || true
           
           # Show final disk space
           echo "📊 Final disk usage:"

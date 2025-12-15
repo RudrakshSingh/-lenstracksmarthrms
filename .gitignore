@@ -369,3 +369,12 @@ yarn.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# Files with secrets - removed from git tracking
+CREATE-SERVICE-CONNECTION-WITH-SP.md
+COSMOS-DB-CONNECTION-SETUP.md
+RAJVEER-DEVOPS-REQUIREMENTS.md
+URGENT-COSMOS-DB-FIX.md
+microservices/auth-service/.env.example
+microservices/hr-service/.env.example
+

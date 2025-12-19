@@ -90,7 +90,7 @@ stages:
           ACR_NAME="$(ACR_NAME)"
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
-          SERVICES="${{ matrix.SERVICES }}"
+          SERVICES="$(SERVICES)"
           
           # Login to ACR
           az acr login --name $ACR_NAME

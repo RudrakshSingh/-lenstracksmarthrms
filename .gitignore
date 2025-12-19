@@ -125,7 +125,7 @@ build/
 dist/
 
 # Package manager
-package-lock.json
+# package-lock.json - Keep this for GitHub Actions caching
 yarn.lock
 
 # IDE
@@ -242,7 +242,7 @@ build/
 dist/
 
 # Package manager
-package-lock.json
+# package-lock.json - Keep this for GitHub Actions caching
 yarn.lock
 
 # IDE
@@ -359,7 +359,7 @@ build/
 dist/
 
 # Package manager
-package-lock.json
+# package-lock.json - Keep this for GitHub Actions caching
 yarn.lock
 
 # IDE

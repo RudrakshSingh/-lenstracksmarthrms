@@ -1,0 +1,234 @@
+name: Azure DevOps CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '18'
+  AZURE_DEVOPS_ORG: 'Hindempire-devops1'
+  AZURE_DEVOPS_PROJECT: 'etelios'
+  AZURE_CONTAINER_REGISTRY: 'etelios.azurecr.io'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: npm run lint
+
+    - name: Run tests
+      run: npm test
+      env:
+        NODE_ENV: test
+        MONGO_URI: mongodb://localhost:27017/hrms_test
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
+        REDIS_DISABLED: 1
+        JWT_SECRET: test-jwt-secret
+        JWT_REFRESH_SECRET: test-refresh-secret
+
+    - name: Generate coverage report
+      run: npm run test:coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && (secrets.AZURE_REGISTRY_USERNAME != '' || secrets.AZURE_REGISTRY_USERNAME == '')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Azure Container Registry
+      uses: azure/docker-login@v1
+      with:
+        login-server: ${{ env.AZURE_CONTAINER_REGISTRY }}
+        username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+        password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+      continue-on-error: true
+      if: secrets.AZURE_REGISTRY_USERNAME != '' && secrets.AZURE_REGISTRY_PASSWORD != ''
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.AZURE_CONTAINER_REGISTRY }}/etelios
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  security-scan:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.AZURE_CONTAINER_REGISTRY }}/etelios:latest
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  deploy-staging:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && secrets.AZURE_CREDENTIALS != ''
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      continue-on-error: true
+
+    - name: Deploy to Azure App Service (Staging)
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: 'etelios-staging'
+        package: .
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_STAGING }}
+
+  deploy-production:
+    needs: [test, build, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS != ''
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      continue-on-error: true
+
+    - name: Deploy to Azure App Service (Production)
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: 'etelios-production'
+        package: .
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_PRODUCTION }}
+
+    - name: Deploy to Azure Container Instances
+      run: |
+        az container create \
+          --resource-group etelios-rg \
+          --name etelios-container \
+          --image ${{ env.AZURE_CONTAINER_REGISTRY }}/etelios:latest \
+          --cpu 2 \
+          --memory 4 \
+          --ports 3000 \
+          --environment-variables \
+            NODE_ENV=production \
+            MONGO_URI=${{ secrets.MONGO_URI }} \
+            REDIS_HOST=${{ secrets.REDIS_HOST }} \
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+
+  azure-devops-sync:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && secrets.AZURE_CREDENTIALS != ''
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure DevOps Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+      continue-on-error: true
+
+    - name: Push to Azure DevOps Repository
+      run: |
+        # Configure git for Azure DevOps
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        
+        # Add Azure DevOps remote
+        git remote add azure https://${{ secrets.AZURE_DEVOPS_TOKEN }}@dev.azure.com/${{ env.AZURE_DEVOPS_ORG }}/${{ env.AZURE_DEVOPS_PROJECT }}/_git/etelios
+        
+        # Push to Azure DevOps
+        git push azure main --force
+
+    - name: Create Azure DevOps Work Item
+      run: |
+        az boards work-item create \
+          --title "Deployment from GitHub: ${{ github.sha }}" \
+          --type "Task" \
+          --description "Automated deployment from GitHub Actions" \
+          --assigned-to ${{ github.actor }} \
+          --area-path "${{ env.AZURE_DEVOPS_PROJECT }}" \
+          --iteration-path "${{ env.AZURE_DEVOPS_PROJECT }}"

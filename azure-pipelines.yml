@@ -28,224 +28,94 @@ stages:
 - stage: Build
   displayName: 'Build and Push Docker Images'
   jobs:
-  - job: BuildImages
-    displayName: 'Build All Service Images'
+  # Build API Gateway first (single job)
+  - job: BuildAPIGateway
+    displayName: 'Build API Gateway'
     pool:
       vmImage: 'ubuntu-latest'
+    timeoutInMinutes: 20
     steps:
-    - task: Bash@3
-      displayName: 'Initial Disk Cleanup'
-      inputs:
-        targetType: 'inline'
-        script: |
-          echo "🧹 AGGRESSIVE DISK CLEANUP - Starting..."
-          
-          # Check disk space and fail if too low
-          echo "📊 Checking initial disk space..."
-          DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-          AVAILABLE_GB=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
-          
-          echo "Disk usage: ${DISK_USAGE}%"
-          echo "Available space: ${AVAILABLE_GB}GB"
-          
-          # Fail if disk usage is above 90% or less than 5GB available
-          if [ "$DISK_USAGE" -gt 90 ] || [ "$AVAILABLE_GB" -lt 5 ]; then
-            echo "❌ ERROR: Disk space critically low!"
-            echo "   Usage: ${DISK_USAGE}%"
-            echo "   Available: ${AVAILABLE_GB}GB"
-            echo "   Performing emergency cleanup..."
-            
-            # Emergency cleanup
-            docker system prune -af --volumes 2>/dev/null || true
-            docker builder prune -af 2>/dev/null || true
-            sudo find /var/log -type f -name "*.log" -delete 2>/dev/null || true
-            sudo find /tmp -type f -delete 2>/dev/null || true
-            
-            # Recheck
-            DISK_USAGE=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            AVAILABLE_GB=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
-            echo "After cleanup - Usage: ${DISK_USAGE}%, Available: ${AVAILABLE_GB}GB"
-            
-            if [ "$DISK_USAGE" -gt 90 ] || [ "$AVAILABLE_GB" -lt 5 ]; then
-              echo "❌ ERROR: Still insufficient disk space after cleanup!"
-              exit 1
-            fi
-          fi
-          
-          # Show initial disk space
-          echo "📊 Initial disk usage:"
-          df -h / || echo "⚠️  Could not check disk usage"
-          
-          # Clean up system logs and temporary files
-          echo "Cleaning system logs and temp files..."
-          sudo find /var/log -type f -name "*.log" -mtime +0 -delete 2>/dev/null || true
-          sudo find /tmp -type f -mtime +0 -delete 2>/dev/null || true
-          sudo find /home/vsts -type f -name "*.log" -mtime +0 -delete 2>/dev/null || true
-          
-          # Clean up Docker aggressively
-          echo "Cleaning Docker system..."
-          docker system prune -af --volumes --filter "until=1h" 2>/dev/null || true
-          docker builder prune -af --filter "until=1h" 2>/dev/null || true
-          
-          # Remove all stopped containers
-          docker container prune -f 2>/dev/null || true
-          
-          # Remove all unused images (not just dangling)
-          docker image prune -af --filter "until=1h" 2>/dev/null || true
-          
-          # Clean up Docker build cache
-          docker builder prune -af 2>/dev/null || true
-          
-          # Clean up Azure CLI cache
-          echo "Cleaning Azure CLI cache..."
-          az cache purge 2>/dev/null || true
-          rm -rf ~/.azure/logs/* 2>/dev/null || true
-          
-          # Clean up npm/node cache if exists
-          npm cache clean --force 2>/dev/null || true
-          
-          # Clean up pip cache if exists
-          pip cache purge 2>/dev/null || true
-          
-          # Show disk space after cleanup
-          echo "📊 Disk usage after cleanup:"
-          df -h / || echo "⚠️  Could not check disk usage"
-          
-          echo "✅ Initial cleanup complete"
-    
     - task: AzureCLI@2
-      displayName: 'Clean Docker Cache and Build/Push All Images'
+      displayName: 'Build and Push API Gateway'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
-          # Set variables
           ACR_NAME="$(ACR_NAME)"
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           
-          # Additional Docker cleanup before starting
-          echo "🧹 Pre-build Docker cleanup..."
-          docker system prune -af --volumes --filter "until=30m" 2>/dev/null || true
-          docker builder prune -af --filter "until=30m" 2>/dev/null || true
+          # Login to ACR
+          az acr login --name $ACR_NAME
           
-          # Show disk space
-          echo "📊 Current disk usage:"
-          df -h / || echo "⚠️  Could not check disk usage"
+          # Build with cache for faster builds
+          echo "Building API Gateway with cache..."
+          docker build --rm -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
           
-          # Verify Azure CLI is authenticated
-          echo "Verifying Azure CLI authentication..."
-          az account show || {
-            echo "❌ Error: Azure CLI is not authenticated"
-            exit 1
-          }
-          echo "✅ Azure CLI authenticated"
-          
-          # Verify ACR exists and is accessible
-          echo "Verifying ACR access: $ACR_NAME"
-          az acr show --name $ACR_NAME --query name -o tsv || {
-            echo "❌ Error: Cannot access ACR $ACR_NAME"
-            echo "Please verify:"
-            echo "  1. ACR name is correct: $ACR_NAME"
-            echo "  2. Service principal has 'Reader' role on ACR"
-            exit 1
-          }
-          echo "✅ ACR is accessible"
-          
-          # Login to ACR using Azure CLI
-          echo "Logging in to ACR: $ACR_NAME"
-          az acr login --name $ACR_NAME || {
-            echo "❌ Error: Failed to login to ACR"
-            echo "Please verify service principal has 'AcrPush' role on ACR"
-            echo "Grant permission with:"
-            echo "  az role assignment create --assignee <service-principal-id> --role AcrPush --scope /subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.ContainerRegistry/registries/$ACR_NAME"
-            exit 1
-          }
-          echo "✅ Successfully logged in to ACR: $ACR_LOGIN_SERVER"
-          
-          # Test ACR access by listing repositories
-          echo "Testing ACR push permissions..."
-          az acr repository list --name $ACR_NAME --output table || echo "⚠️  Warning: Cannot list repositories, but push may still work"
-          
-          # Build and push API Gateway
-          echo "Building and pushing API Gateway..."
-          docker build --rm --no-cache -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
+          # Push both tags
           docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
           docker push $ACR_LOGIN_SERVER/api-gateway:latest
-          echo "✅ API Gateway pushed successfully"
           
-          # Clean up local API Gateway image after push to save space
-          echo "Cleaning up local API Gateway image..."
+          # Clean up local image
           docker rmi $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG $ACR_LOGIN_SERVER/api-gateway:latest 2>/dev/null || true
+          echo "✅ API Gateway built and pushed"
+
+  # Build microservices in parallel using matrix strategy (4 parallel jobs)
+  - job: BuildMicroservices
+    displayName: 'Build Microservices (Parallel)'
+    dependsOn: BuildAPIGateway
+    strategy:
+      maxParallel: 4
+      matrix:
+        Group1:
+          SERVICES: 'auth-service hr-service attendance-service payroll-service crm-service'
+        Group2:
+          SERVICES: 'inventory-service sales-service purchase-service financial-service document-service'
+        Group3:
+          SERVICES: 'service-management cpp-service prescription-service analytics-service notification-service'
+        Group4:
+          SERVICES: 'monitoring-service tenant-registry-service realtime-service'
+    pool:
+      vmImage: 'ubuntu-latest'
+    timeoutInMinutes: 25
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Build and Push Microservices Group'
+      inputs:
+        azureSubscription: 'Azure-Service-Connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          ACR_NAME="$(ACR_NAME)"
+          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
+          IMAGE_TAG="$(IMAGE_TAG)"
+          SERVICES="${{ matrix.SERVICES }}"
           
-          # Clean up build cache after each major build
-          docker builder prune -af --filter "until=10m" 2>/dev/null || true
-    
-          # Build and push all microservices
-          SERVICES=(
-            "auth-service"
-            "hr-service"
-            "attendance-service"
-            "payroll-service"
-            "crm-service"
-            "inventory-service"
-            "sales-service"
-            "purchase-service"
-            "financial-service"
-            "document-service"
-            "service-management"
-            "cpp-service"
-            "prescription-service"
-            "analytics-service"
-            "notification-service"
-            "monitoring-service"
-            "tenant-registry-service"
-            "realtime-service"
-          )
+          # Login to ACR
+          az acr login --name $ACR_NAME
           
-          SERVICE_COUNT=0
-          for SERVICE in "${SERVICES[@]}"; do
-            SERVICE_COUNT=$((SERVICE_COUNT + 1))
-            echo "Building and pushing $SERVICE ($SERVICE_COUNT/${#SERVICES[@]})..."
+          # Build each service in the group
+          for SERVICE in $SERVICES; do
+            echo "Building $SERVICE..."
             
-            # Build without cache to save disk space (images are pushed immediately)
-            docker build --rm --no-cache -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+            # Build with cache for faster builds
+            docker build --rm -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest \
+              -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+            
+            # Push both tags
             docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
             docker push $ACR_LOGIN_SERVER/$SERVICE:latest
-            echo "✅ $SERVICE pushed successfully"
             
-            # Clean up local image immediately after push to save space
-            echo "Cleaning up local image for $SERVICE..."
+            # Clean up local image immediately
             docker rmi $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG $ACR_LOGIN_SERVER/$SERVICE:latest 2>/dev/null || true
             
-            # Clean up build cache every 3 services to prevent disk fill
-            if [ $((SERVICE_COUNT % 3)) -eq 0 ]; then
-              echo "🧹 Periodic cleanup after $SERVICE_COUNT services..."
-              docker builder prune -af --filter "until=10m" 2>/dev/null || true
-              docker system prune -f --filter "until=10m" 2>/dev/null || true
-              echo "📊 Disk usage after $SERVICE_COUNT services:"
-              df -h / | head -2 || echo "⚠️  Could not check disk usage"
-            fi
+            echo "✅ $SERVICE built and pushed"
           done
           
-          # Final aggressive cleanup of Docker cache
-          echo "🧹 Final aggressive Docker cache cleanup..."
-          docker system prune -af --volumes --filter "until=1h" 2>/dev/null || true
-          docker builder prune -af --filter "until=1h" 2>/dev/null || true
-          docker container prune -f 2>/dev/null || true
-          docker image prune -af --filter "until=1h" 2>/dev/null || true
-          
-          # Clean up any remaining temporary files
-          echo "Cleaning up temporary files..."
-          find /tmp -type f -mtime +0 -delete 2>/dev/null || true
-          find ~/.azure/logs -type f -mtime +0 -delete 2>/dev/null || true
-          
-          # Show final disk space
-          echo "📊 Final disk usage:"
-          df -h / || echo "⚠️  Could not check disk usage"
-          
-          echo "✅ All images built and pushed successfully"
+          # Light cleanup after group
+          docker builder prune -f --filter "until=30m" 2>/dev/null || true
+          echo "✅ All services in group built successfully"
 
 - stage: Deploy
   displayName: 'Deploy to AKS'

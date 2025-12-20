@@ -33,7 +33,7 @@ stages:
     displayName: 'Build API Gateway'
     pool:
       vmImage: 'ubuntu-latest'
-    timeoutInMinutes: 30
+    timeoutInMinutes: 45
     steps:
     - task: AzureCLI@2
       displayName: 'Build and Push API Gateway using ACR Build'
@@ -42,19 +42,26 @@ stages:
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
+          set -e
           ACR_NAME="$(ACR_NAME)"
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           
-          echo "Building API Gateway using ACR build (faster cloud build)..."
+          echo "=========================================="
+          echo "Building API Gateway using ACR build"
+          echo "ACR: $ACR_NAME"
+          echo "Tag: $IMAGE_TAG"
+          echo "=========================================="
           
           # Use ACR build task - builds directly in ACR (faster, no local Docker needed)
+          # Remove --no-logs to see progress, add timeout
           az acr build \
             --registry $ACR_NAME \
             --image api-gateway:$IMAGE_TAG \
             --image api-gateway:latest \
             --file Dockerfile \
-            --no-logs \
+            --timeout 2400 \
+            --platform linux/amd64 \
             .
           
           echo "✅ API Gateway built and pushed to ACR"
@@ -76,7 +83,7 @@ stages:
           SERVICES: 'monitoring-service tenant-registry-service realtime-service'
     pool:
       vmImage: 'ubuntu-latest'
-    timeoutInMinutes: 25
+    timeoutInMinutes: 40
     steps:
     - task: AzureCLI@2
       displayName: 'Build and Push Microservices Group using ACR Build'
@@ -85,28 +92,38 @@ stages:
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
+          set -e
           ACR_NAME="$(ACR_NAME)"
           IMAGE_TAG="$(IMAGE_TAG)"
           SERVICES="$(SERVICES)"
           
-          echo "Building microservices using ACR build (faster cloud builds)..."
+          echo "=========================================="
+          echo "Building microservices using ACR build"
+          echo "ACR: $ACR_NAME"
+          echo "Tag: $IMAGE_TAG"
+          echo "Services: $SERVICES"
+          echo "=========================================="
           
           # Build each service in the group using ACR build
           for SERVICE in $SERVICES; do
-            echo "Building $SERVICE using ACR build..."
+            echo ""
+            echo "🔨 Building $SERVICE using ACR build..."
             
             # Use ACR build - builds directly in ACR (faster, no local Docker needed)
+            # Add timeout and platform for consistency
             az acr build \
               --registry $ACR_NAME \
               --image $SERVICE:$IMAGE_TAG \
               --image $SERVICE:latest \
               --file microservices/$SERVICE/Dockerfile \
-              --no-logs \
+              --timeout 1800 \
+              --platform linux/amd64 \
               microservices/$SERVICE/
             
             echo "✅ $SERVICE built and pushed to ACR"
           done
           
+          echo ""
           echo "✅ All services in group built successfully"
 
 - stage: Deploy

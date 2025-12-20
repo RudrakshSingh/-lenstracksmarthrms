@@ -199,12 +199,12 @@ stages:
         targetType: 'inline'
         script: |
           set -e
-          sudo apt-get update -y
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb stable main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update -y
-          sudo apt-get install -y trivy
+          # Install Trivy using direct download (more reliable than apt repo)
+          TRIVY_VERSION="v0.51.0"
+          wget -qO /tmp/trivy.deb "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_linux_amd64.deb"
+          sudo dpkg -i /tmp/trivy.deb || sudo apt-get install -f -y
+          rm /tmp/trivy.deb
+          trivy --version
     - task: Bash@3
       displayName: 'Run Trivy FS Scan (HIGH,CRITICAL)'
       inputs:
@@ -227,12 +227,12 @@ stages:
         targetType: 'inline'
         script: |
           set -e
-          sudo apt-get update -y
-          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
-          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb stable main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update -y
-          sudo apt-get install -y trivy
+          # Install Trivy using direct download (more reliable than apt repo)
+          TRIVY_VERSION="v0.51.0"
+          wget -qO /tmp/trivy.deb "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_linux_amd64.deb"
+          sudo dpkg -i /tmp/trivy.deb || sudo apt-get install -f -y
+          rm /tmp/trivy.deb
+          trivy --version
     - task: Bash@3
       displayName: 'Trivy Image Scan (HIGH,CRITICAL)'
       inputs:

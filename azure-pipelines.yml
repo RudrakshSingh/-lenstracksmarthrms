@@ -199,11 +199,16 @@ stages:
         targetType: 'inline'
         script: |
           set -e
-          # Install Trivy using direct download (more reliable than apt repo)
-          TRIVY_VERSION="v0.51.0"
-          wget -qO /tmp/trivy.deb "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_linux_amd64.deb"
-          sudo dpkg -i /tmp/trivy.deb || sudo apt-get install -f -y
-          rm /tmp/trivy.deb
+          # Install Trivy using official installation script
+          sudo apt-get update -y
+          sudo apt-get install -y wget
+          # Download and install Trivy binary directly
+          TRIVY_VERSION="v0.52.0"
+          wget -qO /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tar.gz -C /tmp
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          sudo chmod +x /usr/local/bin/trivy
+          rm /tmp/trivy.tar.gz
           trivy --version
     - task: Bash@3
       displayName: 'Run Trivy FS Scan (HIGH,CRITICAL)'
@@ -227,11 +232,16 @@ stages:
         targetType: 'inline'
         script: |
           set -e
-          # Install Trivy using direct download (more reliable than apt repo)
-          TRIVY_VERSION="v0.51.0"
-          wget -qO /tmp/trivy.deb "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_linux_amd64.deb"
-          sudo dpkg -i /tmp/trivy.deb || sudo apt-get install -f -y
-          rm /tmp/trivy.deb
+          # Install Trivy using official installation script
+          sudo apt-get update -y
+          sudo apt-get install -y wget
+          # Download and install Trivy binary directly
+          TRIVY_VERSION="v0.52.0"
+          wget -qO /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tar.gz -C /tmp
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          sudo chmod +x /usr/local/bin/trivy
+          rm /tmp/trivy.tar.gz
           trivy --version
     - task: Bash@3
       displayName: 'Trivy Image Scan (HIGH,CRITICAL)'
@@ -294,6 +304,8 @@ stages:
       runOnce:
         deploy:
           steps:
+          - checkout: self
+            displayName: 'Checkout repository'
           - task: AzureCLI@2
             displayName: 'Configure kubectl for AKS'
             inputs:
@@ -359,8 +371,14 @@ stages:
                 
                 # Verify required manifests exist
                 echo "Verifying required manifests..."
+                echo "Current directory: $(pwd)"
+                echo "Contents of k8s directory:"
+                ls -la k8s/ 2>/dev/null || echo "k8s directory not found"
+                
                 if [ ! -f "k8s/namespace.yaml" ]; then
                   echo "❌ Error: k8s/namespace.yaml not found"
+                  echo "Available files in k8s/:"
+                  ls -la k8s/*.yaml 2>/dev/null || echo "No .yaml files found"
                   exit 1
                 fi
                 if [ ! -f "k8s/configmap.yaml" ]; then

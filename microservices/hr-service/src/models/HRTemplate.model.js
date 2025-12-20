@@ -96,8 +96,7 @@ const hrTemplateSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-hrTemplateSchema.index({ templateId: 1 });
+// Indexes (remove duplicates of field-level indexes)
 hrTemplateSchema.index({ letterType: 1, language: 1, isActive: 1 });
 hrTemplateSchema.index({ brand: 1, letterType: 1 });
 hrTemplateSchema.index({ salarySystem: 1 });

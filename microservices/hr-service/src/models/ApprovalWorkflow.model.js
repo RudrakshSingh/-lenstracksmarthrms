@@ -78,9 +78,8 @@ const approvalWorkflowSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
+// Indexes (remove duplicates of field-level indexes, keep composite)
 approvalWorkflowSchema.index({ workflow_type: 1, is_active: 1 });
-approvalWorkflowSchema.index({ is_default: 1 });
 
 // Static method to get default workflow for type
 approvalWorkflowSchema.statics.getDefaultWorkflow = function(workflowType) {

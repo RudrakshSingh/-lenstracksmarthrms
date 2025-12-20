@@ -89,10 +89,8 @@ const tenantSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-tenantSchema.index({ tenantId: 1 });
+// Indexes (remove duplicates of field indexes)
 tenantSchema.index({ email: 1 });
-tenantSchema.index({ status: 1 });
 tenantSchema.index({ 'subscription.plan': 1 });
 tenantSchema.index({ createdAt: -1 });
 

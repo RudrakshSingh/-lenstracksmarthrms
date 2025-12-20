@@ -42,9 +42,7 @@ const systemSettingsSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-systemSettingsSchema.index({ key: 1 });
-systemSettingsSchema.index({ category: 1 });
+// Indexes (remove duplicates of field-level indexes)
 systemSettingsSchema.index({ isPublic: 1 });
 
 // Static method to get setting by key

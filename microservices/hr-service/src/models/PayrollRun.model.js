@@ -267,7 +267,6 @@ const payrollRunSchema = new mongoose.Schema({
 // Indexes
 payrollRunSchema.index({ month: 1, year: 1 }, { unique: true });
 payrollRunSchema.index({ status: 1, created_at: 1 });
-payrollRunSchema.index({ period: 1 });
 
 // Pre-save middleware
 payrollRunSchema.pre('save', function(next) {

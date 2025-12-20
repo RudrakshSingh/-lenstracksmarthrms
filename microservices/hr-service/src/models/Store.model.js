@@ -158,11 +158,7 @@ const storeSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-storeSchema.index({ code: 1 });
-storeSchema.index({ name: 1 });
-storeSchema.index({ status: 1 });
-storeSchema.index({ isDeleted: 1 });
+// Indexes (remove duplicates of field-level indexes)
 storeSchema.index({ coordinates: '2dsphere' });
 
 // Virtual for full address

@@ -264,9 +264,8 @@ const returnsRemakesFeedSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
+// Indexes (remove duplicates of field-level indexes)
 returnsRemakesFeedSchema.index({ employee_id: 1, date: 1 });
-returnsRemakesFeedSchema.index({ invoice_id: 1 });
 returnsRemakesFeedSchema.index({ policy_applicable: 1, clawback_applied: 1 });
 returnsRemakesFeedSchema.index({ type: 1, date: 1 });
 

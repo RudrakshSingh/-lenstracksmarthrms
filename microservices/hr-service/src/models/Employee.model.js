@@ -134,10 +134,7 @@ const employeeSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-employeeSchema.index({ employeeId: 1 });
-employeeSchema.index({ code: 1 });
-employeeSchema.index({ email: 1 });
+// Indexes (remove duplicates of field indexes)
 employeeSchema.index({ roleFamily: 1 });
 employeeSchema.index({ department: 1 });
 employeeSchema.index({ status: 1 });

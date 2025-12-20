@@ -97,9 +97,7 @@ const roleSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-roleSchema.index({ name: 1 });
-roleSchema.index({ is_active: 1 });
+// Indexes (field-level indexes already declared via index: true)
 
 // Virtual for permission count
 roleSchema.virtual('permission_count').get(function() {

@@ -173,11 +173,7 @@ const userSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-userSchema.index({ email: 1 });
-userSchema.index({ employeeId: 1 });
-userSchema.index({ status: 1 });
-userSchema.index({ isDeleted: 1 });
+// Indexes (field-level indexes already declared; keep only necessary refs)
 userSchema.index({ store: 1 });
 userSchema.index({ role: 1 });
 

@@ -191,9 +191,7 @@ const hrLetterSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-hrLetterSchema.index({ letterId: 1 });
-hrLetterSchema.index({ serialNo: 1 });
+// Indexes (remove duplicates of field-level indexes)
 hrLetterSchema.index({ letterType: 1, status: 1 });
 hrLetterSchema.index({ 'dataBinding.employee.employeeId': 1 });
 hrLetterSchema.index({ issueDate: 1 });

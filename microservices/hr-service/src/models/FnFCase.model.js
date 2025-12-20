@@ -364,10 +364,9 @@ const fnfCaseSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
+// Indexes (remove duplicates of field-level indexes)
 fnfCaseSchema.index({ employee_id: 1, lwd: 1 });
 fnfCaseSchema.index({ status: 1, created_at: 1 });
-fnfCaseSchema.index({ case_id: 1 });
 
 // Pre-save middleware
 fnfCaseSchema.pre('save', function(next) {

@@ -10,6 +10,33 @@ const logger = require('../config/logger');
 class AuthService {
   constructor() {
     this.redis = connectRedis();
+    // In-memory fallback for refresh tokens when Redis is unavailable
+    this.refreshTokenMemoryStore = new Map();
+    this.refreshTokenTtlMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+  }
+
+  /**
+   * In-memory fallback helpers for refresh tokens
+   */
+  saveRefreshTokenInMemory(userId, refreshToken) {
+    this.refreshTokenMemoryStore.set(userId, {
+      token: refreshToken,
+      expiresAt: Date.now() + this.refreshTokenTtlMs,
+    });
+  }
+
+  getRefreshTokenInMemory(userId) {
+    const entry = this.refreshTokenMemoryStore.get(userId);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.refreshTokenMemoryStore.delete(userId);
+      return null;
+    }
+    return entry.token;
+  }
+
+  removeRefreshTokenInMemory(userId) {
+    this.refreshTokenMemoryStore.delete(userId);
   }
 
   /**
@@ -406,9 +433,12 @@ class AuthService {
     try {
       const key = `refresh_token:${userId}`;
       await this.redis.set(key, refreshToken, 'EX', 7 * 24 * 60 * 60); // 7 days
+      // Cache in memory as a fallback in case Redis disconnects between requests
+      this.saveRefreshTokenInMemory(userId.toString(), refreshToken);
     } catch (error) {
       logger.error('Failed to store refresh token', { error: error.message, userId });
-      throw error;
+      // Fallback to in-memory store so refresh still works during Redis outages
+      this.saveRefreshTokenInMemory(userId.toString(), refreshToken);
     }
   }
 
@@ -420,11 +450,14 @@ class AuthService {
   async getRefreshToken(userId) {
     try {
       const key = `refresh_token:${userId}`;
-      return await this.redis.get(key);
+      const token = await this.redis.get(key);
+      if (token) return token;
     } catch (error) {
       logger.error('Failed to get refresh token', { error: error.message, userId });
-      return null;
     }
+
+    // Fallback to in-memory store
+    return this.getRefreshTokenInMemory(userId.toString());
   }
 
   /**
@@ -438,8 +471,10 @@ class AuthService {
       await this.redis.del(key);
     } catch (error) {
       logger.error('Failed to remove refresh token', { error: error.message, userId });
-      throw error;
     }
+
+    // Always attempt to remove from in-memory fallback
+    this.removeRefreshTokenInMemory(userId.toString());
   }
 
   /**

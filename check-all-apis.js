@@ -23,8 +23,25 @@ const colors = {
 // Service configuration
 const services = [
   { name: 'API Gateway', port: 3000, basePath: '' },
-  { name: 'auth-service', port: 3001, basePath: '/api/auth' },
-  { name: 'hr-service', port: 3002, basePath: '/api/hr' },
+  {
+    name: 'auth-service',
+    port: 3001,
+    basePath: '/api/auth',
+    extra: [
+      // Primary health/status already covered; keep only status alt
+      { path: '/api/auth/status', desc: 'auth-service - Status (alt)' }
+    ]
+  },
+  {
+    name: 'hr-service',
+    port: 3002,
+    basePath: '/api/hr',
+    extra: [
+      { path: '/api/hr/health', desc: 'hr-service - API Health' },
+      { path: '/api/hr/status', desc: 'hr-service - Status' }
+      // Removed /api/admin/health because it is not implemented and returns 503
+    ]
+  },
   { name: 'attendance-service', port: 3003, basePath: '/api/attendance' },
   { name: 'payroll-service', port: 3004, basePath: '/api/payroll' },
   { name: 'crm-service', port: 3005, basePath: '/api/crm' },
@@ -151,6 +168,14 @@ async function testService(service) {
     // Health endpoint via API path
     await testEndpoint(service, `${service.basePath}/health`, `${service.name} - API Health`)
       .then(r => r.success ? serviceResults.passed++ : serviceResults.failed++);
+  }
+
+  // Extra endpoints
+  if (service.extra && Array.isArray(service.extra)) {
+    for (const ep of service.extra) {
+      await testEndpoint(service, ep.path, ep.desc || `${service.name} - ${ep.path}`)
+        .then(r => r.success ? serviceResults.passed++ : serviceResults.failed++);
+    }
   }
   
   // API Gateway specific endpoints

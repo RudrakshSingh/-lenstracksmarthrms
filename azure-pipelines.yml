@@ -28,15 +28,15 @@ stages:
 - stage: Build
   displayName: 'Build and Push Docker Images'
   jobs:
-  # Build API Gateway first (single job)
+  # Build API Gateway first (single job) - Using ACR build for faster builds
   - job: BuildAPIGateway
     displayName: 'Build API Gateway'
     pool:
       vmImage: 'ubuntu-latest'
-    timeoutInMinutes: 20
+    timeoutInMinutes: 30
     steps:
     - task: AzureCLI@2
-      displayName: 'Build and Push API Gateway'
+      displayName: 'Build and Push API Gateway using ACR Build'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
@@ -46,20 +46,18 @@ stages:
           ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           
-          # Login to ACR
-          az acr login --name $ACR_NAME
+          echo "Building API Gateway using ACR build (faster cloud build)..."
           
-          # Build with cache for faster builds
-          echo "Building API Gateway with cache..."
-          docker build --rm -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG -t $ACR_LOGIN_SERVER/api-gateway:latest -f Dockerfile .
+          # Use ACR build task - builds directly in ACR (faster, no local Docker needed)
+          az acr build \
+            --registry $ACR_NAME \
+            --image api-gateway:$IMAGE_TAG \
+            --image api-gateway:latest \
+            --file Dockerfile \
+            --no-logs \
+            .
           
-          # Push both tags
-          docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
-          docker push $ACR_LOGIN_SERVER/api-gateway:latest
-          
-          # Clean up local image
-          docker rmi $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG $ACR_LOGIN_SERVER/api-gateway:latest 2>/dev/null || true
-          echo "✅ API Gateway built and pushed"
+          echo "✅ API Gateway built and pushed to ACR"
 
   # Build microservices in parallel using matrix strategy (4 parallel jobs)
   - job: BuildMicroservices
@@ -81,40 +79,34 @@ stages:
     timeoutInMinutes: 25
     steps:
     - task: AzureCLI@2
-      displayName: 'Build and Push Microservices Group'
+      displayName: 'Build and Push Microservices Group using ACR Build'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
           ACR_NAME="$(ACR_NAME)"
-          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           SERVICES="$(SERVICES)"
           
-          # Login to ACR
-          az acr login --name $ACR_NAME
+          echo "Building microservices using ACR build (faster cloud builds)..."
           
-          # Build each service in the group
+          # Build each service in the group using ACR build
           for SERVICE in $SERVICES; do
-            echo "Building $SERVICE..."
+            echo "Building $SERVICE using ACR build..."
             
-            # Build with cache for faster builds
-            docker build --rm -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG -t $ACR_LOGIN_SERVER/$SERVICE:latest \
-              -f microservices/$SERVICE/Dockerfile microservices/$SERVICE/
+            # Use ACR build - builds directly in ACR (faster, no local Docker needed)
+            az acr build \
+              --registry $ACR_NAME \
+              --image $SERVICE:$IMAGE_TAG \
+              --image $SERVICE:latest \
+              --file microservices/$SERVICE/Dockerfile \
+              --no-logs \
+              microservices/$SERVICE/
             
-            # Push both tags
-            docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
-            docker push $ACR_LOGIN_SERVER/$SERVICE:latest
-            
-            # Clean up local image immediately
-            docker rmi $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG $ACR_LOGIN_SERVER/$SERVICE:latest 2>/dev/null || true
-            
-            echo "✅ $SERVICE built and pushed"
+            echo "✅ $SERVICE built and pushed to ACR"
           done
           
-          # Light cleanup after group
-          docker builder prune -f --filter "until=30m" 2>/dev/null || true
           echo "✅ All services in group built successfully"
 
 - stage: Deploy

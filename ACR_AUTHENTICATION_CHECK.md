@@ -32,7 +32,7 @@ Run this Azure CLI command (replace placeholders):
 
 ```bash
 # Get ACR resource ID
-ACR_NAME="eteliosacr-hvawabdbgge7e0fu"
+ACR_NAME="eteliosacr"
 ACR_ID=$(az acr show --name $ACR_NAME --query id --output tsv)
 
 # Get service principal ID (from Step 1)
@@ -58,7 +58,7 @@ If the service principal doesn't have `AcrPush` role, grant it:
 
 ```bash
 # Set variables
-ACR_NAME="eteliosacr-hvawabdbgge7e0fu"
+ACR_NAME="eteliosacr"
 SP_ID="<service-principal-object-id>"
 
 # Get ACR resource ID
@@ -76,7 +76,7 @@ az role assignment list --assignee $SP_ID --scope $ACR_ID --output table
 
 ### Option 2: Using Azure Portal
 
-1. Go to Azure Portal: Navigate to your ACR (`eteliosacr-hvawabdbgge7e0fu`)
+1. Go to Azure Portal: Navigate to your ACR (`eteliosacr`)
 2. Click: **Access control (IAM)**
 3. Click: **Add** → **Add role assignment**
 4. Select role: **AcrPush**
@@ -100,18 +100,18 @@ Should return your subscription information.
 ### Test 2: Verify ACR Access
 
 ```bash
-ACR_NAME="eteliosacr-hvawabdbgge7e0fu"
+ACR_NAME="eteliosacr"
 
 # Check if ACR is accessible
 az acr show --name $ACR_NAME --query name -o tsv
 
-# Should return: eteliosacr-hvawabdbgge7e0fu
+# Should return: eteliosacr
 ```
 
 ### Test 3: Test ACR Login
 
 ```bash
-ACR_NAME="eteliosacr-hvawabdbgge7e0fu"
+ACR_NAME="eteliosacr"
 
 # Login to ACR
 az acr login --name $ACR_NAME
@@ -122,7 +122,7 @@ az acr login --name $ACR_NAME
 ### Test 4: Test Docker Push (if Docker is available)
 
 ```bash
-ACR_LOGIN_SERVER="eteliosacr-hvawabdbgge7e0fu.azurecr.io"
+ACR_LOGIN_SERVER="eteliosacr.azurecr.io"
 
 # Try to push a test image (this will fail if no image, but login should work)
 docker push $ACR_LOGIN_SERVER/test:latest || echo "Push failed (expected if image doesn't exist)"
@@ -158,7 +158,7 @@ docker push $ACR_LOGIN_SERVER/test:latest || echo "Push failed (expected if imag
 **Cause**: Service principal doesn't have `Reader` role or ACR doesn't exist
 
 **Solution**: 
-- Verify ACR name: `eteliosacr-hvawabdbgge7e0fu`
+- Verify ACR name: `eteliosacr`
 - Grant `Reader` role to service principal
 - Verify ACR exists in Azure Portal
 
@@ -183,8 +183,8 @@ Before running the pipeline, verify:
 - [ ] `Azure-Service-Connection` exists in Azure DevOps
 - [ ] Service connection type is "Azure Resource Manager"
 - [ ] Service principal has `AcrPush` role on ACR
-- [ ] ACR name is correct: `eteliosacr-hvawabdbgge7e0fu`
-- [ ] ACR login server is correct: `eteliosacr-hvawabdbgge7e0fu.azurecr.io`
+- [ ] ACR name is correct: `eteliosacr`
+- [ ] ACR login server is correct: `eteliosacr.azurecr.io`
 - [ ] Pipeline uses `Azure-Service-Connection` for ACR operations
 - [ ] All docker commands are in the same Azure CLI task (authentication persistence)
 

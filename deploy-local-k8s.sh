@@ -140,7 +140,7 @@ TEMP_DIR=$(mktemp -d)
 cp -r k8s $TEMP_DIR/
 
 # Replace ACR images with local images in all YAML files
-find $TEMP_DIR/k8s -name "*.yaml" -type f -exec sed -i '' "s|eteliosacr-hvawabdbgge7e0fu.azurecr.io/|$LOCAL_IMAGE_PREFIX/|g" {} \;
+find $TEMP_DIR/k8s -name "*.yaml" -type f -exec sed -i '' "s|eteliosacr.azurecr.io/|$LOCAL_IMAGE_PREFIX/|g" {} \;
 find $TEMP_DIR/k8s -name "*.yaml" -type f -exec sed -i '' "s|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g" {} \;
 
 # Step 7: Deploy MongoDB and Redis

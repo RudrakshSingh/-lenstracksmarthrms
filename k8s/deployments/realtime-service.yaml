@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: realtime-service
-        image: eteliosacr.azurecr.io/realtime-service:latest
+        image: eteliosacr.azurecr.io/realtime-service:__IMAGE_TAG__
         imagePullPolicy: Always
         ports:
         - containerPort: 3021

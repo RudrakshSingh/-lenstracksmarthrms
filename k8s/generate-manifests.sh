@@ -6,14 +6,14 @@
 set -e
 
 ACR_NAME="${ACR_NAME:-eteliosacr}"
-IMAGE_TAG="${IMAGE_TAG:-latest}"
+IMAGE_TAG="${IMAGE_TAG:-__IMAGE_TAG__}"
 NAMESPACE="${NAMESPACE:-etelios-backend-prod}"
 REPLICAS="${REPLICAS:-2}"
 
 # Service configurations (compatible with bash 3.x)
-# Format: service_name:port:acr_name:image_tag
+# Format: service_name:port:acr_name:image_tag_placeholder
 # If acr_name or image_tag is empty, it uses the default ACR_NAME and IMAGE_TAG
-SERVICES="api-gateway:3000:eteliosacr:latest auth-service:3001:eteliosacr:latest hr-service:3002:eteliosacr:latest attendance-service:3003:eteliosacr:latest payroll-service:3004:eteliosacr:latest crm-service:3005:eteliosacr:latest inventory-service:3006:eteliosacr:latest sales-service:3007:eteliosacr:latest purchase-service:3008:eteliosacr:latest financial-service:3009:eteliosacr:latest document-service:3010:eteliosacr:latest service-management:3011:eteliosacr:latest cpp-service:3012:eteliosacr:latest prescription-service:3013:eteliosacr:latest analytics-service:3014:eteliosacr:latest notification-service:3015:eteliosacr:latest monitoring-service:3016:eteliosacr:latest tenant-registry-service:3020:eteliosacr:latest realtime-service:3021:eteliosacr:latest"
+SERVICES="api-gateway:3000:eteliosacr:__IMAGE_TAG__ auth-service:3001:eteliosacr:__IMAGE_TAG__ hr-service:3002:eteliosacr:__IMAGE_TAG__ attendance-service:3003:eteliosacr:__IMAGE_TAG__ payroll-service:3004:eteliosacr:__IMAGE_TAG__ crm-service:3005:eteliosacr:__IMAGE_TAG__ inventory-service:3006:eteliosacr:__IMAGE_TAG__ sales-service:3007:eteliosacr:__IMAGE_TAG__ purchase-service:3008:eteliosacr:__IMAGE_TAG__ financial-service:3009:eteliosacr:__IMAGE_TAG__ document-service:3010:eteliosacr:__IMAGE_TAG__ service-management:3011:eteliosacr:__IMAGE_TAG__ cpp-service:3012:eteliosacr:__IMAGE_TAG__ prescription-service:3013:eteliosacr:__IMAGE_TAG__ analytics-service:3014:eteliosacr:__IMAGE_TAG__ notification-service:3015:eteliosacr:__IMAGE_TAG__ monitoring-service:3016:eteliosacr:__IMAGE_TAG__ tenant-registry-service:3020:eteliosacr:__IMAGE_TAG__ realtime-service:3021:eteliosacr:__IMAGE_TAG__"
 
 # Function to get port for a service
 get_service_port() {

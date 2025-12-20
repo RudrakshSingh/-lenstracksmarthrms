@@ -3,7 +3,7 @@
 trigger:
   branches:
     include:
-      - main
+- main
       - develop
   paths:
     exclude:
@@ -181,8 +181,72 @@ stages:
           set -e
           trivy fs --severity HIGH,CRITICAL --exit-code 0 --skip-dirs .git --skip-dirs node_modules --skip-dirs '**/node_modules' --output trivy-report.txt .
     - publish: trivy-report.txt
-      displayName: 'Publish Trivy Report'
+      displayName: 'Publish Trivy FS Report'
       artifact: trivy-report
+
+  - job: TrivyImage
+    displayName: 'Trivy Image Scan + SBOM'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: Bash@3
+      displayName: 'Install Trivy'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -e
+          sudo apt-get update -y
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb stable main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -y
+          sudo apt-get install -y trivy
+    - task: Bash@3
+      displayName: 'Trivy Image Scan (HIGH,CRITICAL)'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -e
+          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
+          IMAGE_TAG="$(IMAGE_TAG)"
+          SERVICES=(
+            api-gateway
+            auth-service hr-service attendance-service payroll-service crm-service
+            inventory-service sales-service purchase-service financial-service document-service
+            service-management cpp-service prescription-service analytics-service notification-service
+            monitoring-service tenant-registry-service realtime-service
+          )
+          for SERVICE in "${SERVICES[@]}"; do
+            IMAGE="${ACR_LOGIN_SERVER}/${SERVICE}:${IMAGE_TAG}"
+            echo "Scanning image: ${IMAGE}"
+            trivy image --severity HIGH,CRITICAL --exit-code 0 --output "trivy-image-${SERVICE}.txt" "${IMAGE}" || true
+          done
+    - task: Bash@3
+      displayName: 'Generate SBOM (SPDX) for images'
+      inputs:
+        targetType: 'inline'
+        script: |
+          set -e
+          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
+          IMAGE_TAG="$(IMAGE_TAG)"
+          SERVICES=(
+            api-gateway
+            auth-service hr-service attendance-service payroll-service crm-service
+            inventory-service sales-service purchase-service financial-service document-service
+            service-management cpp-service prescription-service analytics-service notification-service
+            monitoring-service tenant-registry-service realtime-service
+          )
+          for SERVICE in "${SERVICES[@]}"; do
+            IMAGE="${ACR_LOGIN_SERVER}/${SERVICE}:${IMAGE_TAG}"
+            echo "SBOM for image: ${IMAGE}"
+            trivy image --format spdx-json --output "sbom-${SERVICE}.spdx.json" "${IMAGE}" || true
+          done
+    - publish: trivy-image-*.txt
+      displayName: 'Publish Trivy Image Reports'
+      artifact: trivy-image-reports
+    - publish: sbom-*.spdx.json
+      displayName: 'Publish SBOMs'
+      artifact: sbom-reports
 
 - stage: Deploy
   displayName: 'Deploy to AKS'
@@ -290,7 +354,7 @@ stages:
                 TAG="$(IMAGE_TAG)"
                 LOGIN="$(ACR_LOGIN_SERVER)"
                 echo "Injecting tag ${TAG} into manifests for login server ${LOGIN}"
-                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|${LOGIN}/\\([^:]*\\):latest|${LOGIN}/\\1:${TAG}|g"
+                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|${LOGIN}/\\([^:]*\\):__IMAGE_TAG__|${LOGIN}/\\1:${TAG}|g"
           
           - task: Kubernetes@1
             displayName: 'Create Namespace'

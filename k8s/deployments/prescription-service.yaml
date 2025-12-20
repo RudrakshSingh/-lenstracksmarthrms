@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: prescription-service
-        image: eteliosacr.azurecr.io/prescription-service:latest
+        image: eteliosacr.azurecr.io/prescription-service:__IMAGE_TAG__
         imagePullPolicy: Always
         ports:
         - containerPort: 3013

@@ -5,7 +5,7 @@
 
 set -e
 
-ACR_NAME="${ACR_NAME:-eteliosacr-hvawabdbgge7e0fu}"
+ACR_NAME="${ACR_NAME:-eteliosacr}"
 IMAGE_TAG="${IMAGE_TAG:-__IMAGE_TAG__}"
 NAMESPACE="${NAMESPACE:-etelios-backend-prod}"
 REPLICAS="${REPLICAS:-2}"

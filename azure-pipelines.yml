@@ -12,9 +12,9 @@ trigger:
 
 variables:
   - name: ACR_NAME
-    value: 'eteliosacr'
+    value: 'eteliosacr-hvawabdbgge7e0fu'
   - name: ACR_LOGIN_SERVER
-    value: 'eteliosacr.azurecr.io'
+    value: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'
   - name: AKS_RESOURCE_GROUP
     value: 'Etelios-AKS-RG'
   - name: AKS_CLUSTER_NAME

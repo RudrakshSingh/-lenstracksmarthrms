@@ -36,7 +36,7 @@ stages:
     timeoutInMinutes: 45
     steps:
     - task: AzureCLI@2
-      displayName: 'Build and Push API Gateway using ACR Build'
+      displayName: 'Build and Push API Gateway'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
@@ -48,21 +48,32 @@ stages:
           IMAGE_TAG="$(IMAGE_TAG)"
           
           echo "=========================================="
-          echo "Building API Gateway using ACR build"
+          echo "Building API Gateway"
           echo "ACR: $ACR_NAME"
+          echo "Login Server: $ACR_LOGIN_SERVER"
           echo "Tag: $IMAGE_TAG"
           echo "=========================================="
           
-          # Use ACR build task - builds directly in ACR (faster, no local Docker needed)
-          # Remove --no-logs to see progress, add timeout
-          az acr build \
-            --registry $ACR_NAME \
-            --image api-gateway:$IMAGE_TAG \
-            --image api-gateway:latest \
-            --file Dockerfile \
-            --timeout 2400 \
-            --platform linux/amd64 \
+          # Login to ACR
+          echo "Logging in to ACR..."
+          az acr login --name $ACR_NAME
+          
+          # Build using Docker (more reliable than ACR build)
+          echo "Building Docker image..."
+          docker build \
+            --rm \
+            -t $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG \
+            -t $ACR_LOGIN_SERVER/api-gateway:latest \
+            -f Dockerfile \
             .
+          
+          # Push both tags
+          echo "Pushing image to ACR..."
+          docker push $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG
+          docker push $ACR_LOGIN_SERVER/api-gateway:latest
+          
+          # Clean up local image
+          docker rmi $ACR_LOGIN_SERVER/api-gateway:$IMAGE_TAG $ACR_LOGIN_SERVER/api-gateway:latest 2>/dev/null || true
           
           echo "✅ API Gateway built and pushed to ACR"
 
@@ -86,7 +97,7 @@ stages:
     timeoutInMinutes: 40
     steps:
     - task: AzureCLI@2
-      displayName: 'Build and Push Microservices Group using ACR Build'
+      displayName: 'Build and Push Microservices Group'
       inputs:
         azureSubscription: 'Azure-Service-Connection'
         scriptType: 'bash'
@@ -94,34 +105,48 @@ stages:
         inlineScript: |
           set -e
           ACR_NAME="$(ACR_NAME)"
+          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
           IMAGE_TAG="$(IMAGE_TAG)"
           SERVICES="$(SERVICES)"
           
           echo "=========================================="
-          echo "Building microservices using ACR build"
+          echo "Building microservices"
           echo "ACR: $ACR_NAME"
+          echo "Login Server: $ACR_LOGIN_SERVER"
           echo "Tag: $IMAGE_TAG"
           echo "Services: $SERVICES"
           echo "=========================================="
           
-          # Build each service in the group using ACR build
+          # Login to ACR
+          echo "Logging in to ACR..."
+          az acr login --name $ACR_NAME
+          
+          # Build each service in the group using Docker
           for SERVICE in $SERVICES; do
             echo ""
-            echo "🔨 Building $SERVICE using ACR build..."
+            echo "🔨 Building $SERVICE..."
             
-            # Use ACR build - builds directly in ACR (faster, no local Docker needed)
-            # Add timeout and platform for consistency
-            az acr build \
-              --registry $ACR_NAME \
-              --image $SERVICE:$IMAGE_TAG \
-              --image $SERVICE:latest \
-              --file microservices/$SERVICE/Dockerfile \
-              --timeout 1800 \
-              --platform linux/amd64 \
+            # Build using Docker (more reliable than ACR build)
+            docker build \
+              --rm \
+              -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG \
+              -t $ACR_LOGIN_SERVER/$SERVICE:latest \
+              -f microservices/$SERVICE/Dockerfile \
               microservices/$SERVICE/
+            
+            # Push both tags
+            echo "Pushing $SERVICE to ACR..."
+            docker push $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG
+            docker push $ACR_LOGIN_SERVER/$SERVICE:latest
+            
+            # Clean up local image immediately
+            docker rmi $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG $ACR_LOGIN_SERVER/$SERVICE:latest 2>/dev/null || true
             
             echo "✅ $SERVICE built and pushed to ACR"
           done
+          
+          # Light cleanup after group
+          docker builder prune -f --filter "until=30m" 2>/dev/null || true
           
           echo ""
           echo "✅ All services in group built successfully"

@@ -300,38 +300,54 @@ stages:
             echo "{}" > sbom-placeholder.spdx.json
           fi
     - task: Bash@3
-      displayName: 'Verify and Publish Trivy Reports'
+      displayName: 'Prepare Trivy Reports for Publishing'
       inputs:
         targetType: 'inline'
         script: |
+          set -e
+          mkdir -p $(Pipeline.Workspace)/trivy-image-reports
           echo "Checking for Trivy image reports..."
           if ls trivy-image-*.txt 1> /dev/null 2>&1; then
             echo "Found $(ls trivy-image-*.txt | wc -l) report(s):"
             ls -lh trivy-image-*.txt
+            cp trivy-image-*.txt $(Pipeline.Workspace)/trivy-image-reports/
+            echo "✅ Copied reports to artifact directory"
           else
             echo "⚠️  No Trivy reports found, creating placeholder"
-            echo "No images were scanned in this run" > trivy-image-placeholder.txt
+            echo "No images were scanned in this run" > $(Pipeline.Workspace)/trivy-image-reports/trivy-image-placeholder.txt
+            echo "✅ Created placeholder report"
           fi
-    - publish: trivy-image-*.txt
+    - task: PublishPipelineArtifact@1
       displayName: 'Publish Trivy Image Reports'
-      artifact: trivy-image-reports
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/trivy-image-reports'
+        artifact: 'trivy-image-reports'
+        publishLocation: 'pipeline'
       condition: always()
     - task: Bash@3
-      displayName: 'Verify and Publish SBOMs'
+      displayName: 'Prepare SBOMs for Publishing'
       inputs:
         targetType: 'inline'
         script: |
+          set -e
+          mkdir -p $(Pipeline.Workspace)/sbom-reports
           echo "Checking for SBOMs..."
           if ls sbom-*.spdx.json 1> /dev/null 2>&1; then
             echo "Found $(ls sbom-*.spdx.json | wc -l) SBOM(s):"
             ls -lh sbom-*.spdx.json
+            cp sbom-*.spdx.json $(Pipeline.Workspace)/sbom-reports/
+            echo "✅ Copied SBOMs to artifact directory"
           else
             echo "⚠️  No SBOMs found, creating placeholder"
-            echo '{"spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT", "name": "placeholder", "packages": []}' > sbom-placeholder.spdx.json
+            echo '{"spdxVersion": "SPDX-2.3", "dataLicense": "CC0-1.0", "SPDXID": "SPDXRef-DOCUMENT", "name": "placeholder", "packages": []}' > $(Pipeline.Workspace)/sbom-reports/sbom-placeholder.spdx.json
+            echo "✅ Created placeholder SBOM"
           fi
-    - publish: sbom-*.spdx.json
+    - task: PublishPipelineArtifact@1
       displayName: 'Publish SBOMs'
-      artifact: sbom-reports
+      inputs:
+        targetPath: '$(Pipeline.Workspace)/sbom-reports'
+        artifact: 'sbom-reports'
+        publishLocation: 'pipeline'
       condition: always()
 
 - stage: Deploy

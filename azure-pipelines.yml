@@ -464,16 +464,16 @@ stages:
                 TAG="$(IMAGE_TAG)"
                 LOGIN="$(ACR_LOGIN_SERVER)"
                 echo "Injecting tag ${TAG} into manifests for login server ${LOGIN}"
-                echo "Replacing __IMAGE_TAG__ in image references..."
-                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|${LOGIN}/\\([^:]*\\):__IMAGE_TAG__|${LOGIN}/\\1:${TAG}|g"
-                echo "Replacing __IMAGE_TAG__ in labels and all other occurrences..."
-                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|__IMAGE_TAG__|${TAG}|g"
-                echo "✅ Tag injection complete"
-                echo "Verifying replacements..."
-                if grep -r "__IMAGE_TAG__" k8s/ 2>/dev/null; then
-                  echo "⚠️  Warning: Some __IMAGE_TAG__ placeholders were not replaced"
+                echo "Replacing 'latest' in image references with build tag..."
+                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|${LOGIN}/\\([^:]*\\):latest|${LOGIN}/\\1:${TAG}|g"
+                echo "Replacing 'version: latest' in labels with build tag..."
+                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|version: latest|version: ${TAG}|g"
+                echo "Tag injection complete"
+                echo "Verifying image tags..."
+                if grep -r ":latest" k8s/deployments/*.yaml k8s/api-gateway.yaml 2>/dev/null | grep -v "#"; then
+                  echo "Warning: Some 'latest' tags were not replaced"
                 else
-                  echo "✅ All __IMAGE_TAG__ placeholders replaced"
+                  echo "All image tags updated to ${TAG}"
                 fi
           
           - task: Bash@3

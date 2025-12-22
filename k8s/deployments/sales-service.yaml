@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: sales-service
-        image: eteliosacr.azurecr.io/sales-service:__IMAGE_TAG__
+        image: eteliosacr.azurecr.io/sales-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3007

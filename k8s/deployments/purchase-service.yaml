@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: purchase-service
-        image: eteliosacr.azurecr.io/purchase-service:__IMAGE_TAG__
+        image: eteliosacr.azurecr.io/purchase-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3008

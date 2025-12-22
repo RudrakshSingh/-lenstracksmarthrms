@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: financial-service
-        image: eteliosacr.azurecr.io/financial-service:__IMAGE_TAG__
+        image: eteliosacr.azurecr.io/financial-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3009

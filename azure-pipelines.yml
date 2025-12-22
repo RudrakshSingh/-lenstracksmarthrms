@@ -464,7 +464,17 @@ stages:
                 TAG="$(IMAGE_TAG)"
                 LOGIN="$(ACR_LOGIN_SERVER)"
                 echo "Injecting tag ${TAG} into manifests for login server ${LOGIN}"
+                echo "Replacing __IMAGE_TAG__ in image references..."
                 find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|${LOGIN}/\\([^:]*\\):__IMAGE_TAG__|${LOGIN}/\\1:${TAG}|g"
+                echo "Replacing __IMAGE_TAG__ in labels and all other occurrences..."
+                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|__IMAGE_TAG__|${TAG}|g"
+                echo "✅ Tag injection complete"
+                echo "Verifying replacements..."
+                if grep -r "__IMAGE_TAG__" k8s/ 2>/dev/null; then
+                  echo "⚠️  Warning: Some __IMAGE_TAG__ placeholders were not replaced"
+                else
+                  echo "✅ All __IMAGE_TAG__ placeholders replaced"
+                fi
           
           - task: Bash@3
             displayName: 'Create Namespace'

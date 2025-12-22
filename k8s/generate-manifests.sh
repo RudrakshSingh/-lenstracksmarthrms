@@ -89,7 +89,7 @@ metadata:
   namespace: ${NAMESPACE}
   labels:
     app: ${service_name}
-    version: ${service_tag}
+    version: "${service_tag}"
 spec:
   replicas: ${REPLICAS}
   selector:
@@ -99,7 +99,7 @@ spec:
     metadata:
       labels:
         app: ${service_name}
-        version: ${service_tag}
+        version: "${service_tag}"
     spec:
       containers:
       - name: ${service_name}

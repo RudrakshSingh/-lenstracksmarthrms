@@ -6,7 +6,7 @@ version: '3.8'
 
 services:
   auth-service:
-    image: eteliosacr.azurecr.io/auth-service:latest
+    image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:latest
     ports:
       - "3001:3001"
     environment:
@@ -30,7 +30,7 @@ services:
       start_period: 40s
 
   hr-service:
-    image: eteliosacr.azurecr.io/hr-service:latest
+    image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/hr-service:latest
     ports:
       - "3002:3002"
     environment:

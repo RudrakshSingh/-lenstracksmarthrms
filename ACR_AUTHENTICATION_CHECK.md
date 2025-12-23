@@ -122,7 +122,7 @@ az acr login --name $ACR_NAME
 ### Test 4: Test Docker Push (if Docker is available)
 
 ```bash
-ACR_LOGIN_SERVER="eteliosacr.azurecr.io"
+ACR_LOGIN_SERVER="eteliosacr-hvawabdbgge7e0fu.azurecr.io"
 
 # Try to push a test image (this will fail if no image, but login should work)
 docker push $ACR_LOGIN_SERVER/test:latest || echo "Push failed (expected if image doesn't exist)"
@@ -184,7 +184,7 @@ Before running the pipeline, verify:
 - [ ] Service connection type is "Azure Resource Manager"
 - [ ] Service principal has `AcrPush` role on ACR
 - [ ] ACR name is correct: `eteliosacr`
-- [ ] ACR login server is correct: `eteliosacr.azurecr.io`
+- [ ] ACR login server is correct: `eteliosacr-hvawabdbgge7e0fu.azurecr.io`
 - [ ] Pipeline uses `Azure-Service-Connection` for ACR operations
 - [ ] All docker commands are in the same Azure CLI task (authentication persistence)
 

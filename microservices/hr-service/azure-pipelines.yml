@@ -16,7 +16,7 @@ variables:
   serviceName: 'hr-service'
   dockerRegistryServiceConnection: 'AzureContainerRegistry'
   imageRepository: 'hr-service'
-  containerRegistry: 'eteliosacr.azurecr.io'  # Updated to use actual ACR
+  containerRegistry: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'  # Updated to use actual ACR
   dockerfilePath: '$(Build.SourcesDirectory)/microservices/hr-service/Dockerfile'
   tag: '$(Build.BuildId)'
   resourceGroup: 'etelios-hrms-rg'

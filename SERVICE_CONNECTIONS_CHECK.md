@@ -8,7 +8,7 @@ Your pipeline requires **2 service connections** to be created in Azure DevOps:
 - **Type**: Docker Registry
 - **Purpose**: Push Docker images to Azure Container Registry
 - **Used in**: Build stage
-- **Registry**: `eteliosacr.azurecr.io`
+- **Registry**: `eteliosacr-hvawabdbgge7e0fu.azurecr.io`
 
 ### 2. **Azure-Service-Connection** (Azure/AKS Connection)
 - **Type**: Azure Resource Manager
@@ -74,7 +74,7 @@ Look for:
 ### Test ACR Connection
 ```bash
 # In Azure DevOps Pipeline, this should work:
-docker login eteliosacr.azurecr.io
+docker login eteliosacr-hvawabdbgge7e0fu.azurecr.io
 ```
 
 ### Test Azure Connection

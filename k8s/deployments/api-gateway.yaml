@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: api-gateway
-        image: eteliosacr.azurecr.io/api-gateway:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/api-gateway:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
@@ -36,7 +36,7 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/api-gateway:latest"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io/api-gateway:latest"
         - name: API_GATEWAY_HOST
           value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:

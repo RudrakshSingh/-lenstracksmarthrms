@@ -22,12 +22,12 @@ git push origin main
 
 ### What Happens:
 1. **Login to Azure Container Registry (ACR)**
-   - ACR Name: `eteliosacr.azurecr.io`
+   - ACR Name: `eteliosacr-hvawabdbgge7e0fu.azurecr.io`
    - Pipeline authenticates using service connection
 
 2. **Build Docker Images**
-   - API Gateway: `eteliosacr.azurecr.io/api-gateway:latest`
-   - All 19 microservices: `eteliosacr.azurecr.io/{service-name}:latest`
+   - API Gateway: `eteliosacr-hvawabdbgge7e0fu.azurecr.io/api-gateway:latest`
+   - All 19 microservices: `eteliosacr-hvawabdbgge7e0fu.azurecr.io/{service-name}:latest`
    - Each image tagged with Build ID and `latest`
 
 3. **Push to ACR**
@@ -37,9 +37,9 @@ git push origin main
 **Example:**
 ```bash
 # Pipeline builds:
-docker build -t eteliosacr.azurecr.io/auth-service:123 -t eteliosacr.azurecr.io/auth-service:latest
-docker push eteliosacr.azurecr.io/auth-service:123
-docker push eteliosacr.azurecr.io/auth-service:latest
+docker build -t eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:123 -t eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:latest
+docker push eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:123
+docker push eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:latest
 ```
 
 ---
@@ -59,7 +59,7 @@ az aks get-credentials --resource-group Etelios-AKS-RG --name Etelios-AKS
 ```
 - Creates deployment YAML files for all services
 - Uses:
-  - ACR: `eteliosacr.azurecr.io`
+  - ACR: `eteliosacr-hvawabdbgge7e0fu.azurecr.io`
   - Namespace: `etelios-backend-prod`
   - Image tag: Latest build ID
 
@@ -117,7 +117,7 @@ metadata:
 spec:
   replicas: 2
   containers:
-  - image: eteliosacr.azurecr.io/api-gateway:latest
+  - image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/api-gateway:latest
     env:
     - name: K8S_ENV
       value: "true"  # ← This triggers Kubernetes mode!

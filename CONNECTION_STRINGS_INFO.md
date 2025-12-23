@@ -90,7 +90,7 @@ echo -n "mongodb://user:pass@host:27017/dbname" | base64
 ## 📋 Current Configuration
 
 ### Pipeline Service Connections:
-- **ACR**: `eteliosacr-connection` → Points to ACR: `eteliosacr.azurecr.io`
+- **ACR**: `eteliosacr-connection` → Points to ACR: `eteliosacr-hvawabdbgge7e0fu.azurecr.io`
 - **Azure**: `Azure-Service-Connection` → Points to AKS: `Etelios-AKS` in RG: `Etelios-AKS-RG`
 
 ### Application Secrets:

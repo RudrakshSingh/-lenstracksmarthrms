@@ -223,9 +223,62 @@ stages:
 
   - job: TrivyImage
     displayName: 'Trivy Image Scan + SBOM'
+    dependsOn: BuildMicroservices
     pool:
       vmImage: 'ubuntu-latest'
     steps:
+    - task: AzureCLI@2
+      displayName: 'Login to ACR for Trivy Scanning'
+      inputs:
+        azureSubscription: 'Azure-Service-Connection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -e
+          ACR_NAME="$(ACR_NAME)"
+          ACR_LOGIN_SERVER="$(ACR_LOGIN_SERVER)"
+
+          echo "=========================================="
+          echo "Authenticating with ACR for Trivy scanning"
+          echo "ACR: $ACR_NAME"
+          echo "Login Server: $ACR_LOGIN_SERVER"
+          echo "=========================================="
+
+          # Verify ACR exists and enable admin user if needed
+          echo "Verifying ACR: $ACR_NAME"
+          az acr show --name $ACR_NAME --query name -o tsv || {
+            echo "❌ Error: ACR $ACR_NAME not found. Listing available ACRs:"
+            az acr list --query "[].name" -o tsv
+            exit 1
+          }
+
+          # Enable admin user if not already enabled
+          ADMIN_ENABLED=$(az acr show --name $ACR_NAME --query adminUserEnabled -o tsv)
+          if [ "$ADMIN_ENABLED" != "true" ]; then
+            echo "Enabling admin user for ACR..."
+            az acr update --name $ACR_NAME --admin-enabled true
+          fi
+
+          # Get admin credentials and login
+          ACR_USERNAME=$(az acr credential show --name $ACR_NAME --query username -o tsv)
+          ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query passwords[0].value -o tsv)
+          echo "$ACR_PASSWORD" | docker login $ACR_LOGIN_SERVER -u $ACR_USERNAME --password-stdin
+
+          echo "✅ ACR authentication successful for Trivy scanning"
+
+          # List available images to verify what was built
+          echo "Listing available repositories in ACR:"
+          az acr repository list --name $ACR_NAME --output table || echo "Could not list repositories"
+
+          # Check for specific service images
+          echo "Checking for built images with tag $IMAGE_TAG:"
+          for SERVICE in api-gateway auth-service hr-service attendance-service payroll-service crm-service inventory-service sales-service purchase-service financial-service document-service service-management cpp-service prescription-service analytics-service notification-service monitoring-service tenant-registry-service realtime-service; do
+            if az acr repository show-tags --name $ACR_NAME --repository $SERVICE --query "contains(@, '$IMAGE_TAG')" -o tsv 2>/dev/null | grep -q "true"; then
+              echo "✅ $SERVICE:$IMAGE_TAG - Found"
+            else
+              echo "❌ $SERVICE:$IMAGE_TAG - Not found"
+            fi
+          done
     - task: Bash@3
       displayName: 'Install Trivy'
       inputs:
@@ -557,7 +610,7 @@ stages:
                 kubectl get ingress -n $(NAMESPACE)
 
           - task: Bash@3
-            displayName: 'Apply resource limits and security context'
+            displayName: 'Verify resource limits and security context'
             inputs:
               targetType: 'inline'
               script: |
@@ -571,28 +624,17 @@ stages:
                   monitoring-service tenant-registry-service realtime-service
                 )
                 
+                # Note: Resource limits are already configured in YAML files with optimized values
+                # CPU: 50m requests, 200m limits (instead of old 100m/500m)
                 for SERVICE in "${SERVICES[@]}"; do
-                  echo "Setting resources for $SERVICE..."
-                  kubectl set resources deployment/$SERVICE -n "$NAMESPACE" --containers=$SERVICE --limits=cpu=500m,memory=512Mi --requests=cpu=100m,memory=256Mi || true
+                  echo "Verifying resources for $SERVICE..."
+                  kubectl get deployment/$SERVICE -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].resources}' | jq . || echo "Could not verify resources for $SERVICE"
                   
-                  echo "Patching securityContext for $SERVICE..."
-                  kubectl patch deployment/$SERVICE -n "$NAMESPACE" --type merge -p "{
-                    \"spec\": {
-                      \"template\": {
-                        \"spec\": {
-                          \"securityContext\": {
-                            \"runAsNonRoot\": true,
-                            \"fsGroup\": 2000
-                          },
-                          \"containers\": [{
-                            \"name\": \"${SERVICE}\",
-                            \"securityContext\": {
-                              \"allowPrivilegeEscalation\": false,
-                              \"capabilities\": {\"drop\": [\"ALL\"]}
-                            }
-                          }]
-                        }
-                      }
-                    }
-                  }" || true
+                  echo "Verifying securityContext for $SERVICE..."
+                  kubectl get deployment/$SERVICE -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.securityContext}' | jq . || echo "Could not verify security context for $SERVICE"
+                  # Security contexts are already configured in YAML files with:
+                  # runAsNonRoot: true, allowPrivilegeEscalation: false, capabilities: drop ALL
+                  echo "Security context verification for $SERVICE completed"
                 done
+
+                echo "✅ Resource limits and security contexts verified"

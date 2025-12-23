@@ -223,7 +223,6 @@ stages:
 
   - job: TrivyImage
     displayName: 'Trivy Image Scan + SBOM'
-    dependsOn: BuildMicroservices
     pool:
       vmImage: 'ubuntu-latest'
     steps:

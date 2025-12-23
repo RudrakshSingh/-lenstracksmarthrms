@@ -158,12 +158,24 @@ stages:
             echo ""
             echo "🔨 Building $SERVICE..."
             
-            docker build \
-              --rm \
-              -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG \
-              -t $ACR_LOGIN_SERVER/$SERVICE:latest \
-              -f microservices/$SERVICE/Dockerfile \
-              microservices/$SERVICE/
+            # Build with appropriate context (root for services needing shared, service dir otherwise)
+            if [ "$SERVICE" = "hr-service" ]; then
+              # HR service needs shared directory
+              docker build \
+                --rm \
+                -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG \
+                -t $ACR_LOGIN_SERVER/$SERVICE:latest \
+                -f microservices/$SERVICE/Dockerfile \
+                .
+            else
+              # Other services use their own directory
+              docker build \
+                --rm \
+                -t $ACR_LOGIN_SERVER/$SERVICE:$IMAGE_TAG \
+                -t $ACR_LOGIN_SERVER/$SERVICE:latest \
+                -f microservices/$SERVICE/Dockerfile \
+                microservices/$SERVICE/
+            fi
             
             # Push both tags
             echo "Pushing $SERVICE to ACR..."

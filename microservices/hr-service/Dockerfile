@@ -32,9 +32,8 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 # Copy application code (includes ecosystem.config.js)
 COPY --chown=nodejs:nodejs . .
 
-# Copy shared utilities directory (if available in build context)
-# Note: In production builds, shared directory may need to be copied differently
-COPY --chown=nodejs:nodejs ../shared ./shared 2>/dev/null || echo "Shared directory not available in build context"
+# Copy shared utilities directory
+COPY --chown=nodejs:nodejs ../shared ./shared
 
 # Create storage directories
 RUN mkdir -p storage/documents storage/exports storage/images storage/temp logs && \

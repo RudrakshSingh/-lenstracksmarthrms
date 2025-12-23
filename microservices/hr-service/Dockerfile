@@ -32,6 +32,9 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 # Copy application code (includes ecosystem.config.js)
 COPY --chown=nodejs:nodejs . .
 
+# Copy shared utilities directory
+COPY --chown=nodejs:nodejs ../shared ./shared
+
 # Create storage directories
 RUN mkdir -p storage/documents storage/exports storage/images storage/temp logs && \
     chown -R nodejs:nodejs storage logs

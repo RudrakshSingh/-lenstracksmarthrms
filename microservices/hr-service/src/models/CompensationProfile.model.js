@@ -169,10 +169,7 @@ const compensationProfileSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-compensationProfileSchema.index({ employee: 1 });
-compensationProfileSchema.index({ employeeId: 1 });
-compensationProfileSchema.index({ is_active: 1 });
+// Additional indexes (field-level indexes already defined above)
 compensationProfileSchema.index({ effective_from: 1, effective_to: 1 });
 
 // Virtual for total allowances

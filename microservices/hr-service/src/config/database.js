@@ -13,11 +13,28 @@ const logger = winston.createLogger({
 
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/etelios_hrms';
+    let mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/etelios_hrms';
+
+    // Validate MongoDB URI format
+    if (!mongoURI.startsWith('mongodb://') && !mongoURI.startsWith('mongodb+srv://')) {
+      logger.error('Invalid MongoDB URI scheme. URI must start with mongodb:// or mongodb+srv://', {
+        providedURI: mongoURI.substring(0, 50) + '...'
+      });
+      throw new Error('Invalid scheme, expected connection string to start with "mongodb://" or "mongodb+srv://"');
+    }
     
     const conn = await mongoose.connect(mongoURI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 30000, // 30 seconds
+      socketTimeoutMS: 60000, // 60 seconds
+      connectTimeoutMS: 30000, // 30 seconds
+      maxPoolSize: 10, // Maximum connections
+      minPoolSize: 2, // Minimum connections
+      maxIdleTimeMS: 30000, // Close idle connections
+      retryWrites: true,
+      retryReads: true,
+      // Optimize for performance
+      bufferCommands: false,
+      bufferMaxEntries: 0
     });
 
     logger.info('MongoDB connected successfully', {

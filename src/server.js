@@ -19,6 +19,24 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const servicesConfig = require('./config/services.config');
 const axios = require('axios');
 
+// Circuit breaker for service resilience
+let circuitBreaker;
+try {
+  circuitBreaker = require('./middleware/circuit-breaker');
+  logger.info('Circuit breaker middleware loaded successfully');
+} catch (err) {
+  logger.warn('Circuit breaker middleware not available, proceeding without circuit breaker protection', { error: err.message });
+}
+
+// Load balancer for service distribution
+let loadBalancer;
+try {
+  loadBalancer = require('./middleware/load-balancer');
+  logger.info('Load balancer middleware loaded successfully');
+} catch (err) {
+  logger.warn('Load balancer middleware not available, proceeding without load balancing', { error: err.message });
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -188,20 +206,105 @@ app.use('/public', express.static(path.join(__dirname, 'public'), {
 
 // Health check - optimized for speed
 app.get('/health', (req, res) => {
-  res.status(200).json({
+  const healthResponse = {
     status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'Etelios Main Server',
     version: '1.0.0',
     port: process.env.PORT || process.env.WEBSITES_PORT || 3000,
     environment: process.env.NODE_ENV || 'development'
-  });
+  };
+
+  // Add circuit breaker health if available
+  if (circuitBreaker) {
+    healthResponse.circuitBreakers = circuitBreaker.getCircuitBreakerHealth();
+  }
+
+  // Add load balancer metrics if available
+  if (loadBalancer) {
+    healthResponse.loadBalancer = loadBalancer.getLoadBalancerMetrics();
+  }
+
+  res.status(200).json(healthResponse);
 });
 
 // Handle common typo: /hralth -> /health (redirect)
 app.get('/hralth', (req, res) => {
   res.redirect(301, '/health');
 });
+
+// Circuit breaker admin endpoints
+if (circuitBreaker) {
+  app.get('/admin/circuit-breakers', (req, res) => {
+    res.json({
+      status: 'OK',
+      circuitBreakers: circuitBreaker.getCircuitBreakerHealth(),
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  app.post('/admin/circuit-breakers/reset/:serviceName', (req, res) => {
+    const { serviceName } = req.params;
+    const success = circuitBreaker.resetCircuitBreaker(serviceName);
+
+    if (success) {
+      res.json({
+        status: 'OK',
+        message: `Circuit breaker reset for ${serviceName}`,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(404).json({
+        status: 'ERROR',
+        message: `Circuit breaker not found for ${serviceName}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+}
+
+// Load balancer admin endpoints
+if (loadBalancer) {
+  app.get('/admin/load-balancer', (req, res) => {
+    res.json({
+      status: 'OK',
+      loadBalancer: loadBalancer.getLoadBalancerMetrics(),
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  app.post('/admin/load-balancer/register/:serviceName', express.json(), (req, res) => {
+    const { serviceName } = req.params;
+    const { instanceUrl, weight = 1 } = req.body;
+
+    if (!instanceUrl) {
+      return res.status(400).json({
+        status: 'ERROR',
+        message: 'instanceUrl is required',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    loadBalancer.registerServiceInstance(serviceName, instanceUrl, weight);
+    res.json({
+      status: 'OK',
+      message: `Service instance registered: ${serviceName} -> ${instanceUrl}`,
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  app.delete('/admin/load-balancer/unregister/:serviceName/:instanceUrl', (req, res) => {
+    const { serviceName, instanceUrl } = req.params;
+    const decodedInstanceUrl = decodeURIComponent(instanceUrl);
+
+    loadBalancer.unregisterServiceInstance(serviceName, decodedInstanceUrl);
+    res.json({
+      status: 'OK',
+      message: `Service instance unregistered: ${serviceName} -> ${decodedInstanceUrl}`,
+      timestamp: new Date().toISOString()
+    });
+  });
+}
 
 // Cache utility
 const cache = require('./utils/cache');
@@ -333,23 +436,44 @@ const sortedServices = Object.entries(allServices).sort((a, b) => {
   return b[1].basePath.length - a[1].basePath.length;
 });
 
+// Initialize load balancer with current services
+if (loadBalancer) {
+  loadBalancer.initializeWithCurrentServices(servicesConfig);
+}
+
 sortedServices.forEach(([key, service]) => {
   const serviceUrl = service.url;
   const basePath = service.basePath;
-  
+  const serviceName = key;
+
   if (service.isWebSocket) {
     return;
   }
-  
+
   // Use serviceUrl as-is (localhost for single App Service, or external URL if set via env var)
   let targetUrl = serviceUrl;
   // Don't change localhost URLs - they're correct for single App Service architecture
-  
+
+  // Apply circuit breaker middleware if available
+  if (circuitBreaker) {
+    app.use(basePath, circuitBreaker.circuitBreakerMiddleware(serviceName, targetUrl));
+  }
+
   // Optimized proxy middleware - minimal logging with HTTPS support
   // IMPORTANT: Forward the full path including basePath to the target service
   // Services expect full paths like /api/hr/employees, not just /employees
   const proxyMiddleware = createProxyMiddleware({
-    target: targetUrl,
+    // Dynamic target selection using load balancer
+    router: (req) => {
+      if (loadBalancer) {
+        const balancedUrl = loadBalancer.getNextInstance(serviceName);
+        if (balancedUrl) {
+          return balancedUrl;
+        }
+      }
+      // Fallback to original URL
+      return targetUrl;
+    },
     changeOrigin: true,
     timeout: 10000,
     proxyTimeout: 10000,

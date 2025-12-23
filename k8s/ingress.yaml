@@ -9,10 +9,45 @@ metadata:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Advanced Load Balancing
+    nginx.ingress.kubernetes.io/upstream-fail-timeout: "10"
+    nginx.ingress.kubernetes.io/upstream-max-fails: "3"
+    nginx.ingress.kubernetes.io/upstream-max-conns: "0"  # Unlimited connections
+
+    # Session Affinity (Sticky Sessions)
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "sticky"
+    nginx.ingress.kubernetes.io/cookie-name: "etelios_session"
+    nginx.ingress.kubernetes.io/cookie-expires: "86400"
+    nginx.ingress.kubernetes.io/cookie-max-age: "86400"
+
+    # Rate Limiting (Advanced)
     nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/rate-limit-burst: "20"
+    nginx.ingress.kubernetes.io/rate-limit-status-code: "429"
+
+    # Request/Response Limits
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-timeout: "30"
+
+    # Load Balancing Algorithm
+    nginx.ingress.kubernetes.io/load-balance: "least_conn"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+
+    # Health Checks
+    nginx.ingress.kubernetes.io/healthcheck-path: "/health"
+    nginx.ingress.kubernetes.io/healthcheck-status: "200"
+
+    # Connection Handling
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "4k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "8k"
 spec:
   tls:
   - hosts:

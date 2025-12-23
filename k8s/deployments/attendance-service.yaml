@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: attendance-service
-        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/attendance-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/attendance-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3003
@@ -36,7 +36,7 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         envFrom:
         - configMapRef:
             name: etelios-config
@@ -45,10 +45,10 @@ spec:
         resources:
           requests:
             memory: "256Mi"
-            cpu: "100m"
+            cpu: "50m"
           limits:
             memory: "512Mi"
-            cpu: "500m"
+            cpu: "200m"
         livenessProbe:
           httpGet:
             path: /health

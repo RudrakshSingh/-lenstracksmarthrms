@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: cpp-service
-        image: eteliosacr.azurecr.io/cpp-service:latest
+        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/cpp-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3012
@@ -35,6 +35,8 @@ spec:
           value: "cpp-service"
         - name: K8S_ENV
           value: "true"
+        - name: API_GATEWAY_HOST
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
             name: etelios-config

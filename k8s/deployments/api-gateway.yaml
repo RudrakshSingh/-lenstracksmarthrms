@@ -35,6 +35,10 @@ spec:
           value: "api-gateway"
         - name: K8S_ENV
           value: "true"
+        - name: API_GATEWAY_HOST
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/api-gateway:latest"
+        - name: API_GATEWAY_HOST
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
             name: etelios-config

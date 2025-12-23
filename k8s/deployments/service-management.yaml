@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: service-management
-        image: eteliosacr.azurecr.io/service-management:latest
+        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/service-management:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3011
@@ -35,6 +35,8 @@ spec:
           value: "service-management"
         - name: K8S_ENV
           value: "true"
+        - name: API_GATEWAY_HOST
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
             name: etelios-config

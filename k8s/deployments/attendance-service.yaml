@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: attendance-service
-        image: eteliosacr.azurecr.io/attendance-service:latest
+        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/attendance-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3003
@@ -35,6 +35,8 @@ spec:
           value: "attendance-service"
         - name: K8S_ENV
           value: "true"
+        - name: API_GATEWAY_HOST
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
             name: etelios-config

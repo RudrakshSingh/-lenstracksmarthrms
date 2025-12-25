@@ -5,7 +5,10 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY microservices/tenant-management-service/package*.json ./
+
+# Copy shared utilities directory
+COPY microservices/shared ./shared
 
 # Install dependencies
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
@@ -26,8 +29,12 @@ WORKDIR /app
 # Copy dependencies from builder
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
+# Copy shared utilities from builder
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
+
 # Copy application code
-COPY --chown=nodejs:nodejs . .
+# Copy application code from service directory
+COPY --chown=nodejs:nodejs microservices/tenant-management-service/ ./
 
 # Create storage directories
 RUN mkdir -p logs && \

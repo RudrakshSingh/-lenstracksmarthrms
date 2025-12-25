@@ -4,11 +4,14 @@ FROM node:22-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from service directory
+COPY microservices/hr-service/package*.json ./
 
 # Install dependencies
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
+
+# Copy shared utilities directory
+COPY microservices/shared ./shared
 
 # Production stage
 FROM node:22-alpine
@@ -29,11 +32,11 @@ WORKDIR /app
 # Copy dependencies from builder
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
-# Copy application code (includes ecosystem.config.js)
-COPY --chown=nodejs:nodejs . .
+# Copy shared utilities
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
-# Copy shared utilities directory
-COPY --chown=nodejs:nodejs ../shared ./shared
+# Copy application code from service directory
+COPY --chown=nodejs:nodejs microservices/hr-service/ .
 
 # Create storage directories
 RUN mkdir -p storage/documents storage/exports storage/images storage/temp logs && \

@@ -5,7 +5,10 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY microservices/inventory-service/package*.json ./
+
+# Copy shared utilities directory
+COPY microservices/shared ./shared
 
 # Install all dependencies (including dev dependencies for build)
 RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi && npm cache clean --force
@@ -27,7 +30,7 @@ RUN apk add --no-cache \
     && adduser -S nodejs -u 1001
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY microservices/inventory-service/package*.json ./
 
 # Install only production dependencies
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force

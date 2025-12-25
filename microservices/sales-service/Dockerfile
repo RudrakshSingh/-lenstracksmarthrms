@@ -1,39 +1,30 @@
-# Multi-stage build for Sales Service
+# Multi-stage build for sales-service Service
 FROM node:22-alpine AS builder
 
 # Set working directory
 WORKDIR /app
 
-# Copy dependencies from builder
-COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
-
-# Copy shared utilities from builder
-COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
-
-# Copy application code from builder stage
+# Copy package files from service directory
 COPY microservices/sales-service/package*.json ./
 
 # Copy shared utilities directory
 COPY microservices/shared ./shared
 
-# Install all dependencies (including dev dependencies for build)
-RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi && npm cache clean --force
-
-# Copy source code
-COPY . .
+# Install dependencies
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Production stage
-FROM node:22-alpine AS production
+FROM node:22-alpine
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init curl
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
 
 # Set working directory
 WORKDIR /app
-
-# Install system dependencies
-RUN apk add --no-cache \
-    dumb-init \
-    curl \
-    && addgroup -g 1001 -S nodejs \
-    && adduser -S nodejs -u 1001
 
 # Copy dependencies from builder
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
@@ -41,29 +32,22 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 # Copy shared utilities from builder
 COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
-# Copy application code from builder stage
-COPY microservices/sales-service/package*.json ./
+# Copy application code from service directory
+COPY --chown=nodejs:nodejs microservices/sales-service/ ./
 
-# Install only production dependencies
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
-
-# Copy application code from builder stage
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/package*.json ./
-
-# Create necessary directories
-RUN mkdir -p logs storage/documents storage/images storage/backups storage/temp \
-    && chown -R nodejs:nodejs /app
+# Create storage directories
+RUN mkdir -p storage logs && \
+    chown -R nodejs:nodejs storage logs
 
 # Switch to non-root user
 USER nodejs
 
 # Expose port
-EXPOSE 3007
+EXPOSE 3006
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD node -e "const port = process.env.PORT || 3007; require('http').get('http://localhost:' + port + '/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"
+  CMD node -e "require('http').get('http://localhost:3006/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

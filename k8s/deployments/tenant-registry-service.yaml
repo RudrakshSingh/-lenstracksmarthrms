@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: tenant-registry-service
-        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/tenant-registry-service:latest
+        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/tenant-registry-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3020
@@ -36,7 +36,14 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: etelios-secrets
+              key: TENANT_REGISTRY_SERVICE_SERVICE_DB_URI
+        - name: DB_NAME
+          value: "tenant_registry_db"
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
             name: etelios-config

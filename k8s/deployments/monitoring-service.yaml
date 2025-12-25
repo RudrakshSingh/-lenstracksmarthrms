@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: monitoring-service
-        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/monitoring-service:latest
+        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/monitoring-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3016
@@ -36,7 +36,14 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: etelios-secrets
+              key: MONITORING_SERVICE_SERVICE_DB_URI
+        - name: DB_NAME
+          value: "monitoring_db"
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
             name: etelios-config

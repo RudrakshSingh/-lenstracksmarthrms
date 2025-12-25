@@ -15,6 +15,20 @@ const connectDB = async () => {
   try {
     let mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/etelios_hrms';
 
+    // If DB_NAME is provided, ensure it matches the URI database name
+    const dbName = process.env.DB_NAME;
+    if (dbName) {
+      // Extract database name from URI and validate
+      const uriMatch = mongoURI.match(/\/([^/?]*)/);
+      const uriDbName = uriMatch ? uriMatch[1] : null;
+      if (uriDbName && uriDbName !== dbName) {
+        logger.warn(`Database name mismatch: URI specifies '${uriDbName}', but DB_NAME is '${dbName}'`, {
+          uriDbName,
+          envDbName: dbName
+        });
+      }
+    }
+
     // Validate MongoDB URI format
     if (!mongoURI.startsWith('mongodb://') && !mongoURI.startsWith('mongodb+srv://')) {
       logger.error('Invalid MongoDB URI scheme. URI must start with mongodb:// or mongodb+srv://', {

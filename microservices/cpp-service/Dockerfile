@@ -29,11 +29,11 @@ RUN apk add --no-cache \
     && addgroup -g 1001 -S nodejs \
     && adduser -S nodejs -u 1001
 
-# Copy package files
-COPY microservices/cpp-service/package*.json ./
+# Copy dependencies from builder
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
-# Install only production dependencies
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
+# Copy shared utilities from builder
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
 # Copy application code from builder stage
 COPY --from=builder /app/src ./src

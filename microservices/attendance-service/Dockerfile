@@ -10,11 +10,8 @@ COPY microservices/attendance-service/package*.json ./
 # Copy shared utilities directory
 COPY microservices/shared ./shared
 
-# Install all dependencies (including dev dependencies for build)
-RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi && npm cache clean --force
-
-# Copy source code
-COPY . .
+# Install dependencies
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Production stage
 FROM node:22-alpine AS production
@@ -29,15 +26,14 @@ RUN apk add --no-cache \
     && addgroup -g 1001 -S nodejs \
     && adduser -S nodejs -u 1001
 
-# Copy package files
-COPY microservices/attendance-service/package*.json ./
+# Copy dependencies from builder
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
-# Install only production dependencies
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
+# Copy shared utilities from builder
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
-# Copy application code from builder stage
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/package*.json ./
+# Copy application code from service directory
+COPY --chown=nodejs:nodejs microservices/attendance-service/ ./
 
 # Create necessary directories
 RUN mkdir -p logs \

@@ -32,7 +32,6 @@ COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 # Copy shared utilities from builder
 COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
 
-# Copy application code
 # Copy application code from service directory
 COPY --chown=nodejs:nodejs microservices/auth-service/ ./
 

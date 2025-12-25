@@ -4,7 +4,13 @@ FROM node:22-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy dependencies from builder
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Copy shared utilities from builder
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
+
+# Copy application code from builder stage
 COPY microservices/tenant-registry-service/package*.json ./
 
 # Copy shared utilities directory
@@ -29,7 +35,13 @@ RUN apk add --no-cache \
     && addgroup -g 1001 -S nodejs \
     && adduser -S nodejs -u 1001
 
-# Copy package files
+# Copy dependencies from builder
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+
+# Copy shared utilities from builder
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
+
+# Copy application code from builder stage
 COPY microservices/tenant-registry-service/package*.json ./
 
 # Install only production dependencies

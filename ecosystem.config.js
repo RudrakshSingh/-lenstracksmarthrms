@@ -14,6 +14,12 @@
  * 
  * To run only API Gateway (without microservices):
  *   Set environment variable: RUN_ONLY_GATEWAY=true
+ * 
+ * Logging:
+ *   - All logs are written to stdout/stderr (/dev/stdout, /dev/stderr)
+ *   - This is required for Kubernetes containers running as non-root users
+ *   - Kubernetes automatically captures stdout/stderr logs
+ *   - Do NOT use file-based logging in containers (permission denied errors)
  */
 
 // Check if we should only run the API Gateway
@@ -38,8 +44,8 @@ const apps = [
       CORS_ORIGIN: '*'
       // NO SERVICE_NAME - API Gateway doesn't need it
     },
-    error_file: './logs/gateway-error.log',
-    out_file: './logs/gateway-out.log',
+    error_file: '/dev/stderr',
+    out_file: '/dev/stdout',
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     merge_logs: true,
     autorestart: true,
@@ -67,8 +73,8 @@ if (runAllServices) {
         AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
         CORS_ORIGIN: '*'
       },
-      error_file: './logs/auth-error.log',
-      out_file: './logs/auth-out.log',
+      error_file: '/dev/stderr',
+      out_file: '/dev/stdout',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       autorestart: true,
       max_restarts: 10,
@@ -91,8 +97,8 @@ if (runAllServices) {
         AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
         CORS_ORIGIN: '*'
       },
-      error_file: './logs/hr-error.log',
-      out_file: './logs/hr-out.log',
+      error_file: '/dev/stderr',
+      out_file: '/dev/stdout',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       autorestart: true,
       max_restarts: 10,
@@ -115,8 +121,8 @@ if (runAllServices) {
         AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
         CORS_ORIGIN: '*'
       },
-      error_file: './logs/attendance-error.log',
-      out_file: './logs/attendance-out.log',
+      error_file: '/dev/stderr',
+      out_file: '/dev/stdout',
       autorestart: true,
       max_restarts: 10,
       min_uptime: '10s'
@@ -138,8 +144,8 @@ if (runAllServices) {
         AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
         CORS_ORIGIN: '*'
       },
-      error_file: './logs/payroll-error.log',
-      out_file: './logs/payroll-out.log',
+      error_file: '/dev/stderr',
+      out_file: '/dev/stdout',
       autorestart: true,
       max_restarts: 10,
       min_uptime: '10s'
@@ -161,8 +167,8 @@ if (runAllServices) {
         AZURE_KEY_VAULT_NAME: 'etelios-keyvault',
         CORS_ORIGIN: '*'
       },
-      error_file: './logs/crm-error.log',
-      out_file: './logs/crm-out.log',
+      error_file: '/dev/stderr',
+      out_file: '/dev/stdout',
       autorestart: true,
       max_restarts: 10,
       min_uptime: '10s'

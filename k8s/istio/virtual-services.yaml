@@ -1,0 +1,182 @@
+---
+# VirtualService for auth-service (Production) - Canary Routing + Traffic Mirroring
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: auth-service
+  namespace: etelios-backend-prod
+spec:
+  hosts:
+    - auth-service
+  http:
+    # Canary routing: 90% to prod, 10% to dev
+    - match:
+        - headers:
+            canary:
+              exact: "true"
+      route:
+        - destination:
+            host: auth-service
+            subset: v2  # Dev version
+          weight: 100
+    # Default: 90% prod, 10% dev
+    - route:
+        - destination:
+            host: auth-service
+            subset: v1  # Production version
+          weight: 90
+        - destination:
+            host: auth-service
+            subset: v2  # Dev version
+          weight: 10
+      mirror:
+        host: auth-service.etelios-backend-dev.svc.cluster.local
+        subset: v2
+      mirrorPercentage:
+        value: 100  # Mirror 100% of traffic to dev for testing
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: 5xx,gateway-error,connect-failure,refused-stream
+
+---
+# VirtualService for hr-service (Production) - Canary Routing + Traffic Mirroring
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: hr-service
+  namespace: etelios-backend-prod
+spec:
+  hosts:
+    - hr-service
+  http:
+    - match:
+        - headers:
+            canary:
+              exact: "true"
+      route:
+        - destination:
+            host: hr-service
+            subset: v2
+          weight: 100
+    - route:
+        - destination:
+            host: hr-service
+            subset: v1
+          weight: 90
+        - destination:
+            host: hr-service
+            subset: v2
+          weight: 10
+      mirror:
+        host: hr-service.etelios-backend-dev.svc.cluster.local
+        subset: v2
+      mirrorPercentage:
+        value: 100
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: 5xx,gateway-error,connect-failure,refused-stream
+
+---
+# VirtualService for attendance-service (Production) - Canary Routing + Traffic Mirroring
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: attendance-service
+  namespace: etelios-backend-prod
+spec:
+  hosts:
+    - attendance-service
+  http:
+    - match:
+        - headers:
+            canary:
+              exact: "true"
+      route:
+        - destination:
+            host: attendance-service
+            subset: v2
+          weight: 100
+    - route:
+        - destination:
+            host: attendance-service
+            subset: v1
+          weight: 90
+        - destination:
+            host: attendance-service
+            subset: v2
+          weight: 10
+      mirror:
+        host: attendance-service.etelios-backend-dev.svc.cluster.local
+        subset: v2
+      mirrorPercentage:
+        value: 100
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: 5xx,gateway-error,connect-failure,refused-stream
+
+---
+# VirtualService for auth-service (Dev) - Direct routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: auth-service
+  namespace: etelios-backend-dev
+spec:
+  hosts:
+    - auth-service
+  http:
+    - route:
+        - destination:
+            host: auth-service
+            subset: v2
+          weight: 100
+      retries:
+        attempts: 2
+        perTryTimeout: 10s
+        retryOn: 5xx,gateway-error,connect-failure
+
+---
+# VirtualService for hr-service (Dev)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: hr-service
+  namespace: etelios-backend-dev
+spec:
+  hosts:
+    - hr-service
+  http:
+    - route:
+        - destination:
+            host: hr-service
+            subset: v2
+          weight: 100
+      retries:
+        attempts: 2
+        perTryTimeout: 10s
+        retryOn: 5xx,gateway-error,connect-failure
+
+---
+# VirtualService for attendance-service (Dev)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: attendance-service
+  namespace: etelios-backend-dev
+spec:
+  hosts:
+    - attendance-service
+  http:
+    - route:
+        - destination:
+            host: attendance-service
+            subset: v2
+          weight: 100
+      retries:
+        attempts: 2
+        perTryTimeout: 10s
+        retryOn: 5xx,gateway-error,connect-failure
+

@@ -1,0 +1,28 @@
+---
+# ConfigMap for Production Environment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etelios-config-prod
+  namespace: etelios-backend-prod
+data:
+  NODE_ENV: "production"
+  K8S_ENV: "true"
+  CORS_ORIGIN: "*"
+  USE_KEY_VAULT: "true"
+  AZURE_KEY_VAULT_URL: "https://etelios-keyvault.vault.azure.net/"
+  AZURE_KEY_VAULT_NAME: "etelios-keyvault"
+  LOG_LEVEL: "info"
+  # Service URLs (internal Kubernetes DNS)
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  HR_SERVICE_URL: "http://hr-service:3002"
+  ATTENDANCE_SERVICE_URL: "http://attendance-service:3003"
+  # Redis Configuration
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_TLS: "0"
+  REDIS_DISABLED: "0"
+  # Monitoring
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+

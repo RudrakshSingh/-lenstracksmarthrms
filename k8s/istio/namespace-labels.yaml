@@ -1,0 +1,22 @@
+---
+# Enable Istio sidecar injection for production namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: etelios-backend-prod
+  labels:
+    name: etelios-backend-prod
+    environment: production
+    istio-injection: enabled
+
+---
+# Enable Istio sidecar injection for dev namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: etelios-backend-dev
+  labels:
+    name: etelios-backend-dev
+    environment: development
+    istio-injection: enabled
+

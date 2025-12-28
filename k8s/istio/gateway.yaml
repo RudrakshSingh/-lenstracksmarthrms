@@ -1,0 +1,284 @@
+---
+# Istio Gateway for Production
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: etelios-gateway-prod
+  namespace: etelios-backend-prod
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - api.etelios.com
+      # Redirect HTTP to HTTPS
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - api.etelios.com
+      tls:
+        mode: SIMPLE
+        credentialName: etelios-tls
+
+---
+# Istio Gateway for Development
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: etelios-gateway-dev
+  namespace: etelios-backend-dev
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - dev.api.etelios.com
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - dev.api.etelios.com
+      tls:
+        mode: SIMPLE
+        credentialName: etelios-tls-dev
+
+---
+# VirtualService for Production Ingress Routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: etelios-ingress-prod
+  namespace: etelios-backend-prod
+spec:
+  hosts:
+    - api.etelios.com
+  gateways:
+    - etelios-gateway-prod
+  http:
+    # Auth Service
+    - match:
+        - uri:
+            prefix: /api/auth
+      route:
+        - destination:
+            host: auth-service
+            port:
+              number: 3001
+          weight: 90
+        - destination:
+            host: auth-service
+            port:
+              number: 3001
+            subset: v2
+          weight: 10
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+      timeout: 30s
+      corsPolicy:
+        allowOrigins:
+          - exact: "*"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        allowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+        maxAge: 24h
+    # HR Service
+    - match:
+        - uri:
+            prefix: /api/hr
+        - uri:
+            prefix: /api/transfers
+        - uri:
+            prefix: /api/hr-letter
+      route:
+        - destination:
+            host: hr-service
+            port:
+              number: 3002
+          weight: 90
+        - destination:
+            host: hr-service
+            port:
+              number: 3002
+            subset: v2
+          weight: 10
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+      timeout: 30s
+      corsPolicy:
+        allowOrigins:
+          - exact: "*"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        allowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+        maxAge: 24h
+    # Attendance Service
+    - match:
+        - uri:
+            prefix: /api/attendance
+        - uri:
+            prefix: /api/geofencing
+      route:
+        - destination:
+            host: attendance-service
+            port:
+              number: 3003
+          weight: 90
+        - destination:
+            host: attendance-service
+            port:
+              number: 3003
+            subset: v2
+          weight: 10
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+      timeout: 30s
+      corsPolicy:
+        allowOrigins:
+          - exact: "*"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        allowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+        maxAge: 24h
+
+---
+# VirtualService for Development Ingress Routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: etelios-ingress-dev
+  namespace: etelios-backend-dev
+spec:
+  hosts:
+    - dev.api.etelios.com
+  gateways:
+    - etelios-gateway-dev
+  http:
+    # Auth Service
+    - match:
+        - uri:
+            prefix: /api/auth
+      route:
+        - destination:
+            host: auth-service
+            port:
+              number: 3001
+      retries:
+        attempts: 2
+        perTryTimeout: 10s
+      timeout: 30s
+      corsPolicy:
+        allowOrigins:
+          - exact: "*"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        allowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+        maxAge: 24h
+    # HR Service
+    - match:
+        - uri:
+            prefix: /api/hr
+        - uri:
+            prefix: /api/transfers
+        - uri:
+            prefix: /api/hr-letter
+      route:
+        - destination:
+            host: hr-service
+            port:
+              number: 3002
+      retries:
+        attempts: 2
+        perTryTimeout: 10s
+      timeout: 30s
+      corsPolicy:
+        allowOrigins:
+          - exact: "*"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        allowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+        maxAge: 24h
+    # Attendance Service
+    - match:
+        - uri:
+            prefix: /api/attendance
+        - uri:
+            prefix: /api/geofencing
+      route:
+        - destination:
+            host: attendance-service
+            port:
+              number: 3003
+      retries:
+        attempts: 2
+        perTryTimeout: 10s
+      timeout: 30s
+      corsPolicy:
+        allowOrigins:
+          - exact: "*"
+        allowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        allowHeaders:
+          - authorization
+          - content-type
+          - x-request-id
+        maxAge: 24h
+

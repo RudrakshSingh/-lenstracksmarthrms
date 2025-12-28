@@ -1,0 +1,109 @@
+---
+# Attendance Service Deployment - Development
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attendance-service
+  namespace: etelios-backend-dev
+  labels:
+    app: attendance-service
+    version: "dev"
+    environment: development
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: attendance-service
+      version: "dev"
+  template:
+    metadata:
+      labels:
+        app: attendance-service
+        version: "dev"
+        environment: development
+      annotations:
+        sidecar.istio.io/inject: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3003"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: attendance-service
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/attendance-service:dev
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3003
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "development"
+        - name: PORT
+          value: "3003"
+        - name: SERVICE_NAME
+          value: "attendance-service"
+        - name: K8S_ENV
+          value: "true"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: etelios-secrets-dev
+              key: ATTENDANCE_SERVICE_DB_URI
+        - name: DB_NAME
+          value: "attendance_db_dev"
+        envFrom:
+        - configMapRef:
+            name: etelios-config-dev
+        - secretRef:
+            name: etelios-secrets-dev
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3003
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+---
+# Attendance Service - Development
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendance-service
+  namespace: etelios-backend-dev
+  labels:
+    app: attendance-service
+    service: attendance-service
+spec:
+  type: ClusterIP
+  selector:
+    app: attendance-service
+  ports:
+  - port: 3003
+    targetPort: 3003
+    protocol: TCP
+    name: http
+

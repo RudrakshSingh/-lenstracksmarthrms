@@ -1,0 +1,189 @@
+---
+# DestinationRule for auth-service (Production)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: auth-service
+  namespace: etelios-backend-prod
+spec:
+  host: auth-service
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN  # Load balancing algorithm
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 10
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+        maxRetries: 3
+        idleTimeout: 90s
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+  subsets:
+    - name: v1
+      labels:
+        version: latest
+    - name: v2
+      labels:
+        version: dev
+
+---
+# DestinationRule for hr-service (Production)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: hr-service
+  namespace: etelios-backend-prod
+spec:
+  host: hr-service
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 10
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+        maxRetries: 3
+        idleTimeout: 90s
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+  subsets:
+    - name: v1
+      labels:
+        version: latest
+    - name: v2
+      labels:
+        version: dev
+
+---
+# DestinationRule for attendance-service (Production)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: attendance-service
+  namespace: etelios-backend-prod
+spec:
+  host: attendance-service
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 10
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+        maxRetries: 3
+        idleTimeout: 90s
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 50
+  subsets:
+    - name: v1
+      labels:
+        version: latest
+    - name: v2
+      labels:
+        version: dev
+
+---
+# DestinationRule for auth-service (Dev)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: auth-service
+  namespace: etelios-backend-dev
+spec:
+  host: auth-service
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 5
+        http2MaxRequests: 50
+        maxRequestsPerConnection: 2
+        maxRetries: 2
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 30
+
+---
+# DestinationRule for hr-service (Dev)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: hr-service
+  namespace: etelios-backend-dev
+spec:
+  host: hr-service
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 5
+        http2MaxRequests: 50
+        maxRequestsPerConnection: 2
+        maxRetries: 2
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 30
+
+---
+# DestinationRule for attendance-service (Dev)
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: attendance-service
+  namespace: etelios-backend-dev
+spec:
+  host: attendance-service
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+    connectionPool:
+      tcp:
+        maxConnections: 50
+        connectTimeout: 30s
+      http:
+        http1MaxPendingRequests: 5
+        http2MaxRequests: 50
+        maxRequestsPerConnection: 2
+        maxRetries: 2
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 30
+

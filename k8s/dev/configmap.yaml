@@ -1,0 +1,26 @@
+---
+# ConfigMap for Development Environment
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: etelios-config-dev
+  namespace: etelios-backend-dev
+data:
+  NODE_ENV: "development"
+  K8S_ENV: "true"
+  CORS_ORIGIN: "*"
+  USE_KEY_VAULT: "false"
+  LOG_LEVEL: "debug"
+  # Service URLs (internal Kubernetes DNS)
+  AUTH_SERVICE_URL: "http://auth-service:3001"
+  HR_SERVICE_URL: "http://hr-service:3002"
+  ATTENDANCE_SERVICE_URL: "http://attendance-service:3003"
+  # Redis Configuration
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_TLS: "0"
+  REDIS_DISABLED: "0"
+  # Monitoring
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+

@@ -1,380 +1,114 @@
+
+!env.example
+# Azure specific
+# Backup files
+# Build artifacts
+# Build outputs
+# Coverage directory used by tools like istanbul
+# Dependencies
+# Dependency directories
+# Development artifacts
+# Docker
 # Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-production.env
-azure-environment-config.env
-environment-config.env
-local.env
-
-# Node modules
-node_modules/
-*/node_modules/
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-.nyc_output/
-
-# Dependency directories
-jspm_packages/
-
-# TypeScript cache
-*.tsbuildinfo
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variables file
-.env
-.env.test
-
-# parcel-bundler cache
-.cache
-.parcel-cache
-
-# Next.js build output
-.next
-
-# Nuxt.js build / generate output
-.nuxt
-dist
-
-# Gatsby files
-.cache/
-public
-
-# Storybook build outputs
-.out
-.storybook-out
-
-# Temporary folders
-tmp/
-temp/
-
-# Storage
-storage/
-uploads/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Backup files
-*.backup
-*.bak
-
-# Azure specific
-azure-*
-*.env
-environment-config.env
-azure-environment-config.env
-
-# Development artifacts
-coverage/
-.nyc_output/
-
-# Docker
-.dockerignore
-
-# Test files
-test-results/
-coverage/
-
-# Build outputs
-build/
-dist/
-
-# Package manager
-# package-lock.json - Keep this for GitHub Actions caching
-yarn.lock
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-logs/
-*.log
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-
-# Dependency directories
-node_modules/
-jspm_packages/
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variables file
-.env
-.env.test
-
-# parcel-bundler cache
-.cache
-.parcel-cache
-
-# Next.js build output
-.next
-
-# Nuxt.js build / generate output
-.nuxt
-dist
-
-# Gatsby files
-.cache/
-public
-
-# Storybook build outputs
-.out
-.storybook-out
-
-# Temporary folders
-tmp/
-temp/
-
-# Storage
-storage/
-uploads/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Backup files
-*.backup
-*.bak
-
-# Azure specific
-azure-*
-*.env
-environment-config.env
-azure-environment-config.env
-
-# Development artifacts
-coverage/
-.nyc_output/
-
-# Docker
-.dockerignore
-
-# Test files
-test-results/
-coverage/
-
-# Build outputs
-build/
-dist/
-
-# Package manager
-# package-lock.json - Keep this for GitHub Actions caching
-yarn.lock
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-logs/
-*.log
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-
-# Dependency directories
-node_modules/
-jspm_packages/
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variables file
-.env
-.env.test
-
-# parcel-bundler cache
-.cache
-.parcel-cache
-
-# Next.js build output
-.next
-
-# Nuxt.js build / generate output
-.nuxt
-dist
-
-# Gatsby files
-.cache/
-public
-
-# Storybook build outputs
-.out
-.storybook-out
-
-# Temporary folders
-tmp/
-temp/
-
-# Storage
-storage/
-uploads/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Backup files
-*.backup
-*.bak
-
-# Azure specific
-azure-*
-*.env
-environment-config.env
-azure-environment-config.env
-
-# Development artifacts
-coverage/
-.nyc_output/
-
-# Docker
-.dockerignore
-
-# Test files
-test-results/
-coverage/
-
-# Build outputs
-build/
-dist/
-
-# Package manager
-# package-lock.json - Keep this for GitHub Actions caching
-yarn.lock
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Files with secrets - removed from git tracking
-CREATE-SERVICE-CONNECTION-WITH-SP.md
+# Gatsby files
+# IDE
+# IDE files
+# Istio download
+# Logs
+# Microbundle cache
+# Next.js build output
+# Node modules
+# Nuxt.js build / generate output
+# OS
+# OS files
+# Optional REPL history
+# Optional eslint cache
+# Optional npm cache directory
+# Output of 'npm pack'
+# Package manager
+# Runtime data
+# Storage
+# Storybook build outputs
+# Temporary files
+# Temporary folders
+# Test files
+# TypeScript cache
+# Yarn Integrity file
+# dotenv environment variables file
+# package-lock.json - Keep this for GitHub Actions caching
+# parcel-bundler cache
+*.backup
+*.bak
+*.env
+*.log
+*.log.*
+*.pid
+*.pid.lock
+*.seed
+*.swo
+*.swp
+*.tgz
+*.tmp
+*.tsbuildinfo
+*/node_modules/
+*~
+.DS_Store
+.cache
+.cache/
+.dockerignore
+.env
+.env.development.local
+.env.local
+.env.production.local
+.env.test
+.env.test.local
+.eslintcache
+.idea/
+.next
+.next/
+.node_repl_history
+.npm
+.nuxt
+.nyc_output/
+.out
+.parcel-cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.storybook-out
+.vscode/
+.yarn-integrity
 COSMOS-DB-CONNECTION-SETUP.md
+CREATE-SERVICE-CONNECTION-WITH-SP.md
 RAJVEER-DEVOPS-REQUIREMENTS.md
+Thumbs.db
 URGENT-COSMOS-DB-FIX.md
+azure-*
+azure-environment-config.env
+build/
+coverage/
+dist
+dist/
+environment-config.env
+istio-*/
+jspm_packages/
+local.env
+logs/
 microservices/auth-service/.env.example
 microservices/hr-service/.env.example
-
+node_modules/
+npm-debug.log*
+pids
+production.env
+public
+sh-thd-*
+storage/
+temp/
+test-results/
+tmp/
+uploads/
+yarn-debug.log*
+yarn-error.log*
+yarn.lock

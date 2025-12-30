@@ -1,5 +1,6 @@
 const HRService = require('../services/hr.service');
 const logger = require('../config/logger');
+const Department = require('../models/Department.model');
 const { 
   sendSuccess, 
   sendError, 
@@ -445,6 +446,85 @@ const deleteStore = async (req, res, next) => {
   }
 };
 
+/**
+ * Get all departments
+ * GET /api/hr/departments
+ */
+const getDepartments = async (req, res, next) => {
+  try {
+    // Try to get from database first
+    let departments = await Department.find({ status: 'active' })
+      .select('name code description')
+      .sort({ name: 1 })
+      .lean();
+
+    // If no departments in DB, return default list
+    if (!departments || departments.length === 0) {
+      departments = [
+        { id: 'dept-1', name: 'Sales', code: 'SALES', description: 'Sales Department' },
+        { id: 'dept-2', name: 'IT', code: 'TECH', description: 'Technology Department' },
+        { id: 'dept-3', name: 'HR', code: 'HR', description: 'Human Resources' },
+        { id: 'dept-4', name: 'Accounts', code: 'ACCOUNTS', description: 'Accounts Department' },
+        { id: 'dept-5', name: 'Operations', code: 'ECOMMERCE', description: 'Operations' },
+        { id: 'dept-6', name: 'Lab', code: 'LAB', description: 'Laboratory' },
+        { id: 'dept-7', name: 'Delivery', code: 'DELIVERY', description: 'Delivery Department' },
+        { id: 'dept-8', name: 'Franchise', code: 'FRANCHISE', description: 'Franchise Department' }
+      ];
+    }
+
+    return sendSuccess(res, departments, 'Departments retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getDepartments controller', { error: error.message });
+    
+    // Return default departments even on error
+    const defaultDepartments = [
+      { id: 'dept-1', name: 'Sales', code: 'SALES', description: 'Sales Department' },
+      { id: 'dept-2', name: 'IT', code: 'TECH', description: 'Technology Department' },
+      { id: 'dept-3', name: 'HR', code: 'HR', description: 'Human Resources' },
+      { id: 'dept-4', name: 'Accounts', code: 'ACCOUNTS', description: 'Accounts Department' },
+      { id: 'dept-5', name: 'Operations', code: 'ECOMMERCE', description: 'Operations' },
+      { id: 'dept-6', name: 'Lab', code: 'LAB', description: 'Laboratory' },
+      { id: 'dept-7', name: 'Delivery', code: 'DELIVERY', description: 'Delivery Department' },
+      { id: 'dept-8', name: 'Franchise', code: 'FRANCHISE', description: 'Franchise Department' }
+    ];
+    return sendSuccess(res, defaultDepartments, 'Departments retrieved (default list)', null, 200);
+  }
+};
+
+/**
+ * Create new department
+ * POST /api/hr/departments
+ */
+const createDepartment = async (req, res, next) => {
+  try {
+    const { name, code, description } = req.body;
+
+    // Validate required fields
+    if (!name || !code) {
+      return sendError(res, 'Validation failed', 'Name and code are required', 400);
+    }
+
+    // Create department
+    const department = new Department({
+      name,
+      code: code.toUpperCase(),
+      description
+    });
+
+    await department.save();
+
+    return sendSuccess(res, department, 'Department created successfully', null, 201);
+  } catch (error) {
+    logger.error('Error in createDepartment controller', { error: error.message });
+    
+    if (error.code === 11000) {
+      return sendError(res, 'Duplicate department', 'Department with this name or code already exists', 400);
+    }
+    
+    next(error);
+  }
+};
+
 module.exports = {
   getEmployees,
   getEmployeeById,
@@ -453,6 +533,8 @@ module.exports = {
   deleteEmployee,
   assignRole,
   updateEmployeeStatus,
+  getDepartments,
+  createDepartment,
   getStores,
   createStore,
   getStoreById,

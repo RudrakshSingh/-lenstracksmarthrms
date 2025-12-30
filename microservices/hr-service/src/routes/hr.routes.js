@@ -18,7 +18,9 @@ const {
   createStore,
   getStoreById,
   updateStore,
-  deleteStore
+  deleteStore,
+  getDepartments,
+  createDepartment
 } = require('../controllers/hrController');
 
 // Validation schemas
@@ -188,6 +190,19 @@ router.patch('/employees/:id/status',
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateStatusSchema),
   asyncHandler(updateEmployeeStatus)
+);
+
+// Department routes
+router.get('/departments',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['department:read']),
+  asyncHandler(getDepartments)
+);
+
+router.post('/departments',
+  authenticate,
+  requireRole(['Admin', 'SuperAdmin'], ['department:create']),
+  asyncHandler(createDepartment)
 );
 
 // Store routes

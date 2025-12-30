@@ -6,7 +6,6 @@ metadata:
   namespace: etelios-backend-prod
   labels:
     app: api-gateway
-    version: "latest"
 spec:
   replicas: 2
   selector:
@@ -16,7 +15,6 @@ spec:
     metadata:
       labels:
         app: api-gateway
-        version: "latest"
     spec:
       containers:
       - name: api-gateway
@@ -41,9 +39,9 @@ spec:
           value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         envFrom:
         - configMapRef:
-            name: etelios-config
+            name: etelios-config-prod
         - secretRef:
-            name: etelios-secrets
+            name: etelios-secrets-prod
         resources:
           requests:
             memory: "256Mi"

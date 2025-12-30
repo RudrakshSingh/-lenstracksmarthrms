@@ -1,0 +1,22 @@
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: control-plane
+  namespace: istio-system
+spec:
+  profile: minimal
+  revision: default
+  components:
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 100m      # Reduced from 500m
+            memory: 256Mi  # Reduced from 2Gi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+    ingressGateways:
+    - name: istio-ingressgateway
+      enabled: false      # Disable ingress gateway (use NGINX instead)
+

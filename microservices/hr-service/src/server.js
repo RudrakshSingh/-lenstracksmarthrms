@@ -191,8 +191,8 @@ const connectDB = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      retryWrites: true, // Cosmos DB supports retrywrites (override connection string if needed)
-      retryReads: true,
+      // retryWrites: true, // Already in connection string - causes duplicate error
+      // retryReads: true,
       // Add heartbeat to detect dead connections
       heartbeatFrequencyMS: 10000
     };

@@ -6,7 +6,6 @@ metadata:
   namespace: etelios-backend-prod
   labels:
     app: document-service
-    version: "latest"
 spec:
   replicas: 2
   selector:
@@ -16,7 +15,6 @@ spec:
     metadata:
       labels:
         app: document-service
-        version: "latest"
     spec:
       containers:
       - name: document-service
@@ -39,16 +37,16 @@ spec:
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:
-              name: etelios-secrets
+              name: etelios-secrets-prod
               key: DOCUMENT_SERVICE_SERVICE_DB_URI
         - name: DB_NAME
           value: "document_db"
           value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
-            name: etelios-config
+            name: etelios-config-prod
         - secretRef:
-            name: etelios-secrets
+            name: etelios-secrets-prod
         resources:
           requests:
             memory: "256Mi"

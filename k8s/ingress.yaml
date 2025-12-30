@@ -57,15 +57,7 @@ spec:
   - host: api.etelios.com
     http:
       paths:
-      # API Gateway
-      - path: /()(.*)
-        pathType: Prefix
-        backend:
-          service:
-            name: api-gateway
-            port:
-              number: 3000
-      # Auth Service
+      # Auth Service (Direct access - API Gateway eliminated)
       - path: /api/auth(/|$)(.*)
         pathType: Prefix
         backend:

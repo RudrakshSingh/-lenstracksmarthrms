@@ -120,16 +120,16 @@ RUN for dir in microservices/*/; do \
     done
 
 # Expose the API Gateway port
-EXPOSE 8080
+EXPOSE 3000
 
 # Environment variables (override in K8s or Docker Compose)
 ENV NODE_ENV=production \
-    PORT=8080 \
+    PORT=3000 \
     RUN_ONLY_GATEWAY=true
 
 # Healthcheck for container monitoring
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:8080/health', res => { if(res.statusCode!==200) process.exit(1); })"
+    CMD node -e "require('http').get('http://localhost:3000/health', res => { if(res.statusCode!==200) process.exit(1); })"
 
 # -----------------------------
 # Start the API Gateway ONLY (not microservices)

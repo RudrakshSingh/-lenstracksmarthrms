@@ -44,6 +44,7 @@
     "pdfkit": "^0.14.0",
     "qrcode": "^1.5.4",
     "redis": "^5.8.2",
+    "response-time": "^2.3.2",
     "sharp": "^0.34.4",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",

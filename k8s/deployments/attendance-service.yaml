@@ -6,7 +6,6 @@ metadata:
   namespace: etelios-backend-prod
   labels:
     app: attendance-service
-    version: "latest"
 spec:
   replicas: 2
   selector:
@@ -16,7 +15,6 @@ spec:
     metadata:
       labels:
         app: attendance-service
-        version: "latest"
     spec:
       containers:
       - name: attendance-service
@@ -40,15 +38,15 @@ spec:
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:
-              name: etelios-secrets
+              name: etelios-secrets-prod
               key: ATTENDANCE_SERVICE_DB_URI
         - name: DB_NAME
           value: "attendance_db"
         envFrom:
         - configMapRef:
-            name: etelios-config
+            name: etelios-config-prod
         - secretRef:
-            name: etelios-secrets
+            name: etelios-secrets-prod
         resources:
           requests:
             memory: "256Mi"

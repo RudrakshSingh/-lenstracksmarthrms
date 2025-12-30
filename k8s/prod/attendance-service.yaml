@@ -55,7 +55,7 @@ spec:
         - configMapRef:
             name: etelios-config-prod
         - secretRef:
-            name: etelios-secrets
+            name: etelios-secrets-prod
         resources:
           requests:
             memory: "256Mi"

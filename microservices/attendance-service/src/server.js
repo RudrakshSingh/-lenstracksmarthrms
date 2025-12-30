@@ -14,19 +14,19 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
-const responseTime = require('response-time');
+// const responseTime = require('response-time'); // Temporarily disabled - image needs rebuild
 const logger = require('./config/logger');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Response time tracking
-app.use(responseTime((req, res, time) => {
-  if (time > 40 && !isProduction) {
-    logger.warn(`Slow request: ${req.method} ${req.path} took ${time.toFixed(2)}ms`);
-  }
-  res.setHeader('X-Response-Time', `${time.toFixed(2)}ms`);
-}));
+// Response time tracking - temporarily disabled (image needs rebuild with response-time package)
+// app.use(responseTime((req, res, time) => {
+//   if (time > 40 && !isProduction) {
+//     logger.warn(`Slow request: ${req.method} ${req.path} took ${time.toFixed(2)}ms`);
+//   }
+//   res.setHeader('X-Response-Time', `${time.toFixed(2)}ms`);
+// }));
 
 // Security middleware
 app.use(helmet());

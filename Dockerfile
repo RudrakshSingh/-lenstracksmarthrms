@@ -27,36 +27,8 @@ RUN if [ -f "package-lock.json" ]; then \
 COPY src ./src
 COPY ecosystem.config.js ./
 
-# Copy etelios-microservices and install its dependencies
-COPY etelios-microservices ./etelios-microservices
-
-# Install dependencies for etelios-microservices shared package
-RUN if [ -f "etelios-microservices/shared/package.json" ]; then \
-      echo "Installing dependencies for etelios-microservices/shared"; \
-      cd etelios-microservices/shared && \
-      if [ -f "package-lock.json" ]; then \
-        npm ci --omit=dev || npm install --omit=dev; \
-      else \
-        npm install --omit=dev; \
-      fi && \
-      npm cache clean --force && \
-      cd /app; \
-    fi
-
-# Install dependencies for each etelios-microservices service
-RUN for dir in etelios-microservices/services/*/; do \
-      if [ -f "$dir/package.json" ]; then \
-        echo "Installing dependencies for $dir"; \
-        cd "$dir" && \
-        if [ -f "package-lock.json" ]; then \
-          npm ci --omit=dev || npm install --omit=dev; \
-        else \
-          npm install --omit=dev; \
-        fi && \
-        npm cache clean --force && \
-        cd /app; \
-      fi; \
-    done
+# Note: etelios-microservices directory removed during cleanup
+# API Gateway now runs independently without legacy microservices
 
 # Copy microservices directory
 COPY microservices ./microservices
@@ -77,32 +49,7 @@ RUN npm install -g pm2
 # Copy built app from builder stage
 COPY --from=builder /app /app
 
-# Install dependencies for etelios-microservices (runtime stage)
-RUN if [ -f "etelios-microservices/shared/package.json" ]; then \
-      echo "Installing dependencies for etelios-microservices/shared (runtime)"; \
-      cd etelios-microservices/shared && \
-      if [ -f "package-lock.json" ]; then \
-        npm ci --omit=dev || npm install --omit=dev; \
-      else \
-        npm install --omit=dev; \
-      fi && \
-      npm cache clean --force && \
-      cd /app; \
-    fi
-
-RUN for dir in etelios-microservices/services/*/; do \
-      if [ -f "$dir/package.json" ]; then \
-        echo "Installing dependencies for $dir (runtime)"; \
-        cd "$dir" && \
-        if [ -f "package-lock.json" ]; then \
-          npm ci --omit=dev || npm install --omit=dev; \
-        else \
-          npm install --omit=dev; \
-        fi && \
-        npm cache clean --force && \
-        cd /app; \
-      fi; \
-    done
+# Legacy etelios-microservices removed - API Gateway runs independently
 
 # Install dependencies for each microservice that has a package.json
 RUN for dir in microservices/*/; do \

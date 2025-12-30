@@ -113,6 +113,15 @@ const login = async (req, res, next) => {
 const refreshToken = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token is required',
+        error: 'MISSING_REFRESH_TOKEN'
+      });
+    }
+    
     const result = await AuthService.refreshAccessToken(refreshToken);
 
     res.status(200).json({
@@ -121,6 +130,15 @@ const refreshToken = async (req, res, next) => {
       data: result
     });
   } catch (error) {
+    // Handle invalid token errors with proper status code
+    if (error.message && (error.message.includes('Invalid refresh token') || error.message.includes('Token expired') || error.message.includes('invalid'))) {
+      return res.status(401).json({
+        success: false,
+        message: error.message || 'Invalid or expired refresh token',
+        error: 'INVALID_REFRESH_TOKEN'
+      });
+    }
+    
     logger.error('Error in refreshToken controller', { error: error.message });
     next(error);
   }

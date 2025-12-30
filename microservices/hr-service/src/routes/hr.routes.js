@@ -83,13 +83,21 @@ const getEmployeesSchema = {
 
 const assignRoleSchema = {
   body: Joi.object({
-    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee', 'superadmin', 'admin', 'hr', 'manager', 'employee').required()
+    roleName: Joi.string().valid(
+      'SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee',
+      'superadmin', 'admin', 'hr', 'manager', 'employee',
+      'tenant-admin', 'Tenant-Admin', 'TENANT-ADMIN'  // Map tenant-admin to admin
+    ).required()
   })
 };
 
 const updateStatusSchema = {
   body: Joi.object({
-    status: Joi.string().valid('active', 'on_leave', 'terminated', 'pending').required()
+    status: Joi.string().valid(
+      'active', 'on_leave', 'terminated', 'pending',
+      'ACTIVE', 'ON_LEAVE', 'TERMINATED', 'PENDING',
+      'inactive', 'INACTIVE'
+    ).required()
   })
 };
 

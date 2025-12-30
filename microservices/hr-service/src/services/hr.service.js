@@ -159,15 +159,27 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
 
 /**
  * Gets a single employee by ID
- * @param {string} employeeId - Employee ID
+ * @param {string} employeeId - Employee ID (can be MongoDB ObjectId or employee_id string)
  * @returns {Promise<Object>} Employee object
  */
 const getEmployeeById = async (employeeId) => {
   try {
-    const employee = await User.findById(employeeId)
-      .populate('role', 'name permissions')
-      .populate('store', 'name address')
-      .lean();
+    const mongoose = require('mongoose');
+    let employee;
+    
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      // If it's a valid ObjectId, search by _id
+      employee = await User.findById(employeeId)
+        .populate('role', 'name permissions')
+        .populate('store', 'name address')
+        .lean();
+    } else {
+      // If it's not a valid ObjectId (e.g., employee_id like "EMP-2025-153599"), search by employee_id
+      employee = await User.findOne({ employee_id: employeeId })
+        .populate('role', 'name permissions')
+        .populate('store', 'name address')
+        .lean();
+    }
 
     if (!employee || employee.isDeleted) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
@@ -182,7 +194,7 @@ const getEmployeeById = async (employeeId) => {
 
 /**
  * Updates an employee
- * @param {string} employeeId - Employee ID
+ * @param {string} employeeId - Employee ID (can be MongoDB ObjectId or employee_id string)
  * @param {Object} updateData - Update data
  * @param {string} updatedBy - ID of the user updating
  * @returns {Promise<Object>} Updated employee
@@ -191,7 +203,21 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
   try {
     const { roleName, storeId, ...rest } = updateData;
 
-    const employee = await User.findById(employeeId);
+    // Check if employeeId is a valid MongoDB ObjectId
+    const mongoose = require('mongoose');
+    let employee;
+    let query;
+    
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      // If it's a valid ObjectId, search by _id
+      query = { _id: employeeId };
+      employee = await User.findById(employeeId);
+    } else {
+      // If it's not a valid ObjectId (e.g., employee_id like "EMP-2025-153599"), search by employee_id
+      query = { employee_id: employeeId };
+      employee = await User.findOne({ employee_id: employeeId });
+    }
+    
     if (!employee) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
@@ -214,8 +240,8 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       rest.store = store._id;
     }
 
-    const updatedEmployee = await User.findByIdAndUpdate(
-      employeeId,
+    const updatedEmployee = await User.findOneAndUpdate(
+      query,
       rest,
       { new: true, runValidators: true }
     ).populate('role', 'name permissions').populate('store', 'name address');
@@ -310,16 +336,22 @@ const assignRole = async (employeeId, roleName, assignedBy) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
+    // Normalize role name: map tenant-admin to admin
+    let normalizedRoleName = roleName.toLowerCase();
+    if (normalizedRoleName === 'tenant-admin' || normalizedRoleName === 'tenantadmin') {
+      normalizedRoleName = 'admin';
+    }
+    
     // Find role (case-insensitive)
     const role = await Role.findOne({ 
       $or: [
-        { name: roleName },
+        { name: normalizedRoleName },
         { name: roleName.toLowerCase() },
         { name: roleName.charAt(0).toUpperCase() + roleName.slice(1).toLowerCase() }
       ]
     });
     if (!role) {
-      throw new ApiError(httpStatus.BAD_REQUEST, `Specified role not found: ${roleName}`);
+      throw new ApiError(httpStatus.BAD_REQUEST, `Specified role not found: ${roleName}. Available roles: superadmin, admin, hr, manager, employee`);
     }
 
     employee.role = role._id;
@@ -375,13 +407,22 @@ const updateEmployeeStatus = async (employeeId, status, updatedBy) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
-    const validStatuses = ['active', 'on_leave', 'terminated', 'pending'];
-    if (!validStatuses.includes(status)) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid status');
+    // Normalize status to lowercase (model uses uppercase, but we normalize for consistency)
+    const normalizedStatus = status.toLowerCase();
+    const validStatuses = ['active', 'on_leave', 'terminated', 'pending', 'inactive'];
+    const validStatusesUpper = ['ACTIVE', 'ON_LEAVE', 'TERMINATED', 'PENDING', 'INACTIVE'];
+    
+    // Check both lowercase and uppercase
+    if (!validStatuses.includes(normalizedStatus) && !validStatusesUpper.includes(status)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `Invalid status: ${status}. Valid values: active, on_leave, terminated, pending, inactive`);
     }
+    
+    // Map to model's expected format (uppercase for Employee model, lowercase for User model)
+    // User model uses lowercase, so use normalizedStatus
+    const finalStatus = normalizedStatus;
 
     const previousStatus = employee.status;
-    employee.status = status;
+    employee.status = finalStatus;
     await employee.save();
 
     // Record audit log

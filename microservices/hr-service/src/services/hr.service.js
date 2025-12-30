@@ -359,7 +359,18 @@ const assignRole = async (employeeId, roleName, assignedBy) => {
  */
 const updateEmployeeStatus = async (employeeId, status, updatedBy) => {
   try {
-    const employee = await User.findById(employeeId);
+    // Check if employeeId is a valid MongoDB ObjectId
+    const mongoose = require('mongoose');
+    let employee;
+    
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      // If it's a valid ObjectId, search by _id
+      employee = await User.findById(employeeId);
+    } else {
+      // If it's not a valid ObjectId (e.g., employee_id like "EMP-2025-172751"), search by employee_id
+      employee = await User.findOne({ employee_id: employeeId });
+    }
+    
     if (!employee) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }

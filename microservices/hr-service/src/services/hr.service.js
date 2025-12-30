@@ -128,7 +128,7 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
           .populate('role', 'name permissions')
           .populate('store', 'name address')
           .select('-password -refreshToken')
-          .sort({ createdAt: -1 })
+          // .sort({ createdAt: -1 })  // Removed: Cosmos DB index issue
           .skip(skip)
           .limit(limit)
           .lean(), // Use lean() for read-only queries - returns plain JS objects (faster)
@@ -416,7 +416,7 @@ const getStores = async (filters = {}, page = 1, limit = 10) => {
     const [stores, total] = await Promise.all([
       Store.find(query)
         .populate('manager', 'name email employee_id')
-        .sort({ createdAt: -1 })
+        // .sort({ createdAt: -1 })  // Removed: Cosmos DB index issue
         .skip(skip)
         .limit(limit),
       Store.countDocuments(query)

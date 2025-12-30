@@ -80,11 +80,19 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// CORS configuration - allow all origins if '*' is specified
+// CORS configuration - explicitly allow localhost origins for frontend development
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
+    
+    // Explicitly allow localhost origins for frontend development
+    const allowedOrigins = [
+      'https://98.70.245.87', // Azure IP
+      'http://localhost:3000', // Frontend dev server
+      'http://localhost:3002', // Frontend dev server (if proxying)
+      'http://localhost:3001'  // Frontend dev server (if proxying)
+    ];
     
     // If CORS_ORIGIN is '*', allow all origins
     if (azureConfig.cors.origin === '*' || process.env.CORS_ORIGIN === '*') {
@@ -92,19 +100,24 @@ const corsOptions = {
     }
     
     // Check if origin is in allowed list
-    const allowedOrigins = Array.isArray(azureConfig.cors.origin) 
+    const configuredOrigins = Array.isArray(azureConfig.cors.origin) 
       ? azureConfig.cors.origin 
       : azureConfig.cors.origin.split(',').map(o => o.trim());
     
-    if (allowedOrigins.includes(origin)) {
+    // Combine explicit localhost origins with configured origins
+    const allAllowedOrigins = [...allowedOrigins, ...configuredOrigins];
+    
+    if (allAllowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(null, true); // Allow for now, can be made stricter if needed
     }
   },
-  credentials: azureConfig.cors.credentials,
+  credentials: azureConfig.cors.credentials || true,
   methods: azureConfig.cors.methods || ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: azureConfig.cors.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: azureConfig.cors.allowedHeaders || ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Cache-Control'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  maxAge: 86400 // 24 hours for preflight caching
 };
 
 app.use(cors(corsOptions));

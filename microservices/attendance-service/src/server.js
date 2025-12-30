@@ -30,13 +30,29 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
-// CORS configuration - allows frontend and all origins if CORS_ORIGIN is '*'
+// CORS configuration - explicitly allow localhost origins for frontend development
 const corsOrigin = process.env.CORS_ORIGIN || '*';
+const allowedOrigins = [
+  'https://98.70.245.87', // Azure IP
+  'http://localhost:3000', // Frontend dev server
+  'http://localhost:3002', // Frontend dev server (if proxying)
+  'http://localhost:3001'  // Frontend dev server (if proxying)
+];
+
 app.use(cors({
-  origin: corsOrigin === '*' ? '*' : (origin, callback) => {
+  origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    const allowed = corsOrigin.split(',').map(o => o.trim());
-    if (allowed.includes(origin) || corsOrigin === '*') {
+    
+    // If CORS_ORIGIN is '*', allow all origins
+    if (corsOrigin === '*') {
+      return callback(null, true);
+    }
+    
+    // Check configured origins
+    const configured = corsOrigin.split(',').map(o => o.trim());
+    const allAllowed = [...allowedOrigins, ...configured];
+    
+    if (allAllowed.includes(origin) || corsOrigin === '*') {
       callback(null, true);
     } else {
       callback(null, true); // Allow for now to prevent blocking
@@ -44,7 +60,9 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With', 'Origin', 'Cache-Control'],
+  exposedHeaders: ['Content-Length', 'Content-Type'],
+  maxAge: 86400 // 24 hours for preflight caching
 }));
 
 // Compression

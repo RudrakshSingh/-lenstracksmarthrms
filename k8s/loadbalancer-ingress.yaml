@@ -1,0 +1,81 @@
+---
+# LoadBalancer Service for External Access
+# This creates an Azure Load Balancer with a public IP
+# Frontend can access: http://<EXTERNAL-IP>:<PORT>
+apiVersion: v1
+kind: Service
+metadata:
+  name: etelios-loadbalancer
+  namespace: etelios-backend-prod
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /health
+spec:
+  type: LoadBalancer
+  selector:
+    # This won't select any pods directly
+    # We'll use Ingress Controller pod selector
+    app.kubernetes.io/name: nginx
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+---
+# Alternative: Direct LoadBalancer for Each Service
+# Use this if you want separate IPs for each service
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service-lb
+  namespace: etelios-backend-prod
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /health
+spec:
+  type: LoadBalancer
+  selector:
+    app: auth-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3001
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hr-service-lb
+  namespace: etelios-backend-prod
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /health
+spec:
+  type: LoadBalancer
+  selector:
+    app: hr-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3002
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendance-service-lb
+  namespace: etelios-backend-prod
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /health
+spec:
+  type: LoadBalancer
+  selector:
+    app: attendance-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3003
+    protocol: TCP
+

@@ -6,8 +6,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/use-regex: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "false"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 
     # Advanced Load Balancing
@@ -36,7 +35,6 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-next-upstream-timeout: "30"
 
     # Load Balancing Algorithm
-    nginx.ingress.kubernetes.io/load-balance: "least_conn"
     nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
 
     # Health Checks
@@ -59,7 +57,7 @@ spec:
     http:
       paths:
       # Auth Service (Direct access - API Gateway eliminated)
-      - path: /api/auth(/|$)(.*)
+      - path: /api/auth
         pathType: Prefix
         backend:
           service:
@@ -67,21 +65,21 @@ spec:
             port:
               number: 3001
       # HR Service
-      - path: /api/hr(/|$)(.*)
+      - path: /api/hr
         pathType: Prefix
         backend:
           service:
             name: hr-service
             port:
               number: 3002
-      - path: /api/transfers(/|$)(.*)
+      - path: /api/transfers
         pathType: Prefix
         backend:
           service:
             name: hr-service
             port:
               number: 3002
-      - path: /api/hr-letter(/|$)(.*)
+      - path: /api/hr-letter
         pathType: Prefix
         backend:
           service:
@@ -89,14 +87,14 @@ spec:
             port:
               number: 3002
       # Attendance Service
-      - path: /api/attendance(/|$)(.*)
+      - path: /api/attendance
         pathType: Prefix
         backend:
           service:
             name: attendance-service
             port:
               number: 3003
-      - path: /api/geofencing(/|$)(.*)
+      - path: /api/geofencing
         pathType: Prefix
         backend:
           service:
@@ -104,7 +102,7 @@ spec:
             port:
               number: 3003
       # Payroll Service
-      - path: /api/payroll(/|$)(.*)
+      - path: /api/payroll
         pathType: Prefix
         backend:
           service:
@@ -112,7 +110,7 @@ spec:
             port:
               number: 3004
       # CRM Service
-      - path: /api/crm(/|$)(.*)
+      - path: /api/crm
         pathType: Prefix
         backend:
           service:
@@ -120,7 +118,7 @@ spec:
             port:
               number: 3005
       # Inventory Service
-      - path: /api/inventory(/|$)(.*)
+      - path: /api/inventory
         pathType: Prefix
         backend:
           service:
@@ -128,7 +126,7 @@ spec:
             port:
               number: 3006
       # Sales Service
-      - path: /api/sales(/|$)(.*)
+      - path: /api/sales
         pathType: Prefix
         backend:
           service:
@@ -136,7 +134,7 @@ spec:
             port:
               number: 3007
       # Purchase Service
-      - path: /api/purchase(/|$)(.*)
+      - path: /api/purchase
         pathType: Prefix
         backend:
           service:
@@ -144,7 +142,7 @@ spec:
             port:
               number: 3008
       # Financial Service
-      - path: /api/financial(/|$)(.*)
+      - path: /api/financial
         pathType: Prefix
         backend:
           service:
@@ -152,7 +150,7 @@ spec:
             port:
               number: 3009
       # Document Service
-      - path: /api/documents(/|$)(.*)
+      - path: /api/documents
         pathType: Prefix
         backend:
           service:
@@ -160,7 +158,7 @@ spec:
             port:
               number: 3010
       # Service Management
-      - path: /api/service(/|$)(.*)
+      - path: /api/service
         pathType: Prefix
         backend:
           service:
@@ -168,7 +166,7 @@ spec:
             port:
               number: 3011
       # CPP Service
-      - path: /api/cpp(/|$)(.*)
+      - path: /api/cpp
         pathType: Prefix
         backend:
           service:
@@ -176,7 +174,7 @@ spec:
             port:
               number: 3012
       # Prescription Service
-      - path: /api/prescription(/|$)(.*)
+      - path: /api/prescription
         pathType: Prefix
         backend:
           service:
@@ -184,7 +182,7 @@ spec:
             port:
               number: 3013
       # Analytics Service
-      - path: /api/analytics(/|$)(.*)
+      - path: /api/analytics
         pathType: Prefix
         backend:
           service:
@@ -192,7 +190,7 @@ spec:
             port:
               number: 3014
       # Notification Service
-      - path: /api/notification(/|$)(.*)
+      - path: /api/notification
         pathType: Prefix
         backend:
           service:
@@ -200,7 +198,7 @@ spec:
             port:
               number: 3015
       # Monitoring Service
-      - path: /api/monitoring(/|$)(.*)
+      - path: /api/monitoring
         pathType: Prefix
         backend:
           service:
@@ -208,7 +206,7 @@ spec:
             port:
               number: 3016
       # Tenant Registry Service
-      - path: /api/tenants(/|$)(.*)
+      - path: /api/tenants
         pathType: Prefix
         backend:
           service:
@@ -216,7 +214,7 @@ spec:
             port:
               number: 3020
       # WebSocket Service (Realtime)
-      - path: /ws(/|$)(.*)
+      - path: /ws
         pathType: Prefix
         backend:
           service:
@@ -227,42 +225,42 @@ spec:
   # Rule 2: Without host (for direct IP access - frontend development)
   - http:
       paths:
-      - path: /api/auth(/|$)(.*)
+      - path: /api/auth
         pathType: Prefix
         backend:
           service:
             name: auth-service
             port:
               number: 3001
-      - path: /api/hr(/|$)(.*)
+      - path: /api/hr
         pathType: Prefix
         backend:
           service:
             name: hr-service
             port:
               number: 3002
-      - path: /api/transfers(/|$)(.*)
+      - path: /api/transfers
         pathType: Prefix
         backend:
           service:
             name: hr-service
             port:
               number: 3002
-      - path: /api/hr-letter(/|$)(.*)
+      - path: /api/hr-letter
         pathType: Prefix
         backend:
           service:
             name: hr-service
             port:
               number: 3002
-      - path: /api/attendance(/|$)(.*)
+      - path: /api/attendance
         pathType: Prefix
         backend:
           service:
             name: attendance-service
             port:
               number: 3003
-      - path: /api/geofencing(/|$)(.*)
+      - path: /api/geofencing
         pathType: Prefix
         backend:
           service:

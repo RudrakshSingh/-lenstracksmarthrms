@@ -453,9 +453,9 @@ const deleteStore = async (req, res, next) => {
 const getDepartments = async (req, res, next) => {
   try {
     // Try to get from database first
-    let departments = await Department.find({ status: 'active' })
+    // Removed .sort({ name: 1 }) - Cosmos DB index issue
+    let departments = await Department.find({ is_active: true })
       .select('name code description')
-      .sort({ name: 1 })
       .lean();
 
     // If no departments in DB, return default list

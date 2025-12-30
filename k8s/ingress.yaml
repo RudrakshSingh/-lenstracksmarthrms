@@ -54,8 +54,11 @@ spec:
     - api.etelios.com
     secretName: etelios-tls
   rules:
+  # Rule 1: With domain name (for production)
   - host: api.etelios.com
     http:
+      paths:
+      # Auth Service (Direct access - API Gateway eliminated)
       paths:
       # Auth Service (Direct access - API Gateway eliminated)
       - path: /api/auth(/|$)(.*)
@@ -222,3 +225,49 @@ spec:
             name: realtime-service
             port:
               number: 3021
+  
+  # Rule 2: Without host (for direct IP access - frontend development)
+  - http:
+      paths:
+      - path: /api/auth(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /api/hr(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+      - path: /api/transfers(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+      - path: /api/hr-letter(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+      - path: /api/attendance(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: attendance-service
+            port:
+              number: 3003
+      - path: /api/geofencing(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: attendance-service
+            port:
+              number: 3003

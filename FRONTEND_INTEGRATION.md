@@ -6,29 +6,41 @@
 
 ---
 
-## 🌐 **API BASE URLs - Use These in Your Frontend Code**
+## 🌐 **API BASE URL - Single IP for All Services**
 
-### **Production Endpoints (Azure AKS)**
+### **Production Endpoint (Azure AKS - Ingress LoadBalancer)**
 
 ```javascript
 // config/api.js or .env file
 
-// Auth Service
-const AUTH_API_URL = "http://4.187.155.37"
+// ✅ SINGLE IP FOR ALL SERVICES
+const API_BASE_URL = "http://98.70.245.87"
 
-// HR Service  
-const HR_API_URL = "http://4.224.134.129"
+// All services accessible via this single IP:
+// - Auth:      http://98.70.245.87/api/auth/*
+// - HR:        http://98.70.245.87/api/hr/*
+// - Attendance: http://98.70.245.87/api/attendance/*
+```
 
-// Attendance Service
-const ATTENDANCE_API_URL = "http://4.213.212.183"
+**📋 Usage with Host Header (Recommended):**
+
+```javascript
+// When making requests, include Host header:
+fetch('http://98.70.245.87/api/auth/login', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Host': 'api.etelios.com'  // Required for Ingress routing
+  },
+  body: JSON.stringify({ ... })
+});
 ```
 
 **⚠️ Important Notes:**
-1. These are **HTTP** endpoints (not HTTPS yet)
-2. For production, you'll need to:
-   - Set up domain names (api.etelios.com)
-   - Enable HTTPS/TLS
-   - Use the domain instead of IPs
+1. **Single IP**: `98.70.245.87` - One IP for all services (cost-optimized)
+2. **Host Header**: Include `Host: api.etelios.com` in requests
+3. **HTTP**: Currently HTTP (HTTPS/TLS can be enabled later)
+4. **Path-based routing**: All services use `/api/<service-name>/*` pattern
 
 ---
 

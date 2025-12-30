@@ -59,8 +59,6 @@ spec:
     http:
       paths:
       # Auth Service (Direct access - API Gateway eliminated)
-      paths:
-      # Auth Service (Direct access - API Gateway eliminated)
       - path: /api/auth(/|$)(.*)
         pathType: Prefix
         backend:

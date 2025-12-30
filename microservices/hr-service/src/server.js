@@ -202,16 +202,9 @@ const connectDB = async () => {
       // Use tls options instead of deprecated sslValidate for Node.js 22
       connectionOptions.tls = true;
       connectionOptions.tlsInsecure = false; // Validate certificates
-      // Cosmos DB requires retrywrites=true for write operations
-      connectionOptions.retryWrites = true;
-      // Cosmos DB requires specific connection string format
-      // Ensure connection string has proper format: mongodb://account:key@host:10255/?ssl=true&replicaSet=globaldb
-      if (!mongoUri.includes('retrywrites=true')) {
-        // Add retrywrites if not present
-        mongoUri = mongoUri.includes('?') 
-          ? `${mongoUri}&retrywrites=true` 
-          : `${mongoUri}?retrywrites=true`;
-      }
+      // Cosmos DB requires retrywrites - but it's already in the connection string from secret
+      // Do NOT add it again to avoid "URI option cannot appear more than once" error
+      // connectionOptions.retryWrites = true;  // ← REMOVED - already in connection string
       if (!mongoUri.includes('replicaSet=globaldb')) {
         // Add replicaSet for Cosmos DB
         mongoUri = mongoUri.includes('?') 

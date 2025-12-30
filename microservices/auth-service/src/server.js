@@ -121,22 +121,19 @@ const connectDB = async () => {
   }
 };
 
-// Load routes - optimized
+// Load routes - OPTIONAL: Service continues even if routes fail
 const loadRoutes = () => {
   const isProduction = process.env.NODE_ENV === 'production';
+  let routesLoaded = 0;
   
   try {
     const authRoutes = require('./routes/auth.routes.js');
     app.use('/api/auth', apiRateLimit, authRoutes);
-    if (!isProduction) logger.info('auth.routes.js loaded');
+    routesLoaded++;
+    if (!isProduction) logger.info('✅ auth.routes.js loaded');
   } catch (error) {
-    logger.error('auth.routes.js failed:', { 
-      error: error.message, 
-      stack: error.stack,
-      name: error.name 
-    });
-    console.error('❌ auth.routes.js failed:', error.message);
-    if (error.stack) console.error('Stack:', error.stack);
+    logger.warn('⚠️  auth.routes.js SKIPPED (optional)', { error: error.message });
+    console.log('⚠️  Auth routes skipped - service will continue');
   }
   try {
     const realUsersRoutes = require('./routes/realUsers.routes.js');

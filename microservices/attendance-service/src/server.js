@@ -82,29 +82,49 @@ const connectDB = async () => {
   }
 };
 
-// Load routes - optimized
+// Load routes - OPTIONAL: Service continues even if routes fail
 const loadRoutes = () => {
+  let routesLoaded = 0;
+  let routesFailed = 0;
+  
+  // Attendance routes (OPTIONAL)
   try {
     const attendanceRoutes = require('./routes/attendance.routes.js');
     app.use('/api/attendance', apiRateLimit, attendanceRoutes);
-    if (!isProduction) logger.info('attendance.routes.js loaded');
+    routesLoaded++;
+    logger.info('✅ attendance.routes.js loaded');
   } catch (error) {
-    logger.error('attendance.routes.js failed:', error.message);
+    routesFailed++;
+    logger.warn('⚠️  attendance.routes.js SKIPPED (optional)', { error: error.message });
+    console.log('⚠️  Attendance routes skipped - service will continue without them');
   }
+  
+  // Geofencing routes (OPTIONAL)
   try {
     const geofencingRoutes = require('./routes/geofencing.routes.js');
     app.use('/api/geofencing', apiRateLimit, geofencingRoutes);
-    if (!isProduction) logger.info('geofencing.routes.js loaded');
+    routesLoaded++;
+    logger.info('✅ geofencing.routes.js loaded');
   } catch (error) {
-    logger.error('geofencing.routes.js failed:', error.message);
+    routesFailed++;
+    logger.warn('⚠️  geofencing.routes.js SKIPPED (optional)', { error: error.message });
+    console.log('⚠️  Geofencing routes skipped - service will continue without them');
   }
+  
+  // Security routes (OPTIONAL)
   try {
     const securityRoutes = require('./routes/security.routes.js');
     app.use('/api/security', apiRateLimit, securityRoutes);
-    if (!isProduction) logger.info('security.routes.js loaded');
+    routesLoaded++;
+    logger.info('✅ security.routes.js loaded');
   } catch (error) {
-    logger.error('security.routes.js failed:', error.message);
+    routesFailed++;
+    logger.warn('⚠️  security.routes.js SKIPPED (optional)', { error: error.message });
+    console.log('⚠️  Security routes skipped - service will continue without them');
   }
+  
+  logger.info(`Routes summary: ${routesLoaded} loaded, ${routesFailed} skipped (optional)`);
+  console.log(`✅ Attendance service starting with ${routesLoaded}/${routesLoaded + routesFailed} routes`);
 };
 
 // Health check

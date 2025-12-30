@@ -101,6 +101,14 @@ spec:
             name: attendance-service
             port:
               number: 3003
+      # Document Service (via HR Service)
+      - path: /api/documents
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
       # Payroll Service
       - path: /api/payroll
         pathType: Prefix

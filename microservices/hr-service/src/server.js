@@ -440,6 +440,16 @@ const loadRoutes = () => {
     routesFailed.push({ route: 'audit.routes.js', error: error.message });
     logger.error('audit.routes.js failed to load', { error: error.message, stack: error.stack });
   }
+  
+  try {
+    const documentRoutes = require('./routes/document.routes.js');
+    app.use('/api/documents', apiRateLimit, documentRoutes);
+    routesLoaded.push('document.routes.js');
+    logger.info('document.routes.js loaded successfully at /api/documents');
+  } catch (error) {
+    routesFailed.push({ route: 'document.routes.js', error: error.message });
+    logger.error('document.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
 
   logger.info(`hr-service routes loaded: ${routesLoaded.length} successful, ${routesFailed.length} failed`);
   

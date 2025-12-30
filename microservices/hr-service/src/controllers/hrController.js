@@ -20,6 +20,11 @@ const {
  */
 const getEmployees = async (req, res, next) => {
   try {
+    // Normalize status to lowercase if provided
+    if (req.query.status) {
+      req.query.status = req.query.status.toLowerCase();
+    }
+    
     // Parse pagination
     const { page, limit, skip } = parsePagination(req.query);
     
@@ -43,6 +48,11 @@ const getEmployees = async (req, res, next) => {
     return sendSuccess(res, employees, 'Employees retrieved successfully', pagination, 200);
   } catch (error) {
     logger.error('Error in getEmployees controller', { error: error.message, userId: req.user?._id });
+    
+    // Handle validation errors - return 400 instead of 500
+    if (error.statusCode === 400 || error.name === 'ValidationError' || (error.message && error.message.includes('Validation failed'))) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
     
     // Check if it's a service unavailable error
     if (error.message && error.message.includes('unavailable')) {
@@ -251,8 +261,14 @@ const assignRole = async (req, res, next) => {
 const updateEmployeeStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    let { status } = req.body;
     const updatedBy = req.user._id;
+
+    // Normalize status to lowercase
+    if (status) {
+      status = status.toLowerCase();
+      req.body.status = status; // Update req.body for validation
+    }
 
     // Validate required fields
     const validationError = validateRequired({ status }, ['status']);
@@ -273,12 +289,13 @@ const updateEmployeeStatus = async (req, res, next) => {
   } catch (error) {
     logger.error('Error in updateEmployeeStatus controller', { error: error.message, userId: req.user?._id });
     
-    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
-      return sendNotFound(res, 'Employee', req.params.id);
+    // Handle validation errors - return 400 instead of 500
+    if (error.statusCode === 400 || error.name === 'ValidationError' || (error.message && error.message.includes('Validation failed'))) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
     }
     
-    if (error.name === 'ValidationError' || error.statusCode === 400) {
-      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Employee', req.params.id);
     }
     
     next(error);

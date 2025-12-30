@@ -72,8 +72,8 @@ const updateEmployeeSchema = {
 const getEmployeesSchema = {
   query: Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
-    status: Joi.string().valid('active', 'on_leave', 'terminated', 'pending').optional(),
+    limit: Joi.number().integer().min(1).max(1000).default(10), // Increased max to 1000
+    status: Joi.string().valid('active', 'on_leave', 'terminated', 'pending', 'ACTIVE', 'ON_LEAVE', 'TERMINATED', 'PENDING').optional(), // Allow both cases
     store: Joi.string().optional(),
     role: Joi.string().optional(),
     department: Joi.string().optional(),

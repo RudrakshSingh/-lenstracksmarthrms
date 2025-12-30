@@ -92,11 +92,11 @@ const createEmployee = async (employeeData, createdBy) => {
  */
 const getEmployees = async (filters = {}, page = 1, limit = 10) => {
   try {
-    // Generate cache key based on filters and pagination
-    const cacheKey = `employees:${JSON.stringify(filters)}:${page}:${limit}`;
+    // Skip caching for now - direct database query
+    // const cacheKey = `employees:${JSON.stringify(filters)}:${page}:${limit}`;
     
-    // Try to get from cache first (60 second TTL)
-    return await cache.getOrSet(cacheKey, async () => {
+    // Direct database query without caching
+    const getData = async () => {
       const query = { isDeleted: false };
 
       // Apply filters
@@ -148,7 +148,9 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
           hasPrevPage: page > 1
         }
       };
-    }, 60); // Cache for 60 seconds
+    };
+    
+    return await getData();
   } catch (error) {
     logger.error('Error in getEmployees service', { error: error.message });
     throw error;

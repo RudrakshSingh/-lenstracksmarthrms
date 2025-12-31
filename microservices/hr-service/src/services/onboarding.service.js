@@ -674,6 +674,7 @@ const completeOnboarding = async (employeeId, onboardingData, completedBy) => {
 
     logger.info('Onboarding completed', {
       employeeId: user.employeeId,
+      userId: user._id,
       completedBy
     });
 

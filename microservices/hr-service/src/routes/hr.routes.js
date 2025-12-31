@@ -174,7 +174,7 @@ router.post('/employees',
 
 router.get('/employees/:id',
   authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:read']),
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'hr', 'admin', 'superadmin'], ['user:read', 'read_users']),
   asyncHandler(getEmployeeById)
 );
 
@@ -272,7 +272,7 @@ router.delete('/stores/:id',
 // Workforce route
 router.get('/workforce',
   authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['user:read']),
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager', 'hr', 'admin', 'superadmin', 'manager'], ['user:read', 'read_users']),
   asyncHandler(getWorkforce)
 );
 

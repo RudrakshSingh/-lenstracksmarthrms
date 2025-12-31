@@ -137,6 +137,29 @@ if (process.env.IP_WHITELIST_ENABLED === 'true') {
   });
 }
 
+// Health and status endpoints - MUST be defined FIRST, before any other middleware or routes
+// These should be public (no auth required) for monitoring and load balancers
+// CRITICAL: These must be registered BEFORE any other routes or middleware that could intercept them
+app.get('/api/hr/health', (req, res) => {
+  res.json({
+    service: 'hr-service',
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    businessLogic: 'active',
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/api/hr/status', (req, res) => {
+  res.json({
+    service: 'hr-service',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    businessLogic: 'active'
+  });
+});
+
 // Rate limiting
 const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

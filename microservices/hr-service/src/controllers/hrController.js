@@ -1,6 +1,7 @@
 const HRService = require('../services/hr.service');
 const logger = require('../config/logger');
 const Department = require('../models/Department.model');
+const User = require('../models/User.model');
 const { 
   sendSuccess, 
   sendError, 
@@ -11,7 +12,7 @@ const {
   parseFilters,
   formatEmployee,
   validateRequired
-} = require('../../shared/utils/response.util.js');
+} = require('../../../shared/utils/response.util.js');
 
 /**
  * Get all employees

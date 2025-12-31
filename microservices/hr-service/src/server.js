@@ -435,6 +435,17 @@ const loadRoutes = () => {
   }
   
   try {
+    const attendanceRoutes = require('./routes/attendance.routes.js');
+    app.use('/api/hr', apiRateLimit, attendanceRoutes);
+    app.use('/api', apiRateLimit, attendanceRoutes); // Also mount at /api for compatibility
+    routesLoaded.push('attendance.routes.js');
+    logger.info('attendance.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'attendance.routes.js', error: error.message });
+    logger.error('attendance.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
     const payrollRoutes = require('./routes/payroll.routes.js');
     app.use('/api/hr', apiRateLimit, payrollRoutes);
     routesLoaded.push('payroll.routes.js');

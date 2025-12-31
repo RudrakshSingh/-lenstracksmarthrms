@@ -2,7 +2,7 @@ const TrainingProgram = require('../models/TrainingProgram.model');
 const TrainingProgress = require('../models/TrainingProgress.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError, createPagination, parsePagination } = require('../../shared/utils/response.util.js');
+const { sendSuccess, sendError, createPagination, parsePagination } = require('../../../shared/utils/response.util.js');
 
 /**
  * Get training programs
@@ -45,6 +45,11 @@ const getTrainingPrograms = async (req, res, next) => {
  */
 const createTrainingProgram = async (req, res, next) => {
   try {
+    // Ensure user is authenticated
+    if (!req.user || !req.user._id) {
+      return sendError(res, 'Authentication required', 'User not authenticated', 401);
+    }
+
     const programData = {
       ...req.body,
       created_by: req.user._id
@@ -56,8 +61,13 @@ const createTrainingProgram = async (req, res, next) => {
     return sendSuccess(res, program, 'Training program created successfully', null, 201);
   } catch (error) {
     logger.error('Error in createTrainingProgram', { error: error.message, stack: error.stack });
-    if (error.name === 'ValidationError' || error.code === 11000) {
-      return sendError(res, error.message, 'Validation failed', 400);
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors || {}).map(e => e.message).join(', ');
+      return sendError(res, validationErrors || error.message, 'Validation failed', 400);
+    }
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0];
+      return sendError(res, `${field} already exists`, 'Duplicate entry', 409);
     }
     return sendError(res, error.message || 'Failed to create training program', 'Internal server error', 500);
   }

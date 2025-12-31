@@ -2,7 +2,7 @@ const Benefit = require('../models/Benefit.model');
 const BenefitEnrollment = require('../models/BenefitEnrollment.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError, createPagination, parsePagination } = require('../../shared/utils/response.util.js');
+const { sendSuccess, sendError, createPagination, parsePagination } = require('../../../shared/utils/response.util.js');
 
 /**
  * Get all benefits

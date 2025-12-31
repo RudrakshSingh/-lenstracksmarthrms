@@ -3,7 +3,7 @@ const PayrollRun = require('../models/PayrollRun.model');
 const PayrollOverride = require('../models/PayrollOverride.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
+const { sendSuccess, sendError } = require('../../../shared/utils/response.util.js');
 
 /**
  * @desc Create payroll run
@@ -340,13 +340,19 @@ const previewSalary = async (req, res, next) => {
       return sendError(res, 'Validation failed', 'employeeId, month, and year are required', 400);
     }
 
-    // Get employee
-    const employee = await User.findOne({ 
-      $or: [
+    // Get employee - check if employeeId is a valid ObjectId
+    const mongoose = require('mongoose');
+    const query = { employee_id: employeeId };
+    
+    // Only add _id query if employeeId is a valid ObjectId
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      query.$or = [
         { _id: employeeId },
         { employee_id: employeeId }
-      ]
-    });
+      ];
+    }
+    
+    const employee = await User.findOne(query);
 
     if (!employee) {
       return sendError(res, 'Employee not found', 'Employee not found', 404);

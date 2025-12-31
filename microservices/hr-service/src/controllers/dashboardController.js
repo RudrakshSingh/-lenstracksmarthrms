@@ -4,7 +4,7 @@ const Department = require('../models/Department.model');
 const Store = require('../models/Store.model');
 const LeaveRequest = require('../models/LeaveRequest.model');
 const PayrollRun = require('../models/PayrollRun.model');
-const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
+const { sendSuccess, sendError } = require('../../../shared/utils/response.util.js');
 
 /**
  * Get dashboard statistics

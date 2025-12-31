@@ -1,7 +1,7 @@
 const PerformanceReview = require('../models/PerformanceReview.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
+const { sendSuccess, sendError } = require('../../../shared/utils/response.util.js');
 
 /**
  * Get performance metrics for current user
@@ -117,8 +117,18 @@ const getMyTrends = async (req, res, next) => {
 const getMyPeers = async (req, res, next) => {
   try {
     const { period } = req.query;
+    
+    if (!req.user || !req.user._id) {
+      return sendError(res, 'Authentication required', 'User not authenticated', 401);
+    }
+    
     const employeeId = req.user._id;
     const currentUser = await User.findById(employeeId).select('department store role').lean();
+
+    if (!currentUser) {
+      // Return empty array instead of error if user doesn't exist
+      return sendSuccess(res, [], 'No peer comparison available - user not found in database', null, 200);
+    }
 
     if (!period) {
       return sendError(res, 'Validation failed', 'period is required', 400);
@@ -127,7 +137,8 @@ const getMyPeers = async (req, res, next) => {
     // Find peers (same department/store/role)
     const peerQuery = {
       isDeleted: { $ne: true },
-      status: { $in: ['active', 'ACTIVE'] }
+      status: { $in: ['active', 'ACTIVE'] },
+      _id: { $ne: employeeId } // Exclude current user
     };
     if (currentUser.department) peerQuery.department = currentUser.department;
     if (currentUser.store) peerQuery.store = currentUser.store;
@@ -137,6 +148,11 @@ const getMyPeers = async (req, res, next) => {
       .select('_id fullName employeeId')
       .limit(10)
       .lean();
+
+    // If no peers found, return empty array
+    if (peers.length === 0) {
+      return sendSuccess(res, [], 'No peers found for comparison', null, 200);
+    }
 
     // Get performance reviews for peers
     const peerIds = peers.map(p => p._id);
@@ -156,6 +172,17 @@ const getMyPeers = async (req, res, next) => {
         breakdown: review.breakdown || {}
       };
     });
+
+    // If no reviews found, return peers without scores
+    if (peerComparison.length === 0) {
+      const peersWithoutReviews = peers.map(peer => ({
+        employeeId: peer.employeeId || 'N/A',
+        employeeName: peer.fullName || 'N/A',
+        score: 0,
+        breakdown: {}
+      }));
+      return sendSuccess(res, peersWithoutReviews, 'Peer comparison retrieved successfully (no reviews available)', null, 200);
+    }
 
     return sendSuccess(res, peerComparison, 'Peer comparison retrieved successfully', null, 200);
   } catch (error) {

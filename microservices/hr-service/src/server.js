@@ -261,25 +261,8 @@ const connectDB = async () => {
   }
 };
 
-// Health and status endpoints - MUST be defined BEFORE routes to avoid authentication
-// These should be public (no auth required) for monitoring and load balancers
-app.get('/api/hr/health', (req, res) => {
-  res.json({
-    service: 'hr-service',
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    businessLogic: 'active'
-  });
-});
-
-app.get('/api/hr/status', (req, res) => {
-  res.json({
-    service: 'hr-service',
-    status: 'operational',
-    timestamp: new Date().toISOString(),
-    businessLogic: 'active'
-  });
-});
+// Health endpoints are now defined at the top (around line 141) before any middleware
+// This ensures they're public and not caught by authentication middleware
 
 // Base /api/hr route - show available endpoints (public info endpoint)
 app.get('/api/hr', (req, res) => {

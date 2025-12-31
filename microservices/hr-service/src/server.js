@@ -577,7 +577,6 @@ const loadRoutes = () => {
   try {
     const timeTrackingRoutes = require('./routes/timeTracking.routes.js');
     app.use('/api/hr', apiRateLimit, timeTrackingRoutes);
-    app.use('/api', apiRateLimit, timeTrackingRoutes); // Also mount at /api for compatibility
     routesLoaded.push('timeTracking.routes.js');
     logger.info('timeTracking.routes.js loaded successfully');
   } catch (error) {

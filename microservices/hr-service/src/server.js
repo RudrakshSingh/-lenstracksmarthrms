@@ -227,18 +227,58 @@ const connectDB = async () => {
         mongoUri = `${mongoUri}/${dbName}`;
       }
       logger.info('Database name added to connection string from DB_NAME environment variable', { dbName });
-    } else if (!mongoUri.match(/\/[^/?]+(\?|$)/)) {
-      // No database name in URI and no DB_NAME env var - use default
-      const defaultDbName = process.env.MONGO_DB_NAME || 'etelios_hr_service';
-      if (mongoUri.includes('?')) {
-        mongoUri = mongoUri.replace('?', `/${defaultDbName}?`);
-      } else {
-        mongoUri = `${mongoUri}/${defaultDbName}`;
+    } else {
+      // Check if database name exists in URI (after @host/ and before ? or end)
+      // Pattern: mongodb://host/DATABASE_NAME or mongodb://host/DATABASE_NAME?options
+      const dbNamePattern = /@[^/]+\/([^/?]+)/;
+      const dbNameMatch = mongoUri.match(dbNamePattern);
+      
+      if (!dbNameMatch || !dbNameMatch[1] || dbNameMatch[1].trim() === '') {
+        // No database name in URI and no DB_NAME env var - use default
+        // IMPORTANT: Use main production database name, NOT test database
+        const defaultDbName = process.env.MONGO_DB_NAME || 'etelios_hr_service';
+        
+        // Ensure we're NOT using a test database
+        if (defaultDbName.toLowerCase().includes('test')) {
+          logger.error('⚠️  ERROR: Default database name contains "test"! This should be the main production database.', {
+            defaultDbName,
+            action: 'Using etelios_hr_service instead'
+          });
+          const mainDbName = 'etelios_hr_service';
+          if (mongoUri.includes('?')) {
+            mongoUri = mongoUri.replace('?', `/${mainDbName}?`);
+          } else {
+            // Find the position after @host/ and insert database name
+            const atIndex = mongoUri.indexOf('@');
+            const slashAfterHost = mongoUri.indexOf('/', atIndex);
+            if (slashAfterHost !== -1) {
+              mongoUri = mongoUri.substring(0, slashAfterHost + 1) + mainDbName + mongoUri.substring(slashAfterHost + 1);
+            } else {
+              mongoUri = `${mongoUri}/${mainDbName}`;
+            }
+          }
+        } else {
+          if (mongoUri.includes('?')) {
+            mongoUri = mongoUri.replace('?', `/${defaultDbName}?`);
+          } else {
+            // Find the position after @host/ and insert database name
+            const atIndex = mongoUri.indexOf('@');
+            const slashAfterHost = mongoUri.indexOf('/', atIndex);
+            if (slashAfterHost !== -1) {
+              mongoUri = mongoUri.substring(0, slashAfterHost + 1) + defaultDbName + mongoUri.substring(slashAfterHost + 1);
+            } else {
+              mongoUri = `${mongoUri}/${defaultDbName}`;
+            }
+          }
+        }
+        
+        const finalDbName = mongoUri.match(dbNamePattern)?.[1] || defaultDbName;
+        logger.warn('No database name in connection string. Using default database name', { 
+          defaultDbName: finalDbName,
+          hint: 'Set DB_NAME or MONGO_DB_NAME environment variable to specify database name',
+          warning: 'Make sure this is the MAIN production database, not test database'
+        });
       }
-      logger.warn('No database name in connection string. Using default database name', { 
-        defaultDbName,
-        hint: 'Set DB_NAME or MONGO_DB_NAME environment variable to specify database name'
-      });
     }
     
     // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)

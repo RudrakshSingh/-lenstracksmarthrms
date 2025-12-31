@@ -243,28 +243,32 @@ const connectDB = async () => {
           testDbName: existingDbName,
           mainDbName: targetDbName
         });
-      }
-      
-      // Insert database name before query string or at end
-      if (mongoUri.includes('?')) {
-        // Replace /? with /DATABASE_NAME?
-        mongoUri = mongoUri.replace(/\/(\?)/, `/${targetDbName}$1`);
+        // Replace test database name with main database name
+        mongoUri = mongoUri.replace(`/${existingDbName}`, `/${targetDbName}`);
       } else {
-        // Add /DATABASE_NAME at end
-        // Find position after @host
-        const atIndex = mongoUri.indexOf('@');
-        if (atIndex !== -1) {
-          const afterHost = mongoUri.substring(atIndex);
-          const slashIndex = afterHost.indexOf('/');
-          if (slashIndex !== -1) {
-            // Replace existing /something with /DATABASE_NAME
-            mongoUri = mongoUri.substring(0, atIndex + slashIndex + 1) + targetDbName + mongoUri.substring(atIndex + slashIndex + 1 + (existingDbName ? existingDbName.length : 0));
+        // Insert database name before query string or at end
+        if (mongoUri.includes('?')) {
+          // Replace /? with /DATABASE_NAME?
+          mongoUri = mongoUri.replace(/\/(\?)/, `/${targetDbName}$1`);
+        } else {
+          // Add /DATABASE_NAME at end
+          // Find position after @host
+          const atIndex = mongoUri.indexOf('@');
+          if (atIndex !== -1) {
+            const afterHost = mongoUri.substring(atIndex);
+            const slashIndex = afterHost.indexOf('/');
+            if (slashIndex !== -1 && slashIndex < afterHost.length - 1) {
+              // There's something after /, replace it
+              const queryIndex = afterHost.indexOf('?', slashIndex);
+              const endIndex = queryIndex !== -1 ? queryIndex : afterHost.length;
+              mongoUri = mongoUri.substring(0, atIndex + slashIndex + 1) + targetDbName + mongoUri.substring(atIndex + endIndex);
+            } else {
+              // Just add /DATABASE_NAME
+              mongoUri = `${mongoUri}/${targetDbName}`;
+            }
           } else {
-            // Add /DATABASE_NAME
             mongoUri = `${mongoUri}/${targetDbName}`;
           }
-        } else {
-          mongoUri = `${mongoUri}/${targetDbName}`;
         }
       }
       

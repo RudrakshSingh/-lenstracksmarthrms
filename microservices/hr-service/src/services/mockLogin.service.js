@@ -30,24 +30,75 @@ const mockLogin = async (email = null, roleName = 'hr') => {
       });
     }
 
-    // If still no role found, create a default HR role
+    // If still no role found, create a default HR role with all necessary permissions
     if (!hrRole) {
       hrRole = await Role.create({
         name: roleName,
         display_name: 'HR',
         permissions: [
-          'hr.read',
-          'hr.create',
-          'hr.update',
-          'hr.delete',
-          'employee.read',
-          'employee.create',
-          'employee.update',
-          'employee.delete',
+          // User Management (required for employee endpoints)
+          'read_users', 'write_users', 'create_users', 'update_users', 'delete_users',
+          'user:read', 'user:create', 'user:update', 'user:delete',
+          
+          // HR Management
+          'read_hr', 'write_hr', 'create_hr', 'update_hr', 'delete_hr',
+          
+          // Role Management
+          'read_roles', 'write_roles', 'create_roles', 'update_roles',
+          'role:assign', 'role:read', 'role:update',
+          
+          // Leave Management
+          'read_leave', 'write_leave', 'create_leave', 'update_leave', 'approve_leave',
+          'hr.leave.read', 'hr.leave.create', 'hr.leave.update', 'hr.leave.approve',
+          'hr.leave.yearclose',
+          
+          // Payroll Management
+          'read_payroll', 'write_payroll', 'create_payroll', 'update_payroll', 'process_payroll',
+          'hr.payroll.read', 'hr.payroll.create', 'hr.payroll.update', 'hr.payroll.process',
+          'hr.payroll.lock', 'hr.payroll.post', 'hr.payroll.override',
+          
+          // Store Management
+          'read_stores', 'write_stores', 'create_stores', 'update_stores', 'delete_stores',
+          'store:read', 'store:create', 'store:update', 'store:delete',
+          
+          // Transfer Management
+          'transfer:read', 'transfer:create', 'transfer:update', 'transfer:approve', 'transfer:request',
+          
+          // Reports
+          'read_reports', 'write_reports', 'export_reports',
+          'hr.reports.read',
+          
+          // Audit
+          'read_audit', 'view_audit_logs', 'hr.audit.read', 'hr.audit.verify',
+          
+          // F&F Settlement
+          'hr.fnf.read', 'hr.fnf.create', 'hr.fnf.update', 'hr.fnf.approve', 'hr.fnf.payout',
+          
+          // Incentive & Claw-back
+          'hr.incentive.read', 'hr.incentive.create', 'hr.incentive.approve',
+          'hr.clawback.apply',
+          
+          // Statutory
+          'hr.statutory.read', 'hr.statutory.export', 'hr.statutory.validate',
+          
+          // HR Letters
+          'hr.letters.create', 'hr.letters.read', 'hr.letters.update', 'hr.letters.submit',
+          'hr.letters.approve',
+          
+          // Legacy permissions for compatibility
+          'hr.read', 'hr.create', 'hr.update', 'hr.delete',
+          'employee.read', 'employee.create', 'employee.update', 'employee.delete',
           'dashboard.read'
         ]
       });
-      logger.info('Created default HR role', { roleId: hrRole._id });
+      logger.info('Created default HR role with full permissions', { roleId: hrRole._id });
+    } else {
+      // Ensure the role has user:read permission
+      if (!hrRole.permissions.includes('user:read') && !hrRole.permissions.includes('read_users')) {
+        hrRole.permissions.push('user:read', 'read_users');
+        await hrRole.save();
+        logger.info('Added user:read permission to HR role', { roleId: hrRole._id });
+      }
     }
 
     // Find or create HR user

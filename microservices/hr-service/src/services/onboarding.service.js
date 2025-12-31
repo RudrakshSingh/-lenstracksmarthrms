@@ -635,7 +635,7 @@ const completeOnboarding = async (employeeId, onboardingData, completedBy) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'EMPLOYEE_NOT_FOUND', 'Employee not found');
     }
 
-    const { system_access } = onboardingData;
+    const { system_access } = onboardingData || {};
 
     // Update user status to active
     user.status = 'active';
@@ -660,7 +660,17 @@ const completeOnboarding = async (employeeId, onboardingData, completedBy) => {
       }
     }
 
-    await user.save();
+    // Save user with error handling
+    try {
+      await user.save();
+    } catch (saveError) {
+      logger.error('Error saving user during onboarding completion', {
+        error: saveError.message,
+        employeeId: user.employeeId,
+        userId: user._id
+      });
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'USER_SAVE_FAILED', `Failed to save user: ${saveError.message}`);
+    }
 
     logger.info('Onboarding completed', {
       employeeId: user.employeeId,

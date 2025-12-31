@@ -160,7 +160,7 @@ const { cacheMiddleware } = require('../middleware/cache.middleware');
 // Routes
 router.get('/employees',
   authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:read']),
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'hr', 'admin', 'superadmin'], ['user:read', 'read_users']),
   validateRequest(getEmployeesSchema),
   asyncHandler(getEmployees)
 );

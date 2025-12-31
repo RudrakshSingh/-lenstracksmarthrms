@@ -19,6 +19,27 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const servicesConfig = require('./config/services.config');
 const axios = require('axios');
 
+// Initialize logger early so it can be used in middleware loading
+const isProduction = process.env.NODE_ENV === 'production';
+const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'info');
+const logger = winston.createLogger({
+  level: logLevel,
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'hrms-backend' },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    })
+  ]
+});
+
 // Circuit breaker for service resilience
 let circuitBreaker;
 try {
@@ -39,32 +60,6 @@ try {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const isProduction = process.env.NODE_ENV === 'production';
-
-// Logger - Always show all logs (info level) for better debugging
-// Set LOG_LEVEL env var to 'error' if you want to reduce logging
-const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'info');
-const logger = winston.createLogger({
-  level: logLevel,
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  ),
-  transports: [
-    // Always log to console (visible in PM2 logs and Docker logs)
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    }),
-    // Always log errors to file
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    // Log all messages to combined log file
-    new winston.transports.File({ filename: 'logs/combined.log', level: 'info' })
-  ]
-});
 
 // Response time tracking middleware
 const responseTime = require('response-time');

@@ -79,6 +79,11 @@ const createEmployee = async (req, res, next) => {
       return sendError(res, 'Authentication required', 'Authentication required', 401);
     }
 
+    // Create fullName from firstName and lastName if not provided
+    if (!employeeData.fullName && employeeData.firstName && employeeData.lastName) {
+      employeeData.fullName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
+    }
+
     // Validate required fields
     const requiredFields = ['fullName', 'email', 'department'];
     const validationError = validateRequired(employeeData, requiredFields);

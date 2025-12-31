@@ -214,11 +214,23 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
     // Save additional work details in a separate field or create compensation profile
     if (base_salary || target_sales || pf_applicable !== undefined || esic_applicable !== undefined || joining_date) {
       // Ensure employeeId is always set - use employeeId from user or fallback to _id
-      const employeeIdStr = user.employeeId || user._id.toString();
+      // Check for null, undefined, empty string, or invalid values
+      let employeeIdStr = user.employeeId;
+      if (!employeeIdStr || employeeIdStr === null || employeeIdStr === 'null' || employeeIdStr === 'undefined' || employeeIdStr === '' || typeof employeeIdStr !== 'string') {
+        employeeIdStr = user._id.toString();
+      }
       
-      if (!employeeIdStr) {
+      // Ensure it's a valid string
+      employeeIdStr = String(employeeIdStr).trim();
+      if (!employeeIdStr || employeeIdStr === 'null' || employeeIdStr === 'undefined') {
         throw new ApiError(httpStatus.BAD_REQUEST, 'EMPLOYEE_ID_REQUIRED', 'Employee ID is required');
       }
+      
+      logger.info('Creating CompensationProfile with employeeId', {
+        employeeId: employeeIdStr,
+        userEmployeeId: user.employeeId,
+        userId: user._id
+      });
       
       // Build update data - ensure employeeId is always set
       const updateData = {
@@ -240,69 +252,114 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
       if (joining_date) updateData.joiningDate = new Date(joining_date);
       if (confirmation_date) updateData.confirmationDate = confirmation_date;
       
-      // Delete ALL existing profiles for this employee to avoid duplicate key errors
-      // This ensures we start fresh and don't have conflicts with null employeeId values
-      const deleteResult = await CompensationProfile.deleteMany({ 
-        $or: [
-          { employee: user._id },
-          { employeeId: employeeIdStr }
-        ]
-      });
+      // Aggressively delete ALL existing profiles for this employee (multiple queries to catch all cases)
+      const deleteQueries = [
+        { employee: user._id },
+        { employeeId: employeeIdStr },
+        { employee: user._id, employeeId: null },
+        { employee: user._id, employeeId: { $exists: false } },
+        { employeeId: null, employee: user._id }
+      ];
       
-      logger.info('Deleted existing compensation profiles', {
-        employeeId: employeeIdStr,
-        deletedCount: deleteResult.deletedCount
-      });
-      
-      // Also delete any profiles with null employeeId for this employee (cleanup)
-      await CompensationProfile.deleteMany({ 
-        employee: user._id,
-        employeeId: null 
-      });
-      
-      // Create new profile with all the data - employeeId is guaranteed to be set
-      // IMPORTANT: Set employeeId explicitly AFTER spreading updateData to ensure it's never null
-      const existingProfile = new CompensationProfile({
-        ...updateData,
-        employee: user._id,
-        employeeId: employeeIdStr, // Explicitly set AFTER spread to ensure it's never null
-        createdBy: createdBy
-      });
-      
-      // Double-check that employeeId is set
-      if (!existingProfile.employeeId) {
-        existingProfile.employeeId = employeeIdStr;
+      let totalDeleted = 0;
+      for (const query of deleteQueries) {
+        const result = await CompensationProfile.deleteMany(query);
+        totalDeleted += result.deletedCount;
       }
       
+      if (totalDeleted > 0) {
+        logger.info('Deleted existing compensation profiles', {
+          employeeId: employeeIdStr,
+          deletedCount: totalDeleted
+        });
+      }
+      
+      // Build profile data with employeeId set FIRST
+      const profileData = {
+        employee: user._id,
+        employeeId: employeeIdStr, // Set FIRST - must never be null
+        ...updateData,
+        createdBy: createdBy
+      };
+      
+      // Triple-check employeeId is never null or undefined
+      if (!profileData.employeeId || profileData.employeeId === 'null' || profileData.employeeId === 'undefined' || profileData.employeeId === null) {
+        profileData.employeeId = employeeIdStr;
+      }
+      
+      // Verify employeeId is a valid string
+      if (typeof profileData.employeeId !== 'string' || profileData.employeeId.trim() === '') {
+        profileData.employeeId = employeeIdStr;
+      }
+      
+      // Use findOneAndUpdate with upsert - but handle errors gracefully
+      // IMPORTANT: Set employeeId explicitly in the query filter AND in $set to ensure it's never null
       try {
-        await existingProfile.save();
-      } catch (saveError) {
-        // If still getting duplicate key error, try to find and update existing
-        if (saveError.code === 11000) {
-          logger.warn('Duplicate key error on save, attempting to find and update existing profile', {
+        // First, try to find existing profile
+        let existingProfile = await CompensationProfile.findOne({ employee: user._id });
+        
+        if (existingProfile) {
+          // Update existing - explicitly set employeeId
+          Object.keys(profileData).forEach(key => {
+            if (profileData[key] !== undefined && key !== '_id') {
+              existingProfile[key] = profileData[key];
+            }
+          });
+          existingProfile.employeeId = employeeIdStr; // Force set
+          existingProfile.updatedBy = createdBy;
+          await existingProfile.save();
+        } else {
+          // Create new - ensure employeeId is set AFTER spread to override any null values
+          existingProfile = new CompensationProfile({
+            employee: user._id,
+            ...profileData,
+            employeeId: employeeIdStr, // Set AFTER spread to ensure it's never null
+            createdBy: createdBy
+          });
+          
+          // Triple-check employeeId before saving
+          if (!existingProfile.employeeId || existingProfile.employeeId === null || existingProfile.employeeId === 'null' || existingProfile.employeeId === 'undefined') {
+            existingProfile.employeeId = employeeIdStr;
+          }
+          
+          // Final validation
+          if (typeof existingProfile.employeeId !== 'string' || existingProfile.employeeId.trim() === '') {
+            existingProfile.employeeId = employeeIdStr;
+          }
+          
+          await existingProfile.save();
+        }
+      } catch (upsertError) {
+        // If upsert fails, try to find and update existing
+        if (upsertError.code === 11000) {
+          logger.warn('Upsert failed with duplicate key, finding and updating existing profile', {
             employeeId: employeeIdStr,
-            error: saveError.message
+            error: upsertError.message
           });
           
-          const existing = await CompensationProfile.findOne({ 
-            $or: [
-              { employee: user._id },
-              { employeeId: employeeIdStr }
-            ]
-          });
-          
+          // Try to find existing profile
+          const existing = await CompensationProfile.findOne({ employee: user._id });
           if (existing) {
-            Object.keys(updateData).forEach(key => {
-              existing[key] = updateData[key];
+            // Update existing
+            Object.keys(profileData).forEach(key => {
+              if (profileData[key] !== undefined && key !== '_id') {
+                existing[key] = profileData[key];
+              }
             });
-            existing.employee = user._id;
-            existing.employeeId = employeeIdStr;
+            existing.employeeId = employeeIdStr; // Force set
+            existing.updatedBy = createdBy;
             await existing.save();
           } else {
-            throw saveError;
+            // If no existing found, delete all and try again
+            await CompensationProfile.deleteMany({ employee: user._id });
+            const newProfile = new CompensationProfile({
+              ...profileData,
+              employeeId: employeeIdStr // Explicitly set
+            });
+            await newProfile.save();
           }
         } else {
-          throw saveError;
+          throw upsertError;
         }
       }
     }
@@ -368,7 +425,23 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
     }
 
     // Get or create compensation profile - handle duplicates properly
-    const employeeIdStr = user.employeeId || user._id.toString();
+    // Check for null, undefined, empty string, or invalid values
+    let employeeIdStr = user.employeeId;
+    if (!employeeIdStr || employeeIdStr === null || employeeIdStr === 'null' || employeeIdStr === 'undefined' || employeeIdStr === '' || typeof employeeIdStr !== 'string') {
+      employeeIdStr = user._id.toString();
+    }
+    
+    // Ensure it's a valid string
+    employeeIdStr = String(employeeIdStr).trim();
+    if (!employeeIdStr || employeeIdStr === 'null' || employeeIdStr === 'undefined') {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'EMPLOYEE_ID_REQUIRED', 'Employee ID is required');
+    }
+    
+    logger.info('Adding statutory info with employeeId', {
+      employeeId: employeeIdStr,
+      userEmployeeId: user.employeeId,
+      userId: user._id
+    });
     
     // Build update data
     const updateData = {
@@ -398,45 +471,120 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
       };
     }
     
-    // Try to find existing profile first
-    let existingProfile = await CompensationProfile.findOne({ employee: user._id });
+    // Aggressively delete ALL existing profiles for this employee (multiple queries to catch all cases)
+    const deleteQueries = [
+      { employee: user._id },
+      { employeeId: employeeIdStr },
+      { employee: user._id, employeeId: null },
+      { employee: user._id, employeeId: { $exists: false } },
+      { employeeId: null, employee: user._id }
+    ];
     
-    if (!existingProfile) {
-      // Check by employeeId as well
-      existingProfile = await CompensationProfile.findOne({ employeeId: employeeIdStr });
+    let totalDeleted = 0;
+    for (const query of deleteQueries) {
+      const result = await CompensationProfile.deleteMany(query);
+      totalDeleted += result.deletedCount;
     }
     
-    if (existingProfile) {
-      // Update existing profile - merge with existing data
-      Object.keys(updateData).forEach(key => {
-        if (updateData[key] !== undefined) {
-          existingProfile[key] = updateData[key];
+    if (totalDeleted > 0) {
+      logger.info('Deleted existing compensation profiles for statutory update', {
+        employeeId: employeeIdStr,
+        deletedCount: totalDeleted
+      });
+    }
+    
+    // Build profile data with employeeId set FIRST
+    const profileData = {
+      employee: user._id,
+      employeeId: employeeIdStr, // Set FIRST - must never be null
+      ...updateData,
+      updatedBy: updatedBy
+    };
+    
+    // Set createdBy if not already set
+    if (!profileData.createdBy) {
+      profileData.createdBy = updatedBy;
+    }
+    
+    // Triple-check employeeId is never null or undefined
+    if (!profileData.employeeId || profileData.employeeId === 'null' || profileData.employeeId === 'undefined' || profileData.employeeId === null) {
+      profileData.employeeId = employeeIdStr;
+    }
+    
+    // Verify employeeId is a valid string
+    if (typeof profileData.employeeId !== 'string' || profileData.employeeId.trim() === '') {
+      profileData.employeeId = employeeIdStr;
+    }
+    
+    // Use findOneAndUpdate with upsert - but handle errors gracefully
+      // IMPORTANT: Set employeeId explicitly to ensure it's never null
+      try {
+        // First, try to find existing profile
+        let existingProfile = await CompensationProfile.findOne({ employee: user._id });
+        
+        if (existingProfile) {
+          // Update existing - explicitly set employeeId
+          Object.keys(profileData).forEach(key => {
+            if (profileData[key] !== undefined && key !== '_id') {
+              existingProfile[key] = profileData[key];
+            }
+          });
+          existingProfile.employeeId = employeeIdStr; // Force set
+          existingProfile.updatedBy = updatedBy;
+          await existingProfile.save();
+        } else {
+          // Create new - ensure employeeId is set AFTER spread to override any null values
+          existingProfile = new CompensationProfile({
+            employee: user._id,
+            ...profileData,
+            employeeId: employeeIdStr, // Set AFTER spread to ensure it's never null
+            createdBy: updatedBy
+          });
+          
+          // Triple-check employeeId before saving
+          if (!existingProfile.employeeId || existingProfile.employeeId === null || existingProfile.employeeId === 'null' || existingProfile.employeeId === 'undefined') {
+            existingProfile.employeeId = employeeIdStr;
+          }
+          
+          // Final validation
+          if (typeof existingProfile.employeeId !== 'string' || existingProfile.employeeId.trim() === '') {
+            existingProfile.employeeId = employeeIdStr;
+          }
+          
+          await existingProfile.save();
         }
-      });
-      existingProfile.employee = user._id; // Ensure employee reference is set
-      existingProfile.employeeId = employeeIdStr; // Ensure employeeId is set
-      existingProfile.updatedBy = updatedBy;
-      
-      // If profile doesn't have createdBy, set it
-      if (!existingProfile.createdBy) {
-        existingProfile.createdBy = updatedBy;
+      } catch (upsertError) {
+      // If upsert fails, try to find and update existing
+      if (upsertError.code === 11000) {
+        logger.warn('Upsert failed with duplicate key in statutory info, finding and updating existing profile', {
+          employeeId: employeeIdStr,
+          error: upsertError.message
+        });
+        
+        // Try to find existing profile
+        const existing = await CompensationProfile.findOne({ employee: user._id });
+        if (existing) {
+          // Update existing
+          Object.keys(profileData).forEach(key => {
+            if (profileData[key] !== undefined && key !== '_id') {
+              existing[key] = profileData[key];
+            }
+          });
+          existing.employeeId = employeeIdStr; // Force set
+          existing.updatedBy = updatedBy;
+          await existing.save();
+        } else {
+          // If no existing found, delete all and try again
+          await CompensationProfile.deleteMany({ employee: user._id });
+          const newProfile = new CompensationProfile({
+            ...profileData,
+            employeeId: employeeIdStr // Explicitly set
+          });
+          await newProfile.save();
+        }
+      } else {
+        throw upsertError;
       }
-      
-      await existingProfile.save();
-    } else {
-      // Delete any profiles with null employeeId for this employee to avoid conflicts
-      await CompensationProfile.deleteMany({ 
-        employee: user._id,
-        employeeId: null 
-      });
-      
-      // Create new profile
-      existingProfile = new CompensationProfile({
-        employee: user._id,
-        ...updateData,
-        createdBy: updatedBy
-      });
-      await existingProfile.save();
     }
 
     logger.info('Statutory info added', {
@@ -458,7 +606,31 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
  */
 const completeOnboarding = async (employeeId, onboardingData, completedBy) => {
   try {
-    const user = await User.findOne({ employeeId: employeeId.toUpperCase() });
+    // Support both employeeId (string) and MongoDB _id (ObjectId)
+    let user = null;
+    const mongoose = require('mongoose');
+    
+    // Try to find by MongoDB _id first (if it's a valid ObjectId)
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      user = await User.findById(employeeId);
+    }
+    
+    // If not found by _id, try by employeeId
+    if (!user) {
+      user = await User.findOne({ employeeId: employeeId.toUpperCase() });
+    }
+    
+    // If still not found, try case-insensitive search
+    if (!user) {
+      user = await User.findOne({ 
+        $or: [
+          { employeeId: employeeId.toUpperCase() },
+          { employeeId: employeeId.toLowerCase() },
+          { employeeId: employeeId }
+        ]
+      });
+    }
+    
     if (!user) {
       throw new ApiError(httpStatus.NOT_FOUND, 'EMPLOYEE_NOT_FOUND', 'Employee not found');
     }

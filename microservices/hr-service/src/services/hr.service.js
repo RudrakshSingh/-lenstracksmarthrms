@@ -55,8 +55,16 @@ const createEmployee = async (employeeData, createdBy) => {
 
     await employee.save();
     
-    // Invalidate employee list cache
-    await cache.invalidatePattern('employees:*');
+    // Invalidate employee list cache (if cache is available)
+    try {
+      const cache = require('../utils/cache');
+      if (cache && cache.invalidatePattern) {
+        await cache.invalidatePattern('employees:*');
+      }
+    } catch (cacheError) {
+      // Cache not available, continue without it
+      logger.debug('Cache not available, skipping invalidation');
+    }
     
     // Record audit log
     try {

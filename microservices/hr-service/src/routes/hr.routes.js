@@ -33,6 +33,7 @@ const createEmployeeSchema = {
     employeeId: Joi.string().required(),
     firstName: Joi.string().required(),
     lastName: Joi.string().required(),
+    fullName: Joi.string().optional(), // Allow fullName (will be created from firstName + lastName if not provided)
     email: Joi.string().email().required(),
     password: Joi.string().min(8).required(),
     roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee', 'hr', 'admin', 'superadmin', 'manager', 'employee').required(),

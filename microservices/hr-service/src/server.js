@@ -216,69 +216,68 @@ const connectDB = async () => {
       logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
     }
     
-    // Ensure database name is specified in connection string
-    // If DB_NAME env var is set, use it; otherwise extract from URI or use default
-    const dbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
-    if (dbName && !mongoUri.includes(`/${dbName}`) && !mongoUri.includes(`/${dbName}?`)) {
-      // Add database name to connection string if not present
-      if (mongoUri.includes('?')) {
-        mongoUri = mongoUri.replace('?', `/${dbName}?`);
-      } else {
-        mongoUri = `${mongoUri}/${dbName}`;
-      }
-      logger.info('Database name added to connection string from DB_NAME environment variable', { dbName });
-    } else {
-      // Check if database name exists in URI (after @host/ and before ? or end)
-      // Pattern: mongodb://host/DATABASE_NAME or mongodb://host/DATABASE_NAME?options
-      const dbNamePattern = /@[^/]+\/([^/?]+)/;
-      const dbNameMatch = mongoUri.match(dbNamePattern);
-      
-      if (!dbNameMatch || !dbNameMatch[1] || dbNameMatch[1].trim() === '') {
-        // No database name in URI and no DB_NAME env var - use default
-        // IMPORTANT: Use main production database name, NOT test database
-        const defaultDbName = process.env.MONGO_DB_NAME || 'etelios_hr_service';
-        
-        // Ensure we're NOT using a test database
-        if (defaultDbName.toLowerCase().includes('test')) {
-          logger.error('⚠️  ERROR: Default database name contains "test"! This should be the main production database.', {
-            defaultDbName,
-            action: 'Using etelios_hr_service instead'
-          });
-          const mainDbName = 'etelios_hr_service';
-          if (mongoUri.includes('?')) {
-            mongoUri = mongoUri.replace('?', `/${mainDbName}?`);
-          } else {
-            // Find the position after @host/ and insert database name
-            const atIndex = mongoUri.indexOf('@');
-            const slashAfterHost = mongoUri.indexOf('/', atIndex);
-            if (slashAfterHost !== -1) {
-              mongoUri = mongoUri.substring(0, slashAfterHost + 1) + mainDbName + mongoUri.substring(slashAfterHost + 1);
-            } else {
-              mongoUri = `${mongoUri}/${mainDbName}`;
-            }
-          }
-        } else {
-          if (mongoUri.includes('?')) {
-            mongoUri = mongoUri.replace('?', `/${defaultDbName}?`);
-          } else {
-            // Find the position after @host/ and insert database name
-            const atIndex = mongoUri.indexOf('@');
-            const slashAfterHost = mongoUri.indexOf('/', atIndex);
-            if (slashAfterHost !== -1) {
-              mongoUri = mongoUri.substring(0, slashAfterHost + 1) + defaultDbName + mongoUri.substring(slashAfterHost + 1);
-            } else {
-              mongoUri = `${mongoUri}/${defaultDbName}`;
-            }
-          }
-        }
-        
-        const finalDbName = mongoUri.match(dbNamePattern)?.[1] || defaultDbName;
-        logger.warn('No database name in connection string. Using default database name', { 
-          defaultDbName: finalDbName,
-          hint: 'Set DB_NAME or MONGO_DB_NAME environment variable to specify database name',
-          warning: 'Make sure this is the MAIN production database, not test database'
+    // Ensure database name is specified in connection string - ALWAYS use MAIN database
+    // Check if database name exists in URI (pattern: mongodb://host/DATABASE_NAME or mongodb://host/DATABASE_NAME?options)
+    const dbNamePattern = /@[^/]+\/([^/?]+)/;
+    const dbNameMatch = mongoUri.match(dbNamePattern);
+    const existingDbName = dbNameMatch ? dbNameMatch[1] : null;
+    
+    // Get target database name - prioritize env vars, but ensure it's MAIN database
+    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
+    
+    // If no env var or env var contains "test", use main production database
+    if (!targetDbName || targetDbName.toLowerCase().includes('test')) {
+      targetDbName = 'etelios_hr_service';
+      if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test')) {
+        logger.error('⚠️  ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
+          provided: process.env.MONGO_DB_NAME,
+          using: targetDbName
         });
       }
+    }
+    
+    // If no database name in URI, or existing name contains "test", replace with main DB
+    if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
+      if (existingDbName && existingDbName.toLowerCase().includes('test')) {
+        logger.error('⚠️  ERROR: Connection string points to TEST database! Replacing with main production database.', {
+          testDbName: existingDbName,
+          mainDbName: targetDbName
+        });
+      }
+      
+      // Insert database name before query string or at end
+      if (mongoUri.includes('?')) {
+        // Replace /? with /DATABASE_NAME?
+        mongoUri = mongoUri.replace(/\/(\?)/, `/${targetDbName}$1`);
+      } else {
+        // Add /DATABASE_NAME at end
+        // Find position after @host
+        const atIndex = mongoUri.indexOf('@');
+        if (atIndex !== -1) {
+          const afterHost = mongoUri.substring(atIndex);
+          const slashIndex = afterHost.indexOf('/');
+          if (slashIndex !== -1) {
+            // Replace existing /something with /DATABASE_NAME
+            mongoUri = mongoUri.substring(0, atIndex + slashIndex + 1) + targetDbName + mongoUri.substring(atIndex + slashIndex + 1 + (existingDbName ? existingDbName.length : 0));
+          } else {
+            // Add /DATABASE_NAME
+            mongoUri = `${mongoUri}/${targetDbName}`;
+          }
+        } else {
+          mongoUri = `${mongoUri}/${targetDbName}`;
+        }
+      }
+      
+      logger.info('Database name set in connection string', { 
+        database: targetDbName,
+        wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test')
+      });
+    } else if (existingDbName !== targetDbName) {
+      // Database name exists but doesn't match target - log warning but don't change (user may have specific reason)
+      logger.warn('Database name in connection string differs from DB_NAME env var', {
+        uriDbName: existingDbName,
+        envDbName: targetDbName
+      });
     }
     
     // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)

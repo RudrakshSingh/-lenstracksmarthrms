@@ -96,5 +96,36 @@ router.post(
   asyncHandler(leaveController.cancelLeaveRequest)
 );
 
+// Alias routes for path compatibility with frontend
+router.get(
+  '/leave',
+  requireRole(['hr', 'admin', 'manager', 'employee']),
+  requirePermission('hr.leave.read'),
+  asyncHandler(leaveController.getLeaveRequests)
+);
+
+router.get(
+  '/leaves',
+  requireRole(['hr', 'admin', 'manager', 'employee']),
+  requirePermission('hr.leave.read'),
+  asyncHandler(leaveController.getLeaveRequests)
+);
+
+router.post(
+  '/leave',
+  requireRole(['hr', 'admin', 'employee']),
+  requirePermission('hr.leave.create'),
+  validateRequest(createLeaveRequestSchema),
+  asyncHandler(leaveController.createLeaveRequest)
+);
+
+router.post(
+  '/leaves',
+  requireRole(['hr', 'admin', 'employee']),
+  requirePermission('hr.leave.create'),
+  validateRequest(createLeaveRequestSchema),
+  asyncHandler(leaveController.createLeaveRequest)
+);
+
 module.exports = router;
 

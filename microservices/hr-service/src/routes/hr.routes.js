@@ -20,7 +20,11 @@ const {
   updateStore,
   deleteStore,
   getDepartments,
-  createDepartment
+  getDepartmentById,
+  createDepartment,
+  updateDepartment,
+  deleteDepartment,
+  getWorkforce
 } = require('../controllers/hrController');
 
 // Validation schemas
@@ -207,10 +211,28 @@ router.get('/departments',
   asyncHandler(getDepartments)
 );
 
+router.get('/departments/:id',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['department:read']),
+  asyncHandler(getDepartmentById)
+);
+
 router.post('/departments',
   authenticate,
   requireRole(['Admin', 'SuperAdmin'], ['department:create']),
   asyncHandler(createDepartment)
+);
+
+router.put('/departments/:id',
+  authenticate,
+  requireRole(['Admin', 'SuperAdmin'], ['department:update']),
+  asyncHandler(updateDepartment)
+);
+
+router.delete('/departments/:id',
+  authenticate,
+  requireRole(['Admin', 'SuperAdmin'], ['department:delete']),
+  asyncHandler(deleteDepartment)
 );
 
 // Store routes
@@ -244,6 +266,43 @@ router.delete('/stores/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:delete']),
   asyncHandler(deleteStore)
+);
+
+// Workforce route
+router.get('/workforce',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['user:read']),
+  asyncHandler(getWorkforce)
+);
+
+// Alias routes for letters (forward to hr-letter service)
+router.get('/letters',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], []),
+  asyncHandler(async (req, res, next) => {
+    // Forward to hr-letter service
+    const hrLetterController = require('../controllers/hrLetterController');
+    return hrLetterController.getLetters(req, res, next);
+  })
+);
+
+router.post('/letters',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin'], []),
+  asyncHandler(async (req, res, next) => {
+    const hrLetterController = require('../controllers/hrLetterController');
+    return hrLetterController.createLetter(req, res, next);
+  })
+);
+
+router.post('/letters/:id/approve',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], []),
+  asyncHandler(async (req, res, next) => {
+    const hrLetterController = require('../controllers/hrLetterController');
+    req.params.letterId = req.params.id; // Map id to letterId
+    return hrLetterController.approveLetter(req, res, next);
+  })
 );
 
 module.exports = router;

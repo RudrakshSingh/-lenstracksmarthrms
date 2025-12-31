@@ -5,6 +5,7 @@ const { requireRole } = require('../middleware/rbac.middleware');
 const checkEmployeeStatus = require('../middleware/statusCheck.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
 const { upload, uploadToCloudinary } = require('../middleware/upload.middleware');
+const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
 const {
@@ -13,7 +14,9 @@ const {
   getAttendanceHistory,
   getAttendanceSummary,
   getAttendanceRecords,
-  markAttendance
+  markAttendance,
+  getAttendanceStats,
+  getAttendanceReports
 } = require('../controllers/attendanceController');
 
 // Validation schemas
@@ -96,6 +99,41 @@ router.post('/',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['attendance:create']),
   markAttendance
+);
+
+// Attendance statistics
+router.get('/stats',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['attendance:read']),
+  asyncHandler(getAttendanceStats)
+);
+
+// Attendance reports
+router.get('/reports',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['attendance:read']),
+  asyncHandler(getAttendanceReports)
+);
+
+// Alias routes for path compatibility
+router.post('/check-in', 
+  authenticate,
+  checkEmployeeStatus(['active']),
+  requireRole([], ['attendance:record']),
+  upload.single('selfie'),
+  uploadToCloudinary,
+  validateRequest(clockInSchema),
+  clockIn
+);
+
+router.post('/check-out',
+  authenticate,
+  checkEmployeeStatus(['active']),
+  requireRole([], ['attendance:record']),
+  upload.single('selfie'),
+  uploadToCloudinary,
+  validateRequest(clockOutSchema),
+  clockOut
 );
 
 module.exports = router;

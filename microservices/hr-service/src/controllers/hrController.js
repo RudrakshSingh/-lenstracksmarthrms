@@ -509,12 +509,53 @@ const getDepartments = async (req, res, next) => {
 };
 
 /**
+ * Get department by ID
+ * GET /api/hr/departments/:id
+ */
+const getDepartmentById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const department = await Department.findById(id)
+      .populate('head', 'fullName employeeId email')
+      .lean();
+
+    if (!department) {
+      return sendNotFound(res, 'Department', id);
+    }
+
+    // Get employee count
+    const employeeCount = await User.countDocuments({
+      isDeleted: { $ne: true },
+      department: id,
+      status: { $in: ['active', 'ACTIVE'] }
+    });
+
+    const departmentWithCount = {
+      ...department,
+      employees: employeeCount,
+      employeeCount: employeeCount
+    };
+
+    return sendSuccess(res, departmentWithCount, 'Department retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getDepartmentById controller', { error: error.message });
+    
+    if (error.name === 'CastError' || error.statusCode === 404) {
+      return sendNotFound(res, 'Department', req.params.id);
+    }
+    
+    next(error);
+  }
+};
+
+/**
  * Create new department
  * POST /api/hr/departments
  */
 const createDepartment = async (req, res, next) => {
   try {
-    const { name, code, description } = req.body;
+    const { name, code, description, manager, location, phone, email, budget, status } = req.body;
 
     // Validate required fields
     if (!name || !code) {
@@ -525,20 +566,165 @@ const createDepartment = async (req, res, next) => {
     const department = new Department({
       name,
       code: code.toUpperCase(),
-      description
+      description,
+      head: manager,
+      location,
+      phone,
+      email,
+      budget,
+      status: status || 'active'
     });
 
     await department.save();
+
+    // Populate manager if provided
+    if (manager) {
+      await department.populate('head', 'fullName employeeId email');
+    }
 
     return sendSuccess(res, department, 'Department created successfully', null, 201);
   } catch (error) {
     logger.error('Error in createDepartment controller', { error: error.message });
     
     if (error.code === 11000) {
-      return sendError(res, 'Duplicate department', 'Department with this name or code already exists', 400);
+      return sendError(res, 'Duplicate department', 'Department with this name or code already exists', 409);
     }
     
     next(error);
+  }
+};
+
+/**
+ * Update department
+ * PUT /api/hr/departments/:id
+ */
+const updateDepartment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    // If code is provided, uppercase it
+    if (updateData.code) {
+      updateData.code = updateData.code.toUpperCase();
+    }
+
+    const department = await Department.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('head', 'fullName employeeId email');
+
+    if (!department) {
+      return sendNotFound(res, 'Department', id);
+    }
+
+    return sendSuccess(res, department, 'Department updated successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in updateDepartment controller', { error: error.message });
+    
+    if (error.name === 'CastError' || error.statusCode === 404) {
+      return sendNotFound(res, 'Department', req.params.id);
+    }
+    
+    if (error.code === 11000) {
+      return sendError(res, 'Duplicate department', 'Department with this name or code already exists', 409);
+    }
+    
+    next(error);
+  }
+};
+
+/**
+ * Delete department
+ * DELETE /api/hr/departments/:id
+ */
+const deleteDepartment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if department has employees
+    const employeeCount = await User.countDocuments({
+      isDeleted: { $ne: true },
+      department: id
+    });
+
+    if (employeeCount > 0) {
+      return sendError(res, 'Cannot delete department', `Department has ${employeeCount} employees. Please reassign them first.`, 400);
+    }
+
+    const department = await Department.findByIdAndDelete(id);
+
+    if (!department) {
+      return sendNotFound(res, 'Department', id);
+    }
+
+    return sendSuccess(res, null, 'Department deleted successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in deleteDepartment controller', { error: error.message });
+    
+    if (error.name === 'CastError' || error.statusCode === 404) {
+      return sendNotFound(res, 'Department', req.params.id);
+    }
+    
+    next(error);
+  }
+};
+
+/**
+ * Get workforce data
+ * GET /api/hr/workforce
+ */
+const getWorkforce = async (req, res, next) => {
+  try {
+    const { storeId, department, date } = req.query;
+    const targetDate = date ? new Date(date) : new Date();
+
+    const query = {
+      isDeleted: { $ne: true },
+      status: { $in: ['active', 'ACTIVE'] }
+    };
+
+    if (storeId) query.store = storeId;
+    if (department) query.department = department;
+
+    const employees = await User.find(query)
+      .select('fullName employeeId department store role status')
+      .populate('department', 'name')
+      .populate('store', 'name code')
+      .populate('role', 'name')
+      .lean();
+
+    const workforce = {
+      totalEmployees: employees.length,
+      byDepartment: {},
+      byStore: {},
+      byRole: {},
+      employees: employees.map(emp => ({
+        id: emp._id,
+        employeeId: emp.employeeId,
+        fullName: emp.fullName,
+        department: emp.department?.name || 'N/A',
+        store: emp.store?.name || 'N/A',
+        role: emp.role?.name || 'N/A',
+        status: emp.status
+      }))
+    };
+
+    // Calculate statistics
+    employees.forEach(emp => {
+      const dept = emp.department?.name || 'N/A';
+      const store = emp.store?.name || 'N/A';
+      const role = emp.role?.name || 'N/A';
+
+      workforce.byDepartment[dept] = (workforce.byDepartment[dept] || 0) + 1;
+      workforce.byStore[store] = (workforce.byStore[store] || 0) + 1;
+      workforce.byRole[role] = (workforce.byRole[role] || 0) + 1;
+    });
+
+    return sendSuccess(res, workforce, 'Workforce data retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getWorkforce', { error: error.message });
+    return sendError(res, error.message || 'Failed to retrieve workforce data', 'Internal server error', 500);
   }
 };
 
@@ -551,10 +737,14 @@ module.exports = {
   assignRole,
   updateEmployeeStatus,
   getDepartments,
+  getDepartmentById,
   createDepartment,
+  updateDepartment,
+  deleteDepartment,
   getStores,
   createStore,
   getStoreById,
   updateStore,
-  deleteStore
+  deleteStore,
+  getWorkforce
 };

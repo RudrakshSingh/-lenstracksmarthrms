@@ -523,6 +523,77 @@ const loadRoutes = () => {
     routesFailed.push({ route: 'document.routes.js', error: error.message });
     logger.error('document.routes.js failed to load', { error: error.message, stack: error.stack });
   }
+  
+  try {
+    const dashboardRoutes = require('./routes/dashboard.routes.js');
+    app.use('/api/hr', apiRateLimit, dashboardRoutes);
+    routesLoaded.push('dashboard.routes.js');
+    logger.info('dashboard.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'dashboard.routes.js', error: error.message });
+    logger.error('dashboard.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
+    const benefitsRoutes = require('./routes/benefits.routes.js');
+    app.use('/api/hr', apiRateLimit, benefitsRoutes);
+    routesLoaded.push('benefits.routes.js');
+    logger.info('benefits.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'benefits.routes.js', error: error.message });
+    logger.error('benefits.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
+    const trainingRoutes = require('./routes/training.routes.js');
+    app.use('/api/hr', apiRateLimit, trainingRoutes);
+    routesLoaded.push('training.routes.js');
+    logger.info('training.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'training.routes.js', error: error.message });
+    logger.error('training.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
+    const performanceRoutes = require('./routes/performance.routes.js');
+    app.use('/api/hr', apiRateLimit, performanceRoutes);
+    routesLoaded.push('performance.routes.js');
+    logger.info('performance.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'performance.routes.js', error: error.message });
+    logger.error('performance.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
+    const rosterRoutes = require('./routes/roster.routes.js');
+    app.use('/api/hr', apiRateLimit, rosterRoutes);
+    routesLoaded.push('roster.routes.js');
+    logger.info('roster.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'roster.routes.js', error: error.message });
+    logger.error('roster.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
+    const timeTrackingRoutes = require('./routes/timeTracking.routes.js');
+    app.use('/api/hr', apiRateLimit, timeTrackingRoutes);
+    app.use('/api', apiRateLimit, timeTrackingRoutes); // Also mount at /api for compatibility
+    routesLoaded.push('timeTracking.routes.js');
+    logger.info('timeTracking.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'timeTracking.routes.js', error: error.message });
+    logger.error('timeTracking.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
+    const recruitmentRoutes = require('./routes/recruitment.routes.js');
+    app.use('/api/hr', apiRateLimit, recruitmentRoutes);
+    routesLoaded.push('recruitment.routes.js');
+    logger.info('recruitment.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'recruitment.routes.js', error: error.message });
+    logger.error('recruitment.routes.js loaded successfully', { error: error.message, stack: error.stack });
+  }
 
   logger.info(`hr-service routes loaded: ${routesLoaded.length} successful, ${routesFailed.length} failed`);
   

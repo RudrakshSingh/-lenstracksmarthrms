@@ -88,5 +88,32 @@ router.post(
   asyncHandler(incentiveController.processReturnsRemakesFeed)
 );
 
+// Alias routes for path compatibility
+router.get(
+  '/incentive/claims',
+  requireRole(['hr', 'admin', 'manager', 'employee']),
+  requirePermission('hr.incentive.read'),
+  asyncHandler(incentiveController.getIncentiveClaims)
+);
+
+router.get(
+  '/incentive/my-claims',
+  requireRole(['hr', 'admin', 'manager', 'employee']),
+  requirePermission('hr.incentive.read'),
+  asyncHandler(async (req, res, next) => {
+    // Filter by current user
+    req.query.employeeId = req.user.employee_id || req.user._id;
+    return incentiveController.getIncentiveClaims(req, res, next);
+  })
+);
+
+router.post(
+  '/incentive/claims/:id/approve',
+  requireRole(['hr', 'admin', 'manager']),
+  requirePermission('hr.incentive.approve'),
+  validateRequest(approveIncentiveClaimSchema),
+  asyncHandler(incentiveController.approveIncentiveClaim)
+);
+
 module.exports = router;
 

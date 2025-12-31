@@ -1,5 +1,8 @@
 const statutoryExportService = require('../services/statutoryExport.service');
+const StatExport = require('../models/StatExport.model');
+const User = require('../models/User.model');
 const logger = require('../config/logger');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
 
 /**
  * Generate EPF export
@@ -124,12 +127,109 @@ const validateExport = async (req, res, next) => {
   }
 };
 
+/**
+ * Get Form-16 by year (GET endpoint)
+ */
+const getForm16 = async (req, res, next) => {
+  try {
+    const { year } = req.params;
+    const employeeId = req.user.employee_id || req.user._id;
+
+    // Find Form-16 export for the employee and year
+    const form16 = await StatExport.findOne({
+      export_type: 'FORM_16',
+      employee_id: employeeId,
+      year: parseInt(year)
+    }).lean();
+
+    if (!form16) {
+      return sendError(res, 'Form-16 not found', 'Form-16 not found for the specified year', 404);
+    }
+
+    return sendSuccess(res, form16, 'Form-16 retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getForm16 controller:', error);
+    return sendError(res, error.message || 'Failed to retrieve Form-16', 'Internal server error', 500);
+  }
+};
+
+/**
+ * Get employee documents
+ */
+const getMyDocuments = async (req, res, next) => {
+  try {
+    const employeeId = req.user.employee_id || req.user._id;
+
+    // Get all statutory exports for the employee
+    const documents = await StatExport.find({
+      employee_id: employeeId
+    })
+    .sort({ created_at: -1 })
+    .lean();
+
+    const formattedDocuments = documents.map(doc => ({
+      id: doc._id,
+      type: doc.export_type,
+      year: doc.year,
+      month: doc.month,
+      quarter: doc.quarter,
+      fileUrl: doc.file_url,
+      status: doc.status,
+      createdAt: doc.created_at
+    }));
+
+    return sendSuccess(res, formattedDocuments, 'Employee documents retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getMyDocuments controller:', error);
+    return sendError(res, error.message || 'Failed to retrieve documents', 'Internal server error', 500);
+  }
+};
+
+/**
+ * Get statutory deductions
+ */
+const getStatutoryDeductions = async (req, res, next) => {
+  try {
+    const { employeeId, month, year } = req.query;
+    const targetEmployeeId = employeeId || req.user.employee_id || req.user._id;
+
+    // This would typically come from payroll data
+    // For now, return placeholder structure
+    const deductions = {
+      employeeId: targetEmployeeId,
+      month: month ? parseInt(month) : new Date().getMonth() + 1,
+      year: year ? parseInt(year) : new Date().getFullYear(),
+      pf: {
+        employeeContribution: 0,
+        employerContribution: 0,
+        total: 0
+      },
+      esic: {
+        employeeContribution: 0,
+        employerContribution: 0,
+        total: 0
+      },
+      pt: 0,
+      tds: 0,
+      totalDeductions: 0
+    };
+
+    return sendSuccess(res, deductions, 'Statutory deductions retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getStatutoryDeductions controller:', error);
+    return sendError(res, error.message || 'Failed to retrieve statutory deductions', 'Internal server error', 500);
+  }
+};
+
 module.exports = {
   generateEPFExport,
   generateESICExport,
   generateTDSForm24Q,
   generateForm16,
   getStatExports,
-  validateExport
+  validateExport,
+  getForm16,
+  getMyDocuments,
+  getStatutoryDeductions
 };
 

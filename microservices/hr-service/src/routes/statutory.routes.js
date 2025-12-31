@@ -86,5 +86,53 @@ router.post(
   asyncHandler(statutoryController.validateExport)
 );
 
+// Get Form-16 by year (GET endpoint)
+router.get(
+  '/statutory/form-16/:year',
+  requireRole(['hr', 'admin', 'accountant', 'employee']),
+  requirePermission('hr.statutory.read'),
+  asyncHandler(statutoryController.getForm16)
+);
+
+// Get employee documents
+router.get(
+  '/statutory/my-documents',
+  requireRole(['hr', 'admin', 'accountant', 'employee']),
+  requirePermission('hr.statutory.read'),
+  asyncHandler(statutoryController.getMyDocuments)
+);
+
+// Get statutory deductions
+router.get(
+  '/statutory/deductions',
+  requireRole(['hr', 'admin', 'accountant', 'employee']),
+  requirePermission('hr.statutory.read'),
+  asyncHandler(statutoryController.getStatutoryDeductions)
+);
+
+// Alias routes for path compatibility
+router.get(
+  '/statutory/exports',
+  requireRole(['hr', 'admin', 'accountant']),
+  requirePermission('hr.statutory.read'),
+  asyncHandler(statutoryController.getStatExports)
+);
+
+router.post(
+  '/statutory/pf',
+  requireRole(['hr', 'admin', 'accountant']),
+  requirePermission('hr.statutory.export'),
+  validateRequest(generateEPFExportSchema),
+  asyncHandler(statutoryController.generateEPFExport)
+);
+
+router.post(
+  '/statutory/esi',
+  requireRole(['hr', 'admin', 'accountant']),
+  requirePermission('hr.statutory.export'),
+  validateRequest(generateESICExportSchema),
+  asyncHandler(statutoryController.generateESICExport)
+);
+
 module.exports = router;
 

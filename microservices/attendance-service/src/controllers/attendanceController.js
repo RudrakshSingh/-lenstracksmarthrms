@@ -1,6 +1,8 @@
 const AttendanceService = require('../services/attendance.service');
 const securityService = require('../services/security/security.service');
 const { upload, uploadToCloudinary } = require('../middleware/upload.middleware');
+const Attendance = require('../models/Attendance.model');
+const User = require('../models/User.model');
 const logger = require('../config/logger');
 const { 
   sendSuccess, 
@@ -392,11 +394,135 @@ const markAttendance = async (req, res, next) => {
   }
 };
 
+/**
+ * Get attendance statistics
+ * GET /api/attendance/stats
+ */
+const getAttendanceStats = async (req, res, next) => {
+  try {
+    const { date, month, storeId } = req.query;
+    const targetDate = date ? new Date(date) : new Date();
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const query = {
+      date: { $gte: startOfDay, $lte: endOfDay }
+    };
+
+    if (storeId) {
+      query.store = storeId;
+    }
+
+    // Get total employees
+    const totalEmployeesQuery = { isDeleted: { $ne: true }, status: { $in: ['active', 'ACTIVE'] } };
+    if (storeId) {
+      totalEmployeesQuery.store = storeId;
+    }
+    const totalEmployees = await User.countDocuments(totalEmployeesQuery);
+
+    // Get attendance records for the day
+    const attendanceRecords = await Attendance.find(query).lean();
+
+    const presentToday = attendanceRecords.filter(r => r.status === 'present' || r.status === 'approved').length;
+    const absentToday = totalEmployees - presentToday;
+    const lateArrivals = attendanceRecords.filter(r => r.is_late).length;
+    const onLeave = 0; // Would need to check leave requests
+    const attendanceRate = totalEmployees > 0 ? (presentToday / totalEmployees) * 100 : 0;
+
+    // Calculate average hours
+    const totalHours = attendanceRecords.reduce((sum, r) => sum + (r.total_hours || 0), 0);
+    const averageHours = attendanceRecords.length > 0 ? totalHours / attendanceRecords.length : 0;
+
+    const stats = {
+      totalEmployees,
+      presentToday,
+      absentToday,
+      lateArrivals,
+      onLeave,
+      attendanceRate: Math.round(attendanceRate * 100) / 100,
+      averageHours: Math.round(averageHours * 100) / 100
+    };
+
+    return sendSuccess(res, stats, 'Attendance statistics retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getAttendanceStats', { error: error.message, stack: error.stack });
+    return sendError(res, error.message || 'Failed to retrieve attendance statistics', 'Internal server error', 500);
+  }
+};
+
+/**
+ * Get attendance reports
+ * GET /api/attendance/reports
+ */
+const getAttendanceReports = async (req, res, next) => {
+  try {
+    const { dateFrom, dateTo, employeeId, storeId, format = 'json' } = req.query;
+
+    if (!dateFrom || !dateTo) {
+      return sendError(res, 'Validation failed', 'dateFrom and dateTo are required', 400);
+    }
+
+    const startDate = new Date(dateFrom);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(dateTo);
+    endDate.setHours(23, 59, 59, 999);
+
+    const query = {
+      date: { $gte: startDate, $lte: endDate }
+    };
+
+    if (employeeId) {
+      query.employee = employeeId;
+    }
+    if (storeId) {
+      query.store = storeId;
+    }
+
+    const attendanceRecords = await Attendance.find(query)
+      .populate('employee', 'fullName employeeId')
+      .populate('store', 'name code')
+      .sort({ date: -1 })
+      .lean();
+
+    const reportData = attendanceRecords.map(record => ({
+      id: record._id,
+      employeeId: record.employee_id,
+      employeeName: record.employee?.fullName || 'N/A',
+      date: record.date,
+      checkIn: record.check_in_time,
+      checkOut: record.check_out_time,
+      status: record.status,
+      totalHours: record.total_hours,
+      overtimeHours: record.overtime_hours,
+      location: record.check_in_location ? {
+        lat: record.check_in_location.latitude,
+        lng: record.check_in_location.longitude,
+        address: record.check_in_location.address
+      } : null
+    }));
+
+    if (format === 'csv' || format === 'excel') {
+      // For CSV/Excel, would need to format differently
+      // For now, return JSON
+      return sendSuccess(res, reportData, 'Attendance report retrieved successfully', null, 200);
+    }
+
+    return sendSuccess(res, reportData, 'Attendance report retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getAttendanceReports', { error: error.message, stack: error.stack });
+    return sendError(res, error.message || 'Failed to retrieve attendance reports', 'Internal server error', 500);
+  }
+};
+
 module.exports = {
   clockIn,
   clockOut,
   getAttendanceHistory,
   getAttendanceSummary,
   getAttendanceRecords,
-  markAttendance
+  markAttendance,
+  getAttendanceStats,
+  getAttendanceReports
 };

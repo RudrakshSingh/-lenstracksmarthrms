@@ -104,5 +104,45 @@ router.get(
   asyncHandler(payrollController.getPayslips)
 );
 
+// Alias route for path compatibility
+router.get(
+  '/payroll/payslips',
+  requireRole(['hr', 'admin', 'accountant', 'manager', 'employee']),
+  requirePermission('hr.payroll.read'),
+  asyncHandler(payrollController.getPayslips)
+);
+
+// Payroll statistics
+router.get(
+  '/payroll/stats',
+  requireRole(['hr', 'admin', 'accountant', 'manager']),
+  requirePermission('hr.payroll.read'),
+  asyncHandler(payrollController.getPayrollStats)
+);
+
+// Payroll employees
+router.get(
+  '/payroll/employees',
+  requireRole(['hr', 'admin', 'accountant', 'manager']),
+  requirePermission('hr.payroll.read'),
+  asyncHandler(payrollController.getPayrollEmployees)
+);
+
+// Salary preview
+router.post(
+  '/payroll/salary/preview',
+  requireRole(['hr', 'admin', 'accountant']),
+  requirePermission('hr.payroll.read'),
+  asyncHandler(payrollController.previewSalary)
+);
+
+// Payroll approvals
+router.get(
+  '/payroll/approvals',
+  requireRole(['hr', 'admin', 'accountant']),
+  requirePermission('hr.payroll.approve'),
+  asyncHandler(payrollController.getPayrollApprovals)
+);
+
 module.exports = router;
 

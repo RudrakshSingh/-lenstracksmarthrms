@@ -1,0 +1,954 @@
+{
+  "timestamp": "2025-12-31T08:12:28.469Z",
+  "baseUrl": "https://98.70.245.87",
+  "summary": {
+    "total": 61,
+    "passed": 19,
+    "failed": 42,
+    "skipped": 0
+  },
+  "passed": [
+    {
+      "name": "Health Check",
+      "endpoint": "/api/auth/health",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Status Check",
+      "endpoint": "/api/auth/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Mock Login Fast",
+      "endpoint": "/api/auth/mock-login-fast",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "name": "Mock Login",
+      "endpoint": "/api/auth/mock-login",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "name": "Login (Invalid)",
+      "endpoint": "/api/auth/login",
+      "method": "POST",
+      "status": 400
+    },
+    {
+      "name": "Refresh Token (Invalid)",
+      "endpoint": "/api/auth/refresh-token",
+      "method": "POST",
+      "status": 401
+    },
+    {
+      "name": "Request Password Reset",
+      "endpoint": "/api/auth/request-password-reset",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "name": "Change Password (Unauthorized)",
+      "endpoint": "/api/auth/change-password",
+      "method": "POST",
+      "status": 401
+    },
+    {
+      "name": "Get Departments",
+      "endpoint": "/api/hr/departments",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Create Department",
+      "endpoint": "/api/hr/departments",
+      "method": "POST",
+      "status": 201
+    },
+    {
+      "name": "Get Employees",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Get Employees (Manager)",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "name": "Get Employees (Employee)",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "name": "Get Stores",
+      "endpoint": "/api/hr/stores",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Get Documents (Unauthorized)",
+      "endpoint": "/api/documents/invalid",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "name": "Attendance Health Check",
+      "endpoint": "/api/attendance/health",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Attendance Status",
+      "endpoint": "/api/attendance/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Get Attendance Records",
+      "endpoint": "/api/attendance/records",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Get Attendance Reports",
+      "endpoint": "/api/attendance/reports",
+      "method": "GET",
+      "status": 200
+    }
+  ],
+  "failed": [
+    {
+      "name": "Get Profile",
+      "endpoint": "/api/auth/profile",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 500,
+      "error": {
+        "success": false,
+        "message": "Authentication failed"
+      }
+    },
+    {
+      "name": "Update Profile",
+      "endpoint": "/api/auth/profile",
+      "method": "PUT",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 500,
+      "error": {
+        "success": false,
+        "message": "Authentication failed"
+      }
+    },
+    {
+      "name": "Logout",
+      "endpoint": "/api/auth/logout",
+      "method": "POST",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 500,
+      "error": {
+        "success": false,
+        "message": "Authentication failed"
+      }
+    },
+    {
+      "name": "Get Real Users",
+      "endpoint": "/api/real-users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get Real User Profile",
+      "endpoint": "/api/real-users/profile",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get All Permissions",
+      "endpoint": "/api/permission/permissions",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get Users with Permissions",
+      "endpoint": "/api/permission/users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Emergency Status",
+      "endpoint": "/api/emergency/status",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Verify Recovery Keys",
+      "endpoint": "/api/emergency/verify-keys",
+      "method": "POST",
+      "expected": [
+        200,
+        400
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "HR Health Check",
+      "endpoint": "/api/hr/health",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "HR Status",
+      "endpoint": "/api/hr/status",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "HR Service Info",
+      "endpoint": "/api/hr",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "Get Employees (HR)",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "expected": [
+        200
+      ],
+      "actual": 403,
+      "error": {
+        "success": false,
+        "message": "Access denied. Insufficient permissions.",
+        "required": [
+          "user:read"
+        ],
+        "current": []
+      }
+    },
+    {
+      "name": "Create Store",
+      "endpoint": "/api/hr/stores",
+      "method": "POST",
+      "expected": [
+        200,
+        201,
+        409
+      ],
+      "actual": 500,
+      "error": {
+        "success": false,
+        "message": "An internal server error occurred",
+        "timestamp": "2025-12-31T08:12:26.537Z"
+      }
+    },
+    {
+      "name": "Get Onboarding Draft",
+      "endpoint": "/api/hr/onboarding/draft",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 500,
+      "error": {
+        "success": false,
+        "message": "An internal server error occurred",
+        "timestamp": "2025-12-31T08:12:26.596Z"
+      }
+    },
+    {
+      "name": "Save Onboarding Draft",
+      "endpoint": "/api/hr/onboarding/draft",
+      "method": "POST",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 500,
+      "error": {
+        "success": false,
+        "message": "An internal server error occurred",
+        "timestamp": "2025-12-31T08:12:26.652Z"
+      }
+    },
+    {
+      "name": "Get Leave Requests",
+      "endpoint": "/api/hr/leave",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/leave",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:26.714Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Leave Balance",
+      "endpoint": "/api/hr/leave/balance",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/leave/balance",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:26.776Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Leave Summary",
+      "endpoint": "/api/hr/leave/summary",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/leave/summary",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:26.845Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Payroll Runs",
+      "endpoint": "/api/hr/payroll/runs",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/payroll/runs",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:26.916Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Employee Reports",
+      "endpoint": "/api/hr/reports/employees",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/reports/employees",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:26.985Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Attendance Reports",
+      "endpoint": "/api/hr/reports/attendance",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/reports/attendance",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:27.045Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Leave Reports",
+      "endpoint": "/api/hr/reports/leave",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/reports/leave",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:27.116Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get All Users (Admin)",
+      "endpoint": "/api/admin/users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get All Roles",
+      "endpoint": "/api/admin/roles",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get All Permissions",
+      "endpoint": "/api/admin/permissions",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get System Settings",
+      "endpoint": "/api/admin/system-settings",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get Transfers",
+      "endpoint": "/api/transfers",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 403,
+      "error": {
+        "success": false,
+        "message": "Access denied. Insufficient permissions.",
+        "required": [
+          "transfer:read"
+        ],
+        "current": []
+      }
+    },
+    {
+      "name": "Get HR Letters",
+      "endpoint": "/api/hr-letter/letters",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 403,
+      "error": {
+        "success": false,
+        "message": "Access denied. Required permission: hr.letters.read"
+      }
+    },
+    {
+      "name": "Get HR Letter Stats",
+      "endpoint": "/api/hr-letter/stats",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 403,
+      "error": {
+        "success": false,
+        "message": "Access denied. Required permission: hr.letters.read"
+      }
+    },
+    {
+      "name": "Get F&F Cases",
+      "endpoint": "/api/hr/fnf/cases",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 403,
+      "error": {
+        "success": false,
+        "message": "Access denied. Required permission: hr.fnf.read"
+      }
+    },
+    {
+      "name": "Get Audit Logs",
+      "endpoint": "/api/hr/audit/logs",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/audit/logs",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:27.655Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Statutory Returns",
+      "endpoint": "/api/hr/statutory/returns",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/statutory/returns",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:27.715Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Incentive Claims",
+      "endpoint": "/api/hr/incentive/claims",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/hr/incentive/claims",
+        "method": "GET",
+        "service": "hr-service",
+        "port": "3002",
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/hr/status",
+          "GET /api/hr/health"
+        ],
+        "timestamp": "2025-12-31T08:12:27.785Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/hr/"
+        }
+      }
+    },
+    {
+      "name": "Get Attendance History",
+      "endpoint": "/api/attendance/history",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/attendance/history",
+        "method": "GET",
+        "service": "attendance-service",
+        "port": 3003,
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/attendance/status",
+          "GET /api/attendance/health"
+        ],
+        "timestamp": "2025-12-31T08:12:28.008Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/attendance/"
+        }
+      }
+    },
+    {
+      "name": "Get Attendance Summary",
+      "endpoint": "/api/attendance/summary",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/attendance/summary",
+        "method": "GET",
+        "service": "attendance-service",
+        "port": 3003,
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/attendance/status",
+          "GET /api/attendance/health"
+        ],
+        "timestamp": "2025-12-31T08:12:28.068Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/attendance/"
+        }
+      }
+    },
+    {
+      "name": "Get All Attendance Records",
+      "endpoint": "/api/attendance",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/attendance",
+        "method": "GET",
+        "service": "attendance-service",
+        "port": 3003,
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/attendance/status",
+          "GET /api/attendance/health"
+        ],
+        "timestamp": "2025-12-31T08:12:28.129Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/attendance/"
+        }
+      }
+    },
+    {
+      "name": "Get Geofencing Settings",
+      "endpoint": "/api/geofencing/settings",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/geofencing/settings",
+        "method": "GET",
+        "service": "attendance-service",
+        "port": 3003,
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/attendance/status",
+          "GET /api/attendance/health"
+        ],
+        "timestamp": "2025-12-31T08:12:28.298Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/attendance/"
+        }
+      }
+    },
+    {
+      "name": "Get Geofencing Users",
+      "endpoint": "/api/geofencing/users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/geofencing/users",
+        "method": "GET",
+        "service": "attendance-service",
+        "port": 3003,
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/attendance/status",
+          "GET /api/attendance/health"
+        ],
+        "timestamp": "2025-12-31T08:12:28.354Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/attendance/"
+        }
+      }
+    },
+    {
+      "name": "Check Geofencing",
+      "endpoint": "/api/geofencing/check",
+      "method": "POST",
+      "expected": [
+        200,
+        400
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found - The requested endpoint does not exist or may require authentication",
+        "path": "/api/geofencing/check",
+        "method": "POST",
+        "service": "attendance-service",
+        "port": 3003,
+        "hint": "Most routes require authentication. Include Authorization header with Bearer token.",
+        "availableEndpoints": [
+          "GET /health",
+          "GET /api/attendance/status",
+          "GET /api/attendance/health"
+        ],
+        "timestamp": "2025-12-31T08:12:28.439Z",
+        "troubleshooting": {
+          "authentication": "Add header: Authorization: Bearer <token>",
+          "dynamicRoutes": "Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)",
+          "basePath": "All routes are under /api/attendance/"
+        }
+      }
+    },
+    {
+      "name": "Get Security Violations",
+      "endpoint": "/api/security/violations",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    },
+    {
+      "name": "Get IP Geolocation",
+      "endpoint": "/api/security/ip-geolocation",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {}
+    }
+  ],
+  "skipped": []
+}

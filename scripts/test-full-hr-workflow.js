@@ -90,8 +90,8 @@ async function login() {
     role: 'admin'
   });
 
-  if (response.status === 200 && response.data?.data?.accessToken) {
-    authToken = response.data.data.accessToken;
+  if (response.status === 200 && (response.data?.data?.accessToken || response.data?.accessToken)) {
+    authToken = response.data?.data?.accessToken || response.data?.accessToken;
     log('✅ Login successful', 'green');
     return true;
   } else {

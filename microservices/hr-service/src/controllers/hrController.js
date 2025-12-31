@@ -79,22 +79,41 @@ const createEmployee = async (req, res, next) => {
       return sendError(res, 'Authentication required', 'Authentication required', 401);
     }
 
-    // Create fullName from firstName and lastName if not provided
-    if ((!employeeData.fullName || employeeData.fullName.trim() === '') && employeeData.firstName && employeeData.lastName) {
+    // Log incoming data for debugging
+    logger.info('Creating employee', {
+      hasFullName: !!employeeData.fullName,
+      fullName: employeeData.fullName,
+      firstName: employeeData.firstName,
+      lastName: employeeData.lastName,
+      email: employeeData.email,
+      department: employeeData.department,
+      allKeys: Object.keys(employeeData)
+    });
+
+    // Create fullName from firstName and lastName if not provided or empty
+    if ((!employeeData.fullName || (typeof employeeData.fullName === 'string' && employeeData.fullName.trim() === '')) && employeeData.firstName && employeeData.lastName) {
       employeeData.fullName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
+      logger.info('Created fullName from firstName and lastName', { fullName: employeeData.fullName });
     }
 
-    // Validate required fields - check fullName after creation
-    const requiredFields = ['fullName', 'email', 'department'];
+    // Validate required fields
+    // fullName is required, but can be created from firstName + lastName
+    const requiredFields = ['email', 'department'];
     const validationError = validateRequired(employeeData, requiredFields);
     if (validationError) {
       logger.error('Employee creation validation failed', {
         missingFields: validationError.error,
-        providedFields: Object.keys(employeeData),
-        hasFullName: !!employeeData.fullName,
-        fullNameValue: employeeData.fullName
+        providedFields: Object.keys(employeeData)
       });
       return sendError(res, validationError.error, validationError.message, 400);
+    }
+
+    // Ensure fullName exists (either provided or created from firstName + lastName)
+    if (!employeeData.fullName || (typeof employeeData.fullName === 'string' && employeeData.fullName.trim() === '')) {
+      if (!employeeData.firstName || !employeeData.lastName) {
+        return sendError(res, 'Missing required fields: fullName (or firstName and lastName)', 'Validation failed', 400);
+      }
+      employeeData.fullName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
     }
 
     // Create employee

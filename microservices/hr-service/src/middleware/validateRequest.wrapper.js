@@ -11,7 +11,7 @@ const validateRequest = (schema) => {
     const validationOptions = {
       abortEarly: false, // Include all errors
       allowUnknown: true, // Allow unknown keys that are not in the schema
-      stripUnknown: true, // Remove unknown keys
+      stripUnknown: false, // Keep all keys - don't strip unknown fields (important for fullName)
     };
 
     const errors = {};

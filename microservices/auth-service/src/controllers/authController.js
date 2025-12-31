@@ -1,21 +1,63 @@
 const AuthService = require('../services/auth.service');
 const logger = require('../config/logger');
 
+// Create a singleton instance
+const authService = new AuthService();
+
 /**
  * Register a new user
  */
 const register = async (req, res, next) => {
   try {
     const userData = req.body;
-    const user = await AuthService.registerUser(userData);
+    const createdBy = req.user?._id || req.user?.id;
+    
+    if (!createdBy) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required to register users'
+      });
+    }
+
+    const result = await authService.register(userData, createdBy);
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      data: user
+      data: result
     });
   } catch (error) {
-    logger.error('Error in register controller', { error: error.message });
+    logger.error('Error in register controller', { 
+      error: error.message, 
+      stack: error.stack,
+      statusCode: error.statusCode,
+      errors: error.errors
+    });
+    
+    // Handle validation errors
+    if (error.statusCode === 400 && error.errors) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: error.errors
+      });
+    }
+    
+    // Handle specific error cases
+    if (error.message && error.message.includes('already exists')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
+    if (error.message && error.message.includes('Invalid role')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    
     next(error);
   }
 };

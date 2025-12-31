@@ -182,8 +182,8 @@ const getEmployeeById = async (employeeId) => {
         .populate('store', 'name address')
         .lean();
     } else {
-      // If it's not a valid ObjectId (e.g., employee_id like "EMP-2025-153599"), search by employee_id
-      employee = await User.findOne({ employee_id: employeeId })
+      // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-153599"), search by employeeId (camelCase)
+      employee = await User.findOne({ employeeId: employeeId.toUpperCase() })
         .populate('role', 'name permissions')
         .populate('store', 'name address')
         .lean();
@@ -221,9 +221,9 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       query = { _id: employeeId };
       employee = await User.findById(employeeId);
     } else {
-      // If it's not a valid ObjectId (e.g., employee_id like "EMP-2025-153599"), search by employee_id
-      query = { employee_id: employeeId };
-      employee = await User.findOne({ employee_id: employeeId });
+      // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-153599"), search by employeeId (camelCase)
+      query = { employeeId: employeeId.toUpperCase() };
+      employee = await User.findOne({ employeeId: employeeId.toUpperCase() });
     }
     
     if (!employee) {
@@ -336,8 +336,8 @@ const assignRole = async (employeeId, roleName, assignedBy) => {
       // If it's a valid ObjectId, search by _id
       employee = await User.findById(employeeId);
     } else {
-      // If it's not a valid ObjectId (e.g., employee_id like "EMP-2025-172751"), search by employee_id
-      employee = await User.findOne({ employee_id: employeeId });
+      // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-172751"), search by employeeId (camelCase)
+      employee = await User.findOne({ employeeId: employeeId.toUpperCase() });
     }
     
     if (!employee) {
@@ -407,8 +407,8 @@ const updateEmployeeStatus = async (employeeId, status, updatedBy) => {
       // If it's a valid ObjectId, search by _id
       employee = await User.findById(employeeId);
     } else {
-      // If it's not a valid ObjectId (e.g., employee_id like "EMP-2025-172751"), search by employee_id
-      employee = await User.findOne({ employee_id: employeeId });
+      // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-172751"), search by employeeId (camelCase)
+      employee = await User.findOne({ employeeId: employeeId.toUpperCase() });
     }
     
     if (!employee) {

@@ -81,10 +81,32 @@ const addStatutoryInfo = async (req, res, next) => {
  */
 const completeOnboarding = async (req, res, next) => {
   try {
-    const { employeeId } = req.params;
+    // Support both :id and :employeeId params
+    const employeeId = req.params.employeeId || req.params.id;
     const completedBy = req.user?.id || req.user?._id;
 
-    const result = await onboardingService.completeOnboarding(employeeId, req.body, completedBy);
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Employee ID is required',
+        error: 'EMPLOYEE_ID_REQUIRED'
+      });
+    }
+
+    if (!completedBy) {
+      logger.warn('Complete onboarding called without authenticated user', {
+        employeeId,
+        user: req.user
+      });
+    }
+
+    logger.info('Completing onboarding', {
+      employeeId,
+      completedBy,
+      hasBody: !!req.body
+    });
+
+    const result = await onboardingService.completeOnboarding(employeeId, req.body || {}, completedBy);
 
     res.status(200).json({
       success: true,
@@ -92,7 +114,12 @@ const completeOnboarding = async (req, res, next) => {
       data: result
     });
   } catch (error) {
-    logger.error('Complete onboarding error', { error: error.message });
+    logger.error('Complete onboarding error', { 
+      error: error.message,
+      stack: error.stack,
+      employeeId: req.params.employeeId || req.params.id,
+      userId: req.user?.id || req.user?._id
+    });
     next(error);
   }
 };

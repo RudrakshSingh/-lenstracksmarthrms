@@ -80,10 +80,10 @@ function makeRequest(method, url, data = null, headers = {}) {
 
 // Login
 async function login() {
-  log.info('Logging in as HR...');
+  log.info('Logging in as Admin...');
   const response = await makeRequest('POST', `${BASE_URL}/api/auth/mock-login`, {
-    email: 'hr@company.com',
-    role: 'hr'
+    email: 'admin@company.com',
+    role: 'admin'
   });
   
   if (response.status === 200) {

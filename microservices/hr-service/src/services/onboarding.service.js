@@ -680,7 +680,9 @@ const completeOnboarding = async (employeeId, onboardingData, completedBy) => {
 
     return {
       employee_id: user.employeeId,
-      status: 'active',
+      user_id: user._id,
+      status: user.status,
+      is_active: user.is_active,
       message: 'Onboarding completed successfully'
     };
   } catch (error) {

@@ -80,14 +80,20 @@ const createEmployee = async (req, res, next) => {
     }
 
     // Create fullName from firstName and lastName if not provided
-    if (!employeeData.fullName && employeeData.firstName && employeeData.lastName) {
+    if ((!employeeData.fullName || employeeData.fullName.trim() === '') && employeeData.firstName && employeeData.lastName) {
       employeeData.fullName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
     }
 
-    // Validate required fields
+    // Validate required fields - check fullName after creation
     const requiredFields = ['fullName', 'email', 'department'];
     const validationError = validateRequired(employeeData, requiredFields);
     if (validationError) {
+      logger.error('Employee creation validation failed', {
+        missingFields: validationError.error,
+        providedFields: Object.keys(employeeData),
+        hasFullName: !!employeeData.fullName,
+        fullNameValue: employeeData.fullName
+      });
       return sendError(res, validationError.error, validationError.message, 400);
     }
 

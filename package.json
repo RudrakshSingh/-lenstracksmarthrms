@@ -36,6 +36,9 @@
     "test:real-data": "node scripts/test-real-data.js",
     "test:emergency-lock": "node test-emergency-lock-system.js",
     "test:emergency-components": "node test-emergency-lock-components.js",
+    "test:apis": "node scripts/test-all-apis.js",
+    "test:apis:local": "USE_LOCAL=true LOCAL_BASE_URL=http://localhost:3001 node scripts/test-all-apis.js",
+    "test:apis:prod": "BASE_URL=https://98.70.245.87 node scripts/test-all-apis.js",
     "keyvault:test": "node scripts/test-keyvault-connection.js",
     "keyvault:setup": "node scripts/setup-keyvault-secrets.js"
   },

@@ -216,6 +216,31 @@ const connectDB = async () => {
       logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
     }
     
+    // Ensure database name is specified in connection string
+    // If DB_NAME env var is set, use it; otherwise extract from URI or use default
+    const dbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
+    if (dbName && !mongoUri.includes(`/${dbName}`) && !mongoUri.includes(`/${dbName}?`)) {
+      // Add database name to connection string if not present
+      if (mongoUri.includes('?')) {
+        mongoUri = mongoUri.replace('?', `/${dbName}?`);
+      } else {
+        mongoUri = `${mongoUri}/${dbName}`;
+      }
+      logger.info('Database name added to connection string from DB_NAME environment variable', { dbName });
+    } else if (!mongoUri.match(/\/[^/?]+(\?|$)/)) {
+      // No database name in URI and no DB_NAME env var - use default
+      const defaultDbName = process.env.MONGO_DB_NAME || 'etelios_hr_service';
+      if (mongoUri.includes('?')) {
+        mongoUri = mongoUri.replace('?', `/${defaultDbName}?`);
+      } else {
+        mongoUri = `${mongoUri}/${defaultDbName}`;
+      }
+      logger.warn('No database name in connection string. Using default database name', { 
+        defaultDbName,
+        hint: 'Set DB_NAME or MONGO_DB_NAME environment variable to specify database name'
+      });
+    }
+    
     // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)
     const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
     
@@ -268,11 +293,26 @@ const connectDB = async () => {
     
     await mongoose.connect(mongoUri, connectionOptions);
     
+    // Log detailed connection information
+    const actualDbName = mongoose.connection.name;
+    const host = mongoose.connection.host;
+    const port = mongoose.connection.port;
+    
     logger.info('hr-service: MongoDB connected successfully', {
-      database: mongoose.connection.name,
-      host: mongoose.connection.host,
-      readyState: mongoose.connection.readyState
+      database: actualDbName,
+      host: host,
+      port: port,
+      readyState: mongoose.connection.readyState,
+      connectionString: mongoUri.replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1****$3') // Mask password
     });
+    
+    // Warn if database name contains "test"
+    if (actualDbName.toLowerCase().includes('test')) {
+      logger.warn('⚠️  WARNING: Connected to database with "test" in name. This may be a test database!', {
+        database: actualDbName,
+        hint: 'Check MONGO_URI environment variable to ensure you are connecting to production database'
+      });
+    }
   } catch (error) {
     logger.error('hr-service: Database connection failed', { 
       error: error.message,

@@ -3,7 +3,7 @@ const PayrollRun = require('../models/PayrollRun.model');
 const PayrollOverride = require('../models/PayrollOverride.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../../shared/utils/response.util.js');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
 
 /**
  * @desc Create payroll run

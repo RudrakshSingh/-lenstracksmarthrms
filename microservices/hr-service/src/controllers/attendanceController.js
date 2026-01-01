@@ -1,6 +1,6 @@
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../../shared/utils/response.util.js');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
 
 /**
  * Get attendance statistics

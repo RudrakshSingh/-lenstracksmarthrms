@@ -2,7 +2,7 @@ const statutoryExportService = require('../services/statutoryExport.service');
 const StatExport = require('../models/StatExport.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../../shared/utils/response.util.js');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
 
 /**
  * Generate EPF export

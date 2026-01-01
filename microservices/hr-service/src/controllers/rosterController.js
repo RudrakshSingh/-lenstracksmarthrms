@@ -2,7 +2,7 @@ const Roster = require('../models/Roster.model');
 const User = require('../models/User.model');
 const Store = require('../models/Store.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError, createPagination, parsePagination } = require('../../../shared/utils/response.util.js');
+const { sendSuccess, sendError, createPagination, parsePagination } = require('../../shared/utils/response.util.js');
 
 /**
  * Get roster

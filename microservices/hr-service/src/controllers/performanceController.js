@@ -1,7 +1,7 @@
 const PerformanceReview = require('../models/PerformanceReview.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../../shared/utils/response.util.js');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
 
 /**
  * Get performance metrics for current user

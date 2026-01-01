@@ -1,6 +1,6 @@
 const RecruitmentJob = require('../models/RecruitmentJob.model');
 const logger = require('../config/logger');
-const { sendSuccess, sendError, createPagination, parsePagination } = require('../../../shared/utils/response.util.js');
+const { sendSuccess, sendError, createPagination, parsePagination } = require('../../shared/utils/response.util.js');
 
 /**
  * Get recruitment jobs

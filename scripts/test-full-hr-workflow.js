@@ -107,11 +107,11 @@ async function createEmployee() {
     employeeId: `EMP-${timestamp}`,
     firstName: 'John',
     lastName: 'Doe',
-    fullName: 'John Doe',
+    fullName: 'John Doe', // Ensure fullName is always provided
     email: `john.doe.${timestamp}@example.com`,
     password: 'Test1234!',
     roleName: 'employee',
-    phone: '+1234567890',
+    phone: '9876543210', // Indian format
     department: 'IT',
     jobTitle: 'Software Developer'
   };

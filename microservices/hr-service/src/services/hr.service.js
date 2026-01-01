@@ -120,15 +120,20 @@ const createEmployee = async (employeeData, createdBy) => {
       
       if (!existingEmployee) {
         // Create Employee document from User data
+        // Ensure all required fields are present
+        const roleFamilyValue = rest.role_family || rest.roleFamily || 'Operations';
+        const departmentValue = employee.department || rest.department || 'Operations'; // Default to Operations if not provided
+        const designationValue = rest.designation || employee.jobTitle || 'Employee';
+        
         const employeeData = {
           employeeId: normalizedEmployeeId,
           code: normalizedEmployeeId, // Use employeeId as code
-          fullName: employee.fullName || `${employee.firstName} ${employee.lastName}`.trim(),
+          fullName: employee.fullName || `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || 'Employee',
           email: employee.email,
           phone: employee.phone || '',
-          designation: employee.jobTitle || rest.designation || 'Employee',
-          roleFamily: rest.role_family || rest.roleFamily || 'Operations', // Default to Operations
-          department: employee.department || rest.department || '',
+          designation: designationValue,
+          roleFamily: roleFamilyValue,
+          department: departmentValue,
           doj: rest.joining_date ? new Date(rest.joining_date) : new Date(), // Date of joining
           status: employee.status === 'active' ? 'ACTIVE' : 'INACTIVE'
         };
@@ -136,7 +141,10 @@ const createEmployee = async (employeeData, createdBy) => {
         // Add optional fields if available
         if (employee.dateOfBirth) employeeData.dob = employee.dateOfBirth;
         if (rest.designation) employeeData.designation = rest.designation;
-        if (rest.gradeBand) employeeData.gradeBand = rest.gradeBand;
+        // Support both snake_case (from frontend) and camelCase
+        if (rest.grade_band || rest.gradeBand) {
+          employeeData.gradeBand = rest.grade_band || rest.gradeBand;
+        }
         if (rest.confirmationDate) employeeData.confirmationDate = new Date(rest.confirmationDate);
         if (rest.uan) employeeData.uan = rest.uan;
         if (rest.esiNo) employeeData.esiNo = rest.esiNo;

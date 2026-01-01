@@ -32,7 +32,7 @@ const createEmployeeSchema = {
   body: Joi.object({
     employeeId: Joi.string().required(),
     firstName: Joi.string().required(),
-    lastName: Joi.string().required(),
+    lastName: Joi.string().allow('').optional(), // Allow empty lastName (fullName will be created from firstName if lastName is empty)
     fullName: Joi.string().allow('').optional(), // Allow fullName (will be created from firstName + lastName if not provided)
     email: Joi.string().email().required(),
     password: Joi.string().min(8).required(),

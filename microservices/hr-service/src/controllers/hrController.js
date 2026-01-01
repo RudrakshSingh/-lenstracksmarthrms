@@ -110,10 +110,15 @@ const createEmployee = async (req, res, next) => {
 
     // Ensure fullName exists (either provided or created from firstName + lastName)
     if (!employeeData.fullName || (typeof employeeData.fullName === 'string' && employeeData.fullName.trim() === '')) {
-      if (!employeeData.firstName || !employeeData.lastName) {
-        return sendError(res, 'Missing required fields: fullName (or firstName and lastName)', 'Validation failed', 400);
+      if (!employeeData.firstName) {
+        return sendError(res, 'Missing required fields: fullName (or firstName)', 'Validation failed', 400);
       }
-      employeeData.fullName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
+      // If lastName is empty or not provided, use firstName as fullName
+      if (employeeData.lastName && employeeData.lastName.trim() !== '') {
+        employeeData.fullName = `${employeeData.firstName} ${employeeData.lastName}`.trim();
+      } else {
+        employeeData.fullName = employeeData.firstName.trim();
+      }
     }
 
     // Create employee

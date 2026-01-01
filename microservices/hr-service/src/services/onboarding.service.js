@@ -730,14 +730,23 @@ const saveDraft = async (employeeId, step, data, userId) => {
  */
 const getDraft = async (employeeId) => {
   try {
+    // Fetch drafts without sort (Cosmos DB index issue)
+    // Sort in memory instead
     const drafts = await OnboardingDraft.find({ employee_id: employeeId.toUpperCase() })
-      .sort({ step: 1 })
       .populate('created_by', 'firstName lastName email')
       .populate('updated_by', 'firstName lastName email');
 
+    // Sort in memory by step
+    const sortedDrafts = drafts.sort((a, b) => {
+      const stepOrder = { 'personal-details': 1, 'work-details': 2, 'statutory-info': 3, 'documents': 4 };
+      const aOrder = stepOrder[a.step] || 99;
+      const bOrder = stepOrder[b.step] || 99;
+      return aOrder - bOrder;
+    });
+
     return {
       employee_id: employeeId.toUpperCase(),
-      drafts: drafts.map(d => ({
+      drafts: sortedDrafts.map(d => ({
         step: d.step,
         data: d.data,
         created_at: d.createdAt,
@@ -752,12 +761,96 @@ const getDraft = async (employeeId) => {
 
 /**
  * Step 1: Add personal details (onboarding-specific endpoint)
- * This is similar to registerBasicInfo but specifically for onboarding flow
+ * This updates an existing employee's personal details
  */
 const addPersonalDetails = async (personalData, createdBy) => {
   try {
-    // Reuse registerBasicInfo logic
-    return await registerBasicInfo(personalData);
+    const { employee_id, name, email, phone, date_of_birth, address } = personalData;
+
+    if (!employee_id) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID is required');
+    }
+
+    // Find existing employee
+    const user = await User.findOne({ employeeId: employee_id.toUpperCase() });
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'EMPLOYEE_NOT_FOUND', 'Employee not found');
+    }
+
+    // Update personal details
+    if (name) {
+      const nameParts = name.trim().split(' ');
+      user.firstName = nameParts[0] || user.firstName;
+      user.lastName = nameParts.slice(1).join(' ') || user.lastName;
+      user.fullName = name.trim();
+    }
+
+    if (email) {
+      const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+      if (!emailRegex.test(email)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_EMAIL', 'Invalid email format');
+      }
+      // Check if email is already used by another user
+      const existingUser = await User.findOne({ email: email.toLowerCase(), _id: { $ne: user._id } });
+      if (existingUser) {
+        throw new ApiError(httpStatus.CONFLICT, 'Email already exists');
+      }
+      user.email = email.toLowerCase();
+    }
+
+    if (phone) {
+      const cleanPhone = phone.replace(/\D/g, ''); // Remove all non-digits
+      const phoneRegex = /^[6-9]\d{9}$/;
+      if (cleanPhone.length === 10 && phoneRegex.test(cleanPhone)) {
+        user.phone = cleanPhone;
+      } else {
+        // If not Indian format, just store the cleaned phone (for international numbers)
+        if (cleanPhone.length > 0) {
+          user.phone = cleanPhone;
+        } else {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_PHONE', 'Phone number is required');
+        }
+      }
+    }
+
+    if (date_of_birth) {
+      const dob = new Date(date_of_birth);
+      const today = new Date();
+      const age = today.getFullYear() - dob.getFullYear();
+      const monthDiff = today.getMonth() - dob.getMonth();
+      const actualAge = (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) ? age - 1 : age;
+      if (actualAge < 18) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_DOB', 'Date of birth must be 18+ years');
+      }
+      user.dateOfBirth = dob;
+    }
+
+    if (address) {
+      if (address.pincode && !/^\d{6}$/.test(address.pincode)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_PINCODE', 'Pincode must be exactly 6 digits');
+      }
+      user.address = {
+        street: address.address_line_1 || address.street || user.address?.street,
+        city: address.city || user.address?.city,
+        state: address.state || user.address?.state,
+        zip: address.pincode || address.zip || user.address?.zip,
+        country: address.country || user.address?.country || 'India'
+      };
+    }
+
+    await user.save();
+
+    logger.info('Personal details updated', {
+      employeeId: user.employeeId,
+      email: user.email
+    });
+
+    return {
+      employee_id: user.employeeId,
+      user_id: user._id,
+      email: user.email,
+      status: user.status
+    };
   } catch (error) {
     logger.error('Error in addPersonalDetails', { error: error.message });
     throw error;

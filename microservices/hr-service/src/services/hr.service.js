@@ -1,6 +1,7 @@
 const User = require('../models/User.model');
 const Role = require('../models/Role.model');
 const Store = require('../models/Store.model');
+const mongoose = require('mongoose');
 const { hashPassword } = require('../utils/hashUtils');
 const logger = require('../config/logger');
 const auditUtils = require('../utils/audit');
@@ -15,7 +16,19 @@ const httpStatus = require('http-status');
  */
 const createEmployee = async (employeeData, createdBy) => {
   try {
-    const { email, password, roleName, storeId, ...rest } = employeeData;
+    const { email, password, roleName, storeId, employeeId, ...rest } = employeeData;
+
+    // Ensure employeeId is provided and uppercase
+    if (!employeeId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID is required');
+    }
+    const normalizedEmployeeId = employeeId.toUpperCase().trim();
+
+    // Check if employeeId already exists
+    const existingEmployeeId = await User.findOne({ employeeId: normalizedEmployeeId });
+    if (existingEmployeeId) {
+      throw new ApiError(httpStatus.CONFLICT, 'Employee ID already exists');
+    }
 
     // Check if email already exists
     const existingUser = await User.findOne({ email });
@@ -44,7 +57,8 @@ const createEmployee = async (employeeData, createdBy) => {
       }
     }
 
-    const employee = new User({
+    let employee = new User({
+      employeeId: normalizedEmployeeId, // Explicitly set employeeId
       email,
       password,
       role: role._id,
@@ -53,7 +67,50 @@ const createEmployee = async (employeeData, createdBy) => {
       ...rest
     });
 
-    await employee.save();
+    // Save employee and verify
+    try {
+      await employee.save();
+      
+      // Reload from database to verify it was saved
+      const savedEmployee = await User.findById(employee._id);
+      if (!savedEmployee) {
+        logger.error('Employee save failed - not found after save!', { 
+          employeeId: normalizedEmployeeId,
+          mongoId: employee._id,
+          email 
+        });
+        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Employee was not saved to database');
+      }
+      
+      // Verify employeeId was saved correctly
+      if (!savedEmployee.employeeId || savedEmployee.employeeId !== normalizedEmployeeId) {
+        logger.error('Employee created but employeeId mismatch!', { 
+          expected: normalizedEmployeeId, 
+          actual: savedEmployee.employeeId, 
+          email 
+        });
+        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Employee ID was not set correctly during creation');
+      }
+      
+      logger.info('Employee saved and verified in database', {
+        employeeId: savedEmployee.employeeId,
+        mongoId: savedEmployee._id,
+        email: savedEmployee.email,
+        database: mongoose.connection.name
+      });
+      
+      // Use saved employee for rest of function
+      employee = savedEmployee;
+    } catch (saveError) {
+      logger.error('Error saving employee to database', {
+        error: saveError.message,
+        employeeId: normalizedEmployeeId,
+        email,
+        database: mongoose.connection.name,
+        stack: saveError.stack
+      });
+      throw saveError;
+    }
     
     // Invalidate employee list cache (if cache is available)
     try {
@@ -175,21 +232,39 @@ const getEmployeeById = async (employeeId) => {
     const mongoose = require('mongoose');
     let employee;
     
-    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+    // Normalize the employeeId input
+    const normalizedId = employeeId ? employeeId.toString().trim() : '';
+    
+    if (mongoose.Types.ObjectId.isValid(normalizedId)) {
       // If it's a valid ObjectId, search by _id
-      employee = await User.findById(employeeId)
+      employee = await User.findById(normalizedId)
         .populate('role', 'name permissions')
         .populate('store', 'name address')
         .lean();
     } else {
       // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-153599"), search by employeeId (camelCase)
-      employee = await User.findOne({ employeeId: employeeId.toUpperCase() })
+      // Try both uppercase and original case
+      employee = await User.findOne({ 
+        $or: [
+          { employeeId: normalizedId.toUpperCase() },
+          { employeeId: normalizedId }
+        ]
+      })
         .populate('role', 'name permissions')
         .populate('store', 'name address')
         .lean();
     }
 
-    if (!employee || employee.isDeleted) {
+    if (!employee) {
+      // Log for debugging
+      logger.warn('Employee not found', { 
+        searchedId: normalizedId,
+        isObjectId: mongoose.Types.ObjectId.isValid(normalizedId)
+      });
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+    }
+
+    if (employee.isDeleted) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 

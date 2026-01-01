@@ -2,7 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../shared/utils/response.util');
+const { sendSuccess, sendError } = require('../../../shared/utils/response.util');
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();

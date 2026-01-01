@@ -12,7 +12,7 @@ const http = require('http');
 
 const BASE_URL = process.env.BASE_URL || 'https://api.etelios.com';
 const isLocal = process.argv.includes('--local');
-const actualBaseUrl = isLocal ? 'http://localhost:3001' : BASE_URL;
+const actualBaseUrl = isLocal ? 'http://localhost:3002' : BASE_URL; // HR service runs on 3002
 
 if (!isLocal) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -140,24 +140,19 @@ async function createEmployee() {
 
 async function onboardingStep1() {
   log('\n━━━ Step 2: Personal Details ━━━', 'bright');
+  const timestamp = Date.now();
   const personalData = {
-    employeeId: createdEmployeeId,
-    firstName: 'John',
-    lastName: 'Doe',
-    email: `john.doe.${Date.now()}@example.com`,
-    phone: '+1234567890',
-    dateOfBirth: '1990-01-15',
+    employee_id: createdEmployeeId,
+    name: 'John Doe',
+    email: `john.doe.${timestamp}@example.com`, // Required field
+    phone: '9876543210', // Indian format: 10 digits starting with 6-9
+    date_of_birth: '1990-01-15',
     address: {
       street: '123 Main St',
       city: 'Mumbai',
       state: 'Maharashtra',
-      zip: '400001',
+      pincode: '400001',
       country: 'India'
-    },
-    emergencyContact: {
-      name: 'Jane Doe',
-      relationship: 'Spouse',
-      phone: '+1234567891'
     }
   };
 
@@ -182,6 +177,9 @@ async function onboardingStep2() {
     employeeId: createdEmployeeId,
     jobTitle: 'Software Developer',
     department: 'IT',
+    designation: 'Software Developer', // Required field
+    role_family: 'Engineering', // Required field
+    joining_date: new Date().toISOString().split('T')[0], // Required field (YYYY-MM-DD format)
     reportingManager: null,
     joiningDate: new Date().toISOString(),
     employmentType: 'Full-time',
@@ -245,15 +243,17 @@ async function onboardingStep4() {
     documents: [
       {
         type: 'PAN',
-        documentNumber: 'ABCDE1234F',
-        uploaded: true,
-        uploadDate: new Date().toISOString()
+        name: 'PAN Card',
+        file_url: 'https://example.com/documents/pan.pdf',
+        uploaded_at: new Date().toISOString(),
+        verified: false
       },
       {
-        type: 'Aadhar',
-        documentNumber: '1234 5678 9012',
-        uploaded: true,
-        uploadDate: new Date().toISOString()
+        type: 'AADHAR',
+        name: 'Aadhar Card',
+        file_url: 'https://example.com/documents/aadhar.pdf',
+        uploaded_at: new Date().toISOString(),
+        verified: false
       }
     ]
   };

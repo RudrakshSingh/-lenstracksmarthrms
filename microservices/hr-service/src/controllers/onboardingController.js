@@ -31,6 +31,14 @@ const addWorkDetails = async (req, res, next) => {
     const { employeeId } = req.body;
     const createdBy = req.user?.id || req.user?._id;
 
+    // Log request for debugging
+    logger.info('Add work details request', {
+      employeeId,
+      hasJobTitle: !!req.body.jobTitle,
+      hasDepartment: !!req.body.department,
+      createdBy
+    });
+
     if (!employeeId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID is required');
     }
@@ -43,7 +51,12 @@ const addWorkDetails = async (req, res, next) => {
       data: result
     });
   } catch (error) {
-    logger.error('Add work details error', { error: error.message });
+    logger.error('Add work details error', { 
+      error: error.message,
+      stack: error.stack,
+      employeeId: req.body?.employeeId,
+      statusCode: error.statusCode || error.status
+    });
     next(error);
   }
 };

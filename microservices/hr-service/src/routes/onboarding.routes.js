@@ -118,7 +118,7 @@ const personalDetailsSchema = {
     name: Joi.string().min(2).max(100).required(),
     email: Joi.string().email().required(),
     phone: Joi.string().required(),
-    password: Joi.string().min(8).required(),
+    password: Joi.string().min(8).optional(), // Optional since employee may already exist
     role: Joi.string().valid('employee', 'hr', 'manager', 'admin', 'superadmin').default('employee'),
     date_of_birth: Joi.date().optional(),
     address: Joi.object({

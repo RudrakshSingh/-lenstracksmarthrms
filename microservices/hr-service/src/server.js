@@ -198,7 +198,17 @@ const connectDB = async () => {
   try {
     // Get MONGO_URI from Azure Key Vault or environment variable
     // Never hardcode connection strings in code!
-    let mongoUri = process.env.MONGO_URI;
+    // Support both MONGO_URI and MONGODB_URI (common variations)
+    let mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+    
+    // Log what we found for debugging
+    if (mongoUri) {
+      logger.info('MongoDB connection string found', {
+        source: process.env.MONGO_URI ? 'MONGO_URI' : 'MONGODB_URI',
+        hasDatabase: mongoUri.includes('/') && !mongoUri.endsWith('/'),
+        length: mongoUri.length
+      });
+    }
     
     // If not in environment, try Key Vault (only if enabled)
     if (!mongoUri && process.env.USE_KEY_VAULT === 'true') {
@@ -217,11 +227,6 @@ const connectDB = async () => {
     }
     
     // Ensure database name is specified in connection string - ALWAYS use MAIN database
-    // Check if database name exists in URI (pattern: mongodb://host/DATABASE_NAME or mongodb://host/DATABASE_NAME?options)
-    const dbNamePattern = /@[^/]+\/([^/?]+)/;
-    const dbNameMatch = mongoUri.match(dbNamePattern);
-    const existingDbName = dbNameMatch ? dbNameMatch[1] : null;
-    
     // Get target database name - prioritize env vars, but ensure it's MAIN database
     let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
     
@@ -236,52 +241,84 @@ const connectDB = async () => {
       }
     }
     
-    // If no database name in URI, or existing name contains "test", replace with main DB
-    if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
-      if (existingDbName && existingDbName.toLowerCase().includes('test')) {
-        logger.error('⚠️  ERROR: Connection string points to TEST database! Replacing with main production database.', {
-          testDbName: existingDbName,
-          mainDbName: targetDbName
+    // Parse connection string to extract and set database name
+    // Format: mongodb://[username:password@]host[:port]/[database][?options]
+    // or: mongodb://[username:password@]host[:port]/?options (no database)
+    
+    try {
+      const url = new URL(mongoUri);
+      const existingDbName = url.pathname ? url.pathname.substring(1).split('?')[0] : '';
+      
+      // Check if existing database name is test or empty
+      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
+        if (existingDbName && existingDbName.toLowerCase().includes('test')) {
+          logger.error('⚠️  ERROR: Connection string points to TEST database! Replacing with main production database.', {
+            testDbName: existingDbName,
+            mainDbName: targetDbName
+          });
+        }
+        
+        // Set the database name in the URL
+        // For mongodb+srv://, ensure pathname is set correctly
+        url.pathname = `/${targetDbName}`;
+        mongoUri = url.toString();
+        
+        // Log the modified connection string (masked) for debugging
+        logger.info('✅ Database name set in connection string', { 
+          database: targetDbName,
+          wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test'),
+          wasEmpty: !existingDbName || existingDbName.trim() === '',
+          connectionFormat: mongoUri.startsWith('mongodb+srv://') ? 'mongodb+srv' : 'mongodb',
+          maskedUri: mongoUri.replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1****$3')
         });
-        // Replace test database name with main database name
-        mongoUri = mongoUri.replace(`/${existingDbName}`, `/${targetDbName}`);
+      } else if (existingDbName !== targetDbName) {
+        // Database name exists but doesn't match target - FORCE to main DB
+        logger.warn('⚠️  Database name in connection string differs from target. Forcing to main database.', {
+          uriDbName: existingDbName,
+          targetDbName: targetDbName
+        });
+        url.pathname = `/${targetDbName}`;
+        mongoUri = url.toString();
+        logger.info('✅ Database name forced to main database', { database: targetDbName });
       } else {
-        // Insert database name before query string or at end
+        logger.info('✅ Database name already correct', { database: existingDbName });
+      }
+    } catch (urlError) {
+      // If URL parsing fails, try regex-based approach
+      logger.warn('URL parsing failed, using regex-based database name extraction', { error: urlError.message });
+      
+      // Try to extract database name using regex
+      // Pattern: /database_name or /database_name?options
+      const dbNameMatch = mongoUri.match(/\/([^/?]+)(\?|$)/);
+      const existingDbName = dbNameMatch ? dbNameMatch[1] : null;
+      
+      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
+        // Replace or add database name
         if (mongoUri.includes('?')) {
-          // Replace /? with /DATABASE_NAME?
+          // Has query string - insert database name before ?
           mongoUri = mongoUri.replace(/\/(\?)/, `/${targetDbName}$1`);
+        } else if (mongoUri.endsWith('/')) {
+          // Ends with / - append database name
+          mongoUri = `${mongoUri}${targetDbName}`;
         } else {
-          // Add /DATABASE_NAME at end
-          // Find position after @host
-          const atIndex = mongoUri.indexOf('@');
-          if (atIndex !== -1) {
-            const afterHost = mongoUri.substring(atIndex);
-            const slashIndex = afterHost.indexOf('/');
-            if (slashIndex !== -1 && slashIndex < afterHost.length - 1) {
-              // There's something after /, replace it
-              const queryIndex = afterHost.indexOf('?', slashIndex);
-              const endIndex = queryIndex !== -1 ? queryIndex : afterHost.length;
-              mongoUri = mongoUri.substring(0, atIndex + slashIndex + 1) + targetDbName + mongoUri.substring(atIndex + endIndex);
+          // Find last / and replace what's after it
+          const lastSlashIndex = mongoUri.lastIndexOf('/');
+          if (lastSlashIndex !== -1) {
+            const beforeSlash = mongoUri.substring(0, lastSlashIndex + 1);
+            const afterSlash = mongoUri.substring(lastSlashIndex + 1);
+            // Check if afterSlash contains @ (it's part of host) or ? (it's query)
+            if (afterSlash.includes('@') || afterSlash.includes('?')) {
+              mongoUri = `${beforeSlash}${targetDbName}${afterSlash.includes('?') ? '' : '?'}${afterSlash.includes('?') ? afterSlash.substring(afterSlash.indexOf('?')) : ''}`;
             } else {
-              // Just add /DATABASE_NAME
-              mongoUri = `${mongoUri}/${targetDbName}`;
+              mongoUri = `${beforeSlash}${targetDbName}`;
             }
           } else {
             mongoUri = `${mongoUri}/${targetDbName}`;
           }
         }
+        
+        logger.info('✅ Database name set using regex method', { database: targetDbName });
       }
-      
-      logger.info('Database name set in connection string', { 
-        database: targetDbName,
-        wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test')
-      });
-    } else if (existingDbName !== targetDbName) {
-      // Database name exists but doesn't match target - log warning but don't change (user may have specific reason)
-      logger.warn('Database name in connection string differs from DB_NAME env var', {
-        uriDbName: existingDbName,
-        envDbName: targetDbName
-      });
     }
     
     // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)
@@ -341,19 +378,46 @@ const connectDB = async () => {
     const host = mongoose.connection.host;
     const port = mongoose.connection.port;
     
-    logger.info('hr-service: MongoDB connected successfully', {
+    // Extract database name from connection string for verification
+    let uriDbName = '';
+    try {
+      const url = new URL(mongoUri);
+      uriDbName = url.pathname ? url.pathname.substring(1).split('?')[0] : '';
+    } catch (e) {
+      // If URL parsing fails, try regex
+      const match = mongoUri.match(/\/([^/?]+)(\?|$)/);
+      uriDbName = match ? match[1] : '';
+    }
+    
+    logger.info('═══════════════════════════════════════════════════════');
+    logger.info('✅ hr-service: MongoDB connected successfully');
+    logger.info('═══════════════════════════════════════════════════════', {
       database: actualDbName,
+      uriDatabase: uriDbName,
+      targetDatabase: targetDbName,
       host: host,
       port: port,
       readyState: mongoose.connection.readyState,
       connectionString: mongoUri.replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1****$3') // Mask password
     });
     
-    // Warn if database name contains "test"
+    // CRITICAL: Verify we're connected to the correct database
     if (actualDbName.toLowerCase().includes('test')) {
-      logger.warn('⚠️  WARNING: Connected to database with "test" in name. This may be a test database!', {
+      logger.error('❌ CRITICAL ERROR: Connected to TEST database!', {
         database: actualDbName,
-        hint: 'Check MONGO_URI environment variable to ensure you are connecting to production database'
+        expected: targetDbName,
+        action: 'Check MONGO_URI environment variable'
+      });
+    } else if (actualDbName !== targetDbName && uriDbName !== targetDbName) {
+      logger.warn('⚠️  WARNING: Database name mismatch!', {
+        actual: actualDbName,
+        uri: uriDbName,
+        expected: targetDbName,
+        hint: 'Verify MONGO_URI points to correct database'
+      });
+    } else {
+      logger.info('✅ Database connection verified - using MAIN database', {
+        database: actualDbName
       });
     }
   } catch (error) {

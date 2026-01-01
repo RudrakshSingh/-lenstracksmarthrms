@@ -98,9 +98,9 @@ const errorHandler = (err, req, res, next) => {
     const isDevelopment = process.env.NODE_ENV === 'development';
     const isProduction = process.env.NODE_ENV === 'production';
 
-    // In production, hide operational error details
-    if (isProduction && !err.isOperational && statusCode >= 500) {
-      message = 'An unexpected error occurred';
+    // In production, hide operational error details (but keep for development)
+    if (isProduction && !err.isOperational && statusCode >= 500 && !isDevelopment) {
+      message = 'An internal server error occurred';
     }
 
     res.locals.errorMessage = err.message;

@@ -30,6 +30,13 @@ const roleSchema = new mongoose.Schema({
       
       // HR Management
       'read_hr', 'write_hr', 'create_hr', 'update_hr', 'delete_hr',
+      'hr.read', 'hr.create', 'hr.update', 'hr.delete',
+      
+      // Employee Management
+      'employee.read', 'employee.create', 'employee.update', 'employee.delete',
+      
+      // Dashboard
+      'dashboard.read', 'dashboard.write',
       
       // Leave Management
       'read_leave', 'write_leave', 'create_leave', 'update_leave', 'approve_leave',

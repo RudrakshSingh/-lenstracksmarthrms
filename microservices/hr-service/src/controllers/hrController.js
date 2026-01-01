@@ -79,6 +79,22 @@ const createEmployee = async (req, res, next) => {
       return sendError(res, 'Authentication required', 'Authentication required', 401);
     }
 
+    // CRITICAL: Transform frontend field names to backend format
+    // Frontend sends: designation → Backend expects: jobTitle
+    if (employeeData.designation && !employeeData.jobTitle) {
+      employeeData.jobTitle = employeeData.designation;
+      logger.info('Transformed designation to jobTitle', { designation: employeeData.designation });
+    }
+    
+    // Frontend sends: joining_date → Backend expects: doj
+    if (employeeData.joining_date && !employeeData.doj) {
+      employeeData.doj = employeeData.joining_date;
+      logger.info('Transformed joining_date to doj', { joining_date: employeeData.joining_date });
+    }
+    
+    // Frontend sends: role_family → Backend expects: roleFamily (already handled in service)
+    // Frontend sends: grade_band → Backend expects: gradeBand (already handled in service)
+
     // Log incoming data for debugging
     logger.info('Creating employee', {
       hasFullName: !!employeeData.fullName,
@@ -87,6 +103,8 @@ const createEmployee = async (req, res, next) => {
       lastName: employeeData.lastName,
       email: employeeData.email,
       department: employeeData.department,
+      jobTitle: employeeData.jobTitle,
+      designation: employeeData.designation,
       allKeys: Object.keys(employeeData)
     });
 
@@ -188,6 +206,49 @@ const updateEmployee = async (req, res, next) => {
     const { id } = req.params;
     const updateData = req.body;
     const updatedBy = req.user._id;
+
+    // CRITICAL: Transform frontend field names to backend format for statutory info
+    // Frontend sends: esi_number → Backend expects: esiNo
+    if (updateData.esi_number && !updateData.esiNo) {
+      updateData.esiNo = updateData.esi_number;
+      delete updateData.esi_number;
+      logger.info('Transformed esi_number to esiNo');
+    }
+    
+    // Frontend sends: pan_number → Backend expects: panNumber
+    if (updateData.pan_number && !updateData.panNumber) {
+      updateData.panNumber = updateData.pan_number;
+      delete updateData.pan_number;
+      logger.info('Transformed pan_number to panNumber');
+    }
+    
+    // Frontend sends: bank_account → Backend expects: bankAccount
+    if (updateData.bank_account && !updateData.bankAccount) {
+      updateData.bankAccount = updateData.bank_account;
+      delete updateData.bank_account;
+      logger.info('Transformed bank_account to bankAccount');
+    }
+    
+    // Frontend sends: aadhar_masked → Backend expects: aadharMasked
+    if (updateData.aadhar_masked && !updateData.aadharMasked) {
+      updateData.aadharMasked = updateData.aadhar_masked;
+      delete updateData.aadhar_masked;
+      logger.info('Transformed aadhar_masked to aadharMasked');
+    }
+    
+    // Frontend sends: previous_employment → Backend expects: previousEmployment
+    if (updateData.previous_employment && !updateData.previousEmployment) {
+      updateData.previousEmployment = updateData.previous_employment;
+      delete updateData.previous_employment;
+      logger.info('Transformed previous_employment to previousEmployment');
+    }
+    
+    // Frontend sends: designation → Backend expects: jobTitle
+    if (updateData.designation && !updateData.jobTitle) {
+      updateData.jobTitle = updateData.designation;
+      delete updateData.designation;
+      logger.info('Transformed designation to jobTitle');
+    }
 
     const employee = await HRService.updateEmployee(id, updateData, updatedBy);
 

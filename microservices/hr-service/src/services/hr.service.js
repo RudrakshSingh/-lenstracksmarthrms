@@ -380,7 +380,7 @@ const getEmployeeById = async (employeeId) => {
  */
 const updateEmployee = async (employeeId, updateData, updatedBy) => {
   try {
-    const { roleName, storeId, ...rest } = updateData;
+    const { roleName, storeId, uan, esiNo, panNumber, bankAccount, aadharMasked, previousEmployment, ...rest } = updateData;
 
     // Check if employeeId is a valid MongoDB ObjectId
     const mongoose = require('mongoose');
@@ -419,11 +419,70 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       rest.store = store._id;
     }
 
+    // Update User model
     const updatedEmployee = await User.findOneAndUpdate(
       query,
       rest,
       { new: true, runValidators: true }
     ).populate('role', 'name permissions').populate('store', 'name address');
+
+    // Handle statutory information updates (UAN, ESI, PAN, Bank Account)
+    // These are stored in CompensationProfile, not User model
+    if (uan || esiNo || panNumber || bankAccount || previousEmployment) {
+      const CompensationProfile = require('../models/CompensationProfile.model');
+      const employeeIdStr = employee.employeeId || employeeId.toUpperCase();
+      
+      // Find or create CompensationProfile
+      let compensationProfile = await CompensationProfile.findOne({ 
+        $or: [
+          { employee: employee._id },
+          { employeeId: employeeIdStr }
+        ]
+      });
+      
+      if (!compensationProfile) {
+        compensationProfile = new CompensationProfile({
+          employee: employee._id,
+          employeeId: employeeIdStr,
+          updatedBy: updatedBy
+        });
+      }
+      
+      // Update statutory fields
+      if (uan) compensationProfile.uan = uan;
+      if (esiNo) compensationProfile.esiNo = esiNo;
+      if (panNumber) compensationProfile.panNumber = panNumber.toUpperCase();
+      if (aadharMasked) compensationProfile.aadharMasked = aadharMasked;
+      
+      if (bankAccount) {
+        compensationProfile.bankAccount = {
+          accountNumber: bankAccount.account_number || bankAccount.accountNumber,
+          ifscCode: (bankAccount.ifsc_code || bankAccount.ifscCode)?.toUpperCase(),
+          bankName: bankAccount.bank_name || bankAccount.bankName,
+          accountType: bankAccount.account_type || bankAccount.accountType
+        };
+      }
+      
+      if (previousEmployment) {
+        compensationProfile.previousEmployment = {
+          hasPreviousEmployment: previousEmployment.has_previous_employment || previousEmployment.hasPreviousEmployment,
+          employerName: previousEmployment.employer_name || previousEmployment.employerName,
+          fromDate: previousEmployment.from_date ? new Date(previousEmployment.from_date) : (previousEmployment.fromDate ? new Date(previousEmployment.fromDate) : undefined),
+          toDate: previousEmployment.to_date ? new Date(previousEmployment.to_date) : (previousEmployment.toDate ? new Date(previousEmployment.toDate) : undefined)
+        };
+      }
+      
+      compensationProfile.updatedBy = updatedBy;
+      await compensationProfile.save();
+      
+      logger.info('Statutory information updated in CompensationProfile', {
+        employeeId: employeeIdStr,
+        hasUAN: !!uan,
+        hasESI: !!esiNo,
+        hasPAN: !!panNumber,
+        hasBankAccount: !!bankAccount
+      });
+    }
 
     // Record audit log
     try {

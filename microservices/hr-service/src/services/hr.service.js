@@ -1,4 +1,5 @@
 const User = require('../models/User.model');
+const Employee = require('../models/Employee.model');
 const Role = require('../models/Role.model');
 const Store = require('../models/Store.model');
 const mongoose = require('mongoose');
@@ -92,7 +93,7 @@ const createEmployee = async (employeeData, createdBy) => {
         throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Employee ID was not set correctly during creation');
       }
       
-      logger.info('Employee saved and verified in database', {
+      logger.info('User saved and verified in database', {
         employeeId: savedEmployee.employeeId,
         mongoId: savedEmployee._id,
         email: savedEmployee.email,
@@ -110,6 +111,91 @@ const createEmployee = async (employeeData, createdBy) => {
         stack: saveError.stack
       });
       throw saveError;
+    }
+    
+    // Save to Employee collection (employees collection in Cosmos DB)
+    try {
+      // Check if Employee already exists
+      const existingEmployee = await Employee.findOne({ employeeId: normalizedEmployeeId });
+      
+      if (!existingEmployee) {
+        // Create Employee document from User data
+        const employeeData = {
+          employeeId: normalizedEmployeeId,
+          code: normalizedEmployeeId, // Use employeeId as code
+          fullName: employee.fullName || `${employee.firstName} ${employee.lastName}`.trim(),
+          email: employee.email,
+          phone: employee.phone || '',
+          designation: employee.jobTitle || rest.designation || 'Employee',
+          roleFamily: rest.role_family || rest.roleFamily || 'Operations', // Default to Operations
+          department: employee.department || rest.department || '',
+          doj: rest.joining_date ? new Date(rest.joining_date) : new Date(), // Date of joining
+          status: employee.status === 'active' ? 'ACTIVE' : 'INACTIVE'
+        };
+        
+        // Add optional fields if available
+        if (employee.dateOfBirth) employeeData.dob = employee.dateOfBirth;
+        if (rest.designation) employeeData.designation = rest.designation;
+        if (rest.gradeBand) employeeData.gradeBand = rest.gradeBand;
+        if (rest.confirmationDate) employeeData.confirmationDate = new Date(rest.confirmationDate);
+        if (rest.uan) employeeData.uan = rest.uan;
+        if (rest.esiNo) employeeData.esiNo = rest.esiNo;
+        
+        // Add address if available
+        if (employee.address) {
+          employeeData.currentAddress = {
+            lines: employee.address.street ? [employee.address.street] : [],
+            city: employee.address.city || '',
+            state: employee.address.state || '',
+            pincode: employee.address.zip || ''
+          };
+        }
+        
+        // Add work location if available
+        if (store) {
+          employeeData.workLocation = {
+            storeId: store._id.toString(),
+            storeName: store.name || '',
+            city: store.city || '',
+            state: store.state || '',
+            pincode: store.pincode || ''
+          };
+        }
+        
+        // Add reporting manager if available
+        if (rest.reporting_manager_id || rest.reportingManager) {
+          const managerId = rest.reporting_manager_id || rest.reportingManager;
+          const manager = await User.findById(managerId).select('employeeId firstName lastName jobTitle');
+          if (manager) {
+            employeeData.reportingManager = {
+              id: manager._id,
+              name: `${manager.firstName} ${manager.lastName}`.trim(),
+              designation: manager.jobTitle || ''
+            };
+          }
+        }
+        
+        const employeeDoc = new Employee(employeeData);
+        await employeeDoc.save();
+        
+        logger.info('Employee saved to employees collection', {
+          employeeId: normalizedEmployeeId,
+          employeeDocId: employeeDoc._id,
+          collection: 'employees'
+        });
+      } else {
+        logger.debug('Employee already exists in employees collection', {
+          employeeId: normalizedEmployeeId
+        });
+      }
+    } catch (employeeSaveError) {
+      // Log error but don't fail the whole operation
+      logger.error('Failed to save employee to employees collection', {
+        error: employeeSaveError.message,
+        employeeId: normalizedEmployeeId,
+        stack: employeeSaveError.stack
+      });
+      // Continue - User is already saved, Employee sync can be retried later
     }
     
     // Invalidate employee list cache (if cache is available)
@@ -138,7 +224,9 @@ const createEmployee = async (employeeData, createdBy) => {
     logger.info('Employee created successfully', { 
       employeeId: employee._id, 
       email: employee.email,
-      createdBy 
+      createdBy,
+      savedToUsers: true,
+      savedToEmployees: true
     });
 
     return employee;

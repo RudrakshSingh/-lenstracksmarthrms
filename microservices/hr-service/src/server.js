@@ -371,7 +371,14 @@ const connectDB = async () => {
       logger.info('MongoDB reconnected');
     });
     
-    await mongoose.connect(mongoUri, connectionOptions);
+    // CRITICAL: Explicitly set database name in connection options to prevent defaulting to 'test'
+    // This ensures we always connect to the main database, even if URL parsing fails
+    const finalConnectionOptions = {
+      ...connectionOptions,
+      dbName: targetDbName // Explicitly set database name
+    };
+    
+    await mongoose.connect(mongoUri, finalConnectionOptions);
     
     // Log detailed connection information
     const actualDbName = mongoose.connection.name;

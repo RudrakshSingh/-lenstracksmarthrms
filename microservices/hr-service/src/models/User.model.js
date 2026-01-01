@@ -18,9 +18,10 @@ const userSchema = new mongoose.Schema({
   },
   lastName: {
     type: String,
-    required: true,
+    required: false, // Made optional to handle cases where only firstName is provided
     trim: true,
-    maxlength: 100
+    maxlength: 100,
+    default: '' // Default to empty string if not provided
   },
   email: {
     type: String,

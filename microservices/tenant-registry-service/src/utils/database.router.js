@@ -17,17 +17,140 @@ class DatabaseRouter {
    */
   async initializeRegistry() {
     try {
-      const registryUrl = process.env.REGISTRY_DATABASE_URL || 'mongodb://localhost:27017/etelios_registry';
+      // Support both REGISTRY_DATABASE_URL and MONGO_URI
+      let registryUrl = process.env.REGISTRY_DATABASE_URL || process.env.MONGO_URI || process.env.MONGODB_URI;
       
-      this.registryConnection = await mongoose.createConnection(registryUrl, {
+      // Fallback to local MongoDB for development
+      if (!registryUrl) {
+        registryUrl = 'mongodb://localhost:27017/etelios_registry';
+        logger.warn('REGISTRY_DATABASE_URL not set. Using local MongoDB.');
+      }
+      
+      // Get target database name - prioritize env vars, but ensure it's MAIN database
+      let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
+      
+      // If no env var or env var contains "test", use main production database
+      if (!targetDbName || targetDbName.toLowerCase().includes('test')) {
+        targetDbName = 'tenant-db';
+        if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test')) {
+          logger.error('⚠️  ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
+            provided: process.env.MONGO_DB_NAME,
+            using: targetDbName
+          });
+        }
+      }
+      
+      // Parse connection string to extract and set database name
+      try {
+        const url = new URL(registryUrl);
+        const existingDbName = url.pathname ? url.pathname.substring(1).split('?')[0] : '';
+        
+        // Check if existing database name is test or empty
+        if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
+          if (existingDbName && existingDbName.toLowerCase().includes('test')) {
+            logger.error('⚠️  ERROR: Connection string points to TEST database! Replacing with main production database.', {
+              testDbName: existingDbName,
+              mainDbName: targetDbName
+            });
+          }
+          url.pathname = `/${targetDbName}`;
+          registryUrl = url.toString();
+          logger.info('✅ Database name set in connection string', { 
+            database: targetDbName,
+            wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test'),
+            wasEmpty: !existingDbName || existingDbName.trim() === ''
+          });
+        } else if (existingDbName !== targetDbName) {
+          logger.warn('⚠️  Database name in connection string differs from target. Forcing to main database.', {
+            uriDbName: existingDbName,
+            targetDbName: targetDbName
+          });
+          url.pathname = `/${targetDbName}`;
+          registryUrl = url.toString();
+          logger.info('✅ Database name forced to main database', { database: targetDbName });
+        } else {
+          logger.info('✅ Database name already correct', { database: existingDbName });
+        }
+      } catch (urlError) {
+        logger.warn('URL parsing failed, using regex-based database name extraction', { error: urlError.message });
+        const dbNameMatch = registryUrl.match(/\/([^/?]+)(\?|$)/);
+        const existingDbName = dbNameMatch ? dbNameMatch[1] : null;
+        
+        if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
+          if (registryUrl.includes('?')) {
+            registryUrl = registryUrl.replace(/\/(\?)/, `/${targetDbName}$1`);
+          } else if (registryUrl.endsWith('/')) {
+            registryUrl = `${registryUrl}${targetDbName}`;
+          } else {
+            const lastSlashIndex = registryUrl.lastIndexOf('/');
+            if (lastSlashIndex !== -1) {
+              const beforeSlash = registryUrl.substring(0, lastSlashIndex + 1);
+              const afterSlash = registryUrl.substring(lastSlashIndex + 1);
+              if (afterSlash.includes('@') || afterSlash.includes('?')) {
+                registryUrl = `${beforeSlash}${targetDbName}${afterSlash.includes('?') ? '' : '?'}${afterSlash.includes('?') ? afterSlash.substring(afterSlash.indexOf('?')) : ''}`;
+              } else {
+                registryUrl = `${beforeSlash}${targetDbName}`;
+              }
+            } else {
+              registryUrl = `${registryUrl}/${targetDbName}`;
+            }
+          }
+          logger.info('✅ Database name set using regex method', { database: targetDbName });
+        }
+      }
+      
+      // Determine if this is Cosmos DB
+      const isCosmosDB = registryUrl.includes('cosmos.azure.com') || registryUrl.includes('documents.azure.com');
+      
+      // Set connection options optimized for Azure Cosmos DB
+      const connectionOptions = {
         useNewUrlParser: true,
         useUnifiedTopology: true,
         maxPoolSize: 10,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
+        serverSelectionTimeoutMS: 30000,
+        socketTimeoutMS: 60000,
+        connectTimeoutMS: 30000,
+        retryWrites: true,
+        retryReads: true,
+        dbName: targetDbName, // Explicitly set the database name
+      };
+      
+      // Azure Cosmos DB specific options
+      if (isCosmosDB) {
+        connectionOptions.tls = true;
+        connectionOptions.tlsInsecure = false;
+        connectionOptions.retryWrites = true;
+        logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
+      }
+      
+      this.registryConnection = await mongoose.createConnection(registryUrl, connectionOptions);
+      
+      const actualDbName = this.registryConnection.name;
+      logger.info('═══════════════════════════════════════════════════════');
+      logger.info('✅ tenant-registry-service: Registry database connected successfully');
+      logger.info('═══════════════════════════════════════════════════════', {
+        database: actualDbName,
+        targetDatabase: targetDbName,
+        host: this.registryConnection.host,
+        readyState: this.registryConnection.readyState
       });
-
-      logger.info('Registry database connected successfully');
+      
+      if (actualDbName.toLowerCase().includes('test')) {
+        logger.error('❌ CRITICAL ERROR: Connected to TEST database!', {
+          database: actualDbName,
+          expected: targetDbName
+        });
+      } else if (actualDbName !== targetDbName) {
+        logger.warn('⚠️  WARNING: Database name mismatch!', {
+          actual: actualDbName,
+          expected: targetDbName
+        });
+      } else {
+        logger.info('✅ Database connection verified - using MAIN database', {
+          database: actualDbName
+        });
+      }
+      
       return this.registryConnection;
     } catch (error) {
       logger.error('Registry database connection failed:', error);

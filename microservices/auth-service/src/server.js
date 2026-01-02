@@ -103,6 +103,79 @@ const connectDB = async () => {
       logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
     }
     
+    // Get target database name - prioritize env vars, but ensure it's MAIN database
+    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
+    
+    // If no env var or env var contains "test", use main production database
+    if (!targetDbName || targetDbName.toLowerCase().includes('test')) {
+      targetDbName = 'auth-db';
+      if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test')) {
+        logger.error('⚠️  ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
+          provided: process.env.MONGO_DB_NAME,
+          using: targetDbName
+        });
+      }
+    }
+    
+    // Parse connection string to extract and set database name
+    try {
+      const url = new URL(mongoUri);
+      const existingDbName = url.pathname ? url.pathname.substring(1).split('?')[0] : '';
+      
+      // Check if existing database name is test or empty
+      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
+        if (existingDbName && existingDbName.toLowerCase().includes('test')) {
+          logger.error('⚠️  ERROR: Connection string points to TEST database! Replacing with main production database.', {
+            testDbName: existingDbName,
+            mainDbName: targetDbName
+          });
+        }
+        url.pathname = `/${targetDbName}`;
+        mongoUri = url.toString();
+        logger.info('✅ Database name set in connection string', { 
+          database: targetDbName,
+          wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test'),
+          wasEmpty: !existingDbName || existingDbName.trim() === ''
+        });
+      } else if (existingDbName !== targetDbName) {
+        logger.warn('⚠️  Database name in connection string differs from target. Forcing to main database.', {
+          uriDbName: existingDbName,
+          targetDbName: targetDbName
+        });
+        url.pathname = `/${targetDbName}`;
+        mongoUri = url.toString();
+        logger.info('✅ Database name forced to main database', { database: targetDbName });
+      } else {
+        logger.info('✅ Database name already correct', { database: existingDbName });
+      }
+    } catch (urlError) {
+      logger.warn('URL parsing failed, using regex-based database name extraction', { error: urlError.message });
+      const dbNameMatch = mongoUri.match(/\/([^/?]+)(\?|$)/);
+      const existingDbName = dbNameMatch ? dbNameMatch[1] : null;
+      
+      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
+        if (mongoUri.includes('?')) {
+          mongoUri = mongoUri.replace(/\/(\?)/, `/${targetDbName}$1`);
+        } else if (mongoUri.endsWith('/')) {
+          mongoUri = `${mongoUri}${targetDbName}`;
+        } else {
+          const lastSlashIndex = mongoUri.lastIndexOf('/');
+          if (lastSlashIndex !== -1) {
+            const beforeSlash = mongoUri.substring(0, lastSlashIndex + 1);
+            const afterSlash = mongoUri.substring(lastSlashIndex + 1);
+            if (afterSlash.includes('@') || afterSlash.includes('?')) {
+              mongoUri = `${beforeSlash}${targetDbName}${afterSlash.includes('?') ? '' : '?'}${afterSlash.includes('?') ? afterSlash.substring(afterSlash.indexOf('?')) : ''}`;
+            } else {
+              mongoUri = `${beforeSlash}${targetDbName}`;
+            }
+          } else {
+            mongoUri = `${mongoUri}/${targetDbName}`;
+          }
+        }
+        logger.info('✅ Database name set using regex method', { database: targetDbName });
+      }
+    }
+    
     // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)
     const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
     
@@ -115,7 +188,7 @@ const connectDB = async () => {
       maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
       retryWrites: true, // Cosmos DB supports retrywrites (override connection string if needed)
       retryReads: true,
-      // Optimize for performance
+      dbName: targetDbName, // Explicitly set the database name
     };
     
     // Azure Cosmos DB specific options (only if Cosmos DB)
@@ -129,10 +202,32 @@ const connectDB = async () => {
     }
     
     await mongoose.connect(mongoUri, connectionOptions);
-    logger.info('auth-service: MongoDB connected successfully', {
-      database: mongoose.connection.name,
-      host: mongoose.connection.host
+    
+    const actualDbName = mongoose.connection.name;
+    logger.info('═══════════════════════════════════════════════════════');
+    logger.info('✅ auth-service: MongoDB connected successfully');
+    logger.info('═══════════════════════════════════════════════════════', {
+      database: actualDbName,
+      targetDatabase: targetDbName,
+      host: mongoose.connection.host,
+      readyState: mongoose.connection.readyState
     });
+    
+    if (actualDbName.toLowerCase().includes('test')) {
+      logger.error('❌ CRITICAL ERROR: Connected to TEST database!', {
+        database: actualDbName,
+        expected: targetDbName
+      });
+    } else if (actualDbName !== targetDbName) {
+      logger.warn('⚠️  WARNING: Database name mismatch!', {
+        actual: actualDbName,
+        expected: targetDbName
+      });
+    } else {
+      logger.info('✅ Database connection verified - using MAIN database', {
+        database: actualDbName
+      });
+    }
   } catch (error) {
     logger.error('auth-service: Database connection failed', { error: error.message });
     process.exit(1);

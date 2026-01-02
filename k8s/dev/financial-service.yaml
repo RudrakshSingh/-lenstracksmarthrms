@@ -1,0 +1,107 @@
+---
+# Financial Service Deployment - Development
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: financial-service
+  namespace: etelios-backend-dev
+  labels:
+    app: financial-service
+    version: v2-dev
+    environment: development
+  annotations:
+    sidecar.istio.io/inject: "true"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3009"
+    prometheus.io/path: "/metrics"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: financial-service
+      version: v2-dev
+  template:
+    metadata:
+      labels:
+        app: financial-service
+        version: v2-dev
+        environment: development
+      annotations:
+        sidecar.istio.io/inject: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3009"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: financial-service
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/financial-service:dev
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3009
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "development"
+        - name: PORT
+          value: "3009"
+        - name: SERVICE_NAME
+          value: "financial-service"
+        - name: K8S_ENV
+          value: "true"
+        envFrom:
+        - configMapRef:
+            name: etelios-config-dev
+        - secretRef:
+            name: etelios-secrets-dev
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3009
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3009
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+---
+# Financial Service - Development
+apiVersion: v1
+kind: Service
+metadata:
+  name: financial-service
+  namespace: etelios-backend-dev
+  labels:
+    app: financial-service
+    service: financial-service
+spec:
+  type: ClusterIP
+  selector:
+    app: financial-service
+  ports:
+  - port: 3009
+    targetPort: 3009
+    protocol: TCP
+    name: http
+

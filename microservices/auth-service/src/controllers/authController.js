@@ -61,10 +61,13 @@ const register = async (req, res, next) => {
 
 /**
  * Login user
+ * Supports both 'email' (frontend format) and 'emailOrEmployeeId' (backend format)
  */
 const login = async (req, res, next) => {
   try {
-    const { emailOrEmployeeId, password } = req.body;
+    // Support both 'email' (frontend) and 'emailOrEmployeeId' (backend) field names
+    const emailOrEmployeeId = req.body.emailOrEmployeeId || req.body.email;
+    const password = req.body.password;
     
     // Validate required fields
     if (!emailOrEmployeeId || !password) {

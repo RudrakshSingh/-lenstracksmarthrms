@@ -39,9 +39,10 @@ const registerSchema = {
 
 const loginSchema = {
   body: Joi.object({
-    emailOrEmployeeId: Joi.string().required().trim(),
+    emailOrEmployeeId: Joi.string().optional().trim(),
+    email: Joi.string().email().optional().trim().lowercase(), // Support 'email' field from frontend
     password: Joi.string().required()
-  })
+  }).or('emailOrEmployeeId', 'email') // At least one of emailOrEmployeeId or email must be provided
 };
 
 const mockLoginSchema = {

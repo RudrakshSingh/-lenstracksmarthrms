@@ -94,6 +94,20 @@ spec:
             name: attendance-service
             port:
               number: 3003
+      - path: /api/tenants
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /tenant-registry/health
+        pathType: Exact
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
       - path: /api/geofencing
         pathType: Prefix
         backend:
@@ -216,6 +230,14 @@ spec:
       # Tenant Registry Service
       - path: /api/tenants
         pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      # Tenant Registry Health Check
+      - path: /tenant-registry/health
+        pathType: Exact
         backend:
           service:
             name: tenant-registry-service

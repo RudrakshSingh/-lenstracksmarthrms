@@ -25,7 +25,42 @@ async function authenticate(req, res, next) {
     // Verify token
     const decoded = verifyAccessToken(token);
 
-    // Get user from database
+    // Handle mock tokens (from mock-login-fast) - userId starts with "mock_"
+    if (decoded.userId && typeof decoded.userId === 'string' && decoded.userId.startsWith('mock_')) {
+      // Extract role and employeeId from userId format: "mock_{role}_{employeeId}"
+      const parts = decoded.userId.split('_');
+      const mockRole = decoded.role || (parts.length > 1 ? parts[1] : 'employee');
+      const mockEmployeeId = parts.length > 2 ? parts[2] : 'MOCK001';
+      const mockName = `Mock ${mockRole.toUpperCase()} User`;
+      const mockEmail = `mock.${mockRole}@etelios.com`;
+      
+      // For mock tokens, create a mock user object without database lookup
+      req.user = {
+        _id: decoded.userId,
+        id: decoded.userId,
+        employee_id: mockEmployeeId,
+        name: mockName,
+        email: mockEmail,
+        role: mockRole,
+        status: 'active',
+        stores: [],
+        reporting_manager: null,
+        permissions: [],
+        isMock: true
+      };
+      return next();
+    }
+
+    // For real tokens, get user from database
+    // Check if userId is a valid MongoDB ObjectId
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(decoded.userId)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid user ID format'
+      });
+    }
+
     const user = await User.findById(decoded.userId)
       .populate('stores', 'name code store_id')
       .populate('reporting_manager', 'name employee_id');

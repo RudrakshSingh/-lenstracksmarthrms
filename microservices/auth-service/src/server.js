@@ -110,7 +110,7 @@ const connectDB = async () => {
     if (!targetDbName || targetDbName.toLowerCase().includes('test')) {
       targetDbName = 'auth-db';
       if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test')) {
-        logger.error('⚠️  ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
+        logger.error('ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
           provided: process.env.MONGO_DB_NAME,
           using: targetDbName
         });
@@ -125,28 +125,28 @@ const connectDB = async () => {
       // Check if existing database name is test or empty
       if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
         if (existingDbName && existingDbName.toLowerCase().includes('test')) {
-          logger.error('⚠️  ERROR: Connection string points to TEST database! Replacing with main production database.', {
+          logger.error('ERROR: Connection string points to TEST database! Replacing with main production database.', {
             testDbName: existingDbName,
             mainDbName: targetDbName
           });
         }
         url.pathname = `/${targetDbName}`;
         mongoUri = url.toString();
-        logger.info('✅ Database name set in connection string', { 
+        logger.info('Database name set in connection string', { 
           database: targetDbName,
           wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test'),
           wasEmpty: !existingDbName || existingDbName.trim() === ''
         });
       } else if (existingDbName !== targetDbName) {
-        logger.warn('⚠️  Database name in connection string differs from target. Forcing to main database.', {
+        logger.warn('Database name in connection string differs from target. Forcing to main database.', {
           uriDbName: existingDbName,
           targetDbName: targetDbName
         });
         url.pathname = `/${targetDbName}`;
         mongoUri = url.toString();
-        logger.info('✅ Database name forced to main database', { database: targetDbName });
+        logger.info('Database name forced to main database', { database: targetDbName });
       } else {
-        logger.info('✅ Database name already correct', { database: existingDbName });
+        logger.info('Database name already correct', { database: existingDbName });
       }
     } catch (urlError) {
       logger.warn('URL parsing failed, using regex-based database name extraction', { error: urlError.message });
@@ -172,7 +172,7 @@ const connectDB = async () => {
             mongoUri = `${mongoUri}/${targetDbName}`;
           }
         }
-        logger.info('✅ Database name set using regex method', { database: targetDbName });
+        logger.info('Database name set using regex method', { database: targetDbName });
       }
     }
     
@@ -204,9 +204,9 @@ const connectDB = async () => {
     await mongoose.connect(mongoUri, connectionOptions);
     
     const actualDbName = mongoose.connection.name;
-    logger.info('═══════════════════════════════════════════════════════');
-    logger.info('✅ auth-service: MongoDB connected successfully');
-    logger.info('═══════════════════════════════════════════════════════', {
+    logger.info('===========================================================');
+    logger.info('auth-service: MongoDB connected successfully');
+    logger.info('===========================================================', {
       database: actualDbName,
       targetDatabase: targetDbName,
       host: mongoose.connection.host,
@@ -214,17 +214,17 @@ const connectDB = async () => {
     });
     
     if (actualDbName.toLowerCase().includes('test')) {
-      logger.error('❌ CRITICAL ERROR: Connected to TEST database!', {
+      logger.error('CRITICAL ERROR: Connected to TEST database!', {
         database: actualDbName,
         expected: targetDbName
       });
     } else if (actualDbName !== targetDbName) {
-      logger.warn('⚠️  WARNING: Database name mismatch!', {
+      logger.warn('WARNING: Database name mismatch!', {
         actual: actualDbName,
         expected: targetDbName
       });
     } else {
-      logger.info('✅ Database connection verified - using MAIN database', {
+      logger.info('Database connection verified - using MAIN database', {
         database: actualDbName
       });
     }
@@ -243,17 +243,17 @@ const loadRoutes = () => {
     const authRoutes = require('./routes/auth.routes.js');
     app.use('/api/auth', apiRateLimit, authRoutes);
     routesLoaded++;
-    logger.info('✅ auth.routes.js loaded successfully', { 
+    logger.info('auth.routes.js loaded successfully', { 
       routesCount: authRoutes.stack?.length || 'unknown',
       production: isProduction 
     });
   } catch (error) {
-    logger.error('❌ auth.routes.js FAILED to load', { 
+    logger.error('auth.routes.js FAILED to load', { 
       error: error.message, 
       stack: error.stack,
       name: error.name 
     });
-    console.error('❌ Auth routes failed to load:', error.message);
+    console.error('Auth routes failed to load:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
     // Don't continue if auth routes fail - this is critical
     throw error;
@@ -268,7 +268,7 @@ const loadRoutes = () => {
       stack: error.stack,
       name: error.name 
     });
-    console.error('❌ realUsers.routes.js failed:', error.message);
+    console.error('realUsers.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
   try {
@@ -282,7 +282,7 @@ const loadRoutes = () => {
       stack: error.stack,
       name: error.name 
     });
-    console.error('❌ permission.routes.js failed:', error.message);
+    console.error('permission.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
   try {
@@ -295,7 +295,7 @@ const loadRoutes = () => {
       stack: error.stack,
       name: error.name 
     });
-    console.error('❌ emergencyLock.routes.js failed:', error.message);
+    console.error('emergencyLock.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
   try {
@@ -307,7 +307,7 @@ const loadRoutes = () => {
       stack: error.stack,
       name: error.name 
     });
-    console.error('❌ greywall.routes.js failed:', error.message);
+    console.error('greywall.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
   try {
@@ -322,7 +322,7 @@ const loadRoutes = () => {
       stack: error.stack,
       name: error.name 
     });
-    console.error('❌ greywallAdmin.routes.js failed:', error.message);
+    console.error('greywallAdmin.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
 };
@@ -399,6 +399,16 @@ const startServer = async () => {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         businessLogic: 'active'
+      });
+    });
+    
+    // 404 handler for unmatched routes (MUST be after all routes are registered)
+    app.use((req, res) => {
+      res.status(404).json({
+        success: false,
+        message: `Route not found: ${req.method} ${req.path}`,
+        error: 'ROUTE_NOT_FOUND',
+        service: 'auth-service'
       });
     });
     

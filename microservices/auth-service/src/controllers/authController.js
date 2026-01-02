@@ -1,8 +1,5 @@
-const AuthService = require('../services/auth.service');
+const authService = require('../services/auth.service');
 const logger = require('../config/logger');
-
-// Create a singleton instance
-const authService = new AuthService();
 
 /**
  * Register a new user
@@ -79,7 +76,7 @@ const login = async (req, res, next) => {
     
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    const result = await AuthService.login(emailOrEmployeeId, password, ip, userAgent);
+    const result = await authService.login(emailOrEmployeeId, password, ip, userAgent);
 
     res.status(200).json({
       success: true,
@@ -164,7 +161,7 @@ const refreshToken = async (req, res, next) => {
       });
     }
     
-    const result = await AuthService.refreshAccessToken(refreshToken);
+    const result = await authService.refreshAccessToken(refreshToken);
 
     res.status(200).json({
       success: true,
@@ -194,7 +191,7 @@ const logout = async (req, res, next) => {
     const userId = req.user._id;
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    const result = await AuthService.logout(userId, ip, userAgent);
+    const result = await authService.logout(userId, ip, userAgent);
 
     res.status(200).json({
       success: true,
@@ -238,7 +235,7 @@ const updateProfile = async (req, res, next) => {
     delete updateData.status;
     delete updateData.isDeleted;
 
-    const user = await AuthService.updateUserProfile(userId, updateData);
+    const user = await authService.updateUserProfile(userId, updateData);
 
     res.status(200).json({
       success: true,
@@ -259,7 +256,7 @@ const changePassword = async (req, res, next) => {
     const userId = req.user._id;
     const { currentPassword, newPassword } = req.body;
 
-    await AuthService.changePassword(userId, currentPassword, newPassword);
+    await authService.changePassword(userId, currentPassword, newPassword);
 
     res.status(200).json({
       success: true,

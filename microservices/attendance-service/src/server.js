@@ -225,16 +225,22 @@ const loadRoutes = () => {
   let routesLoaded = 0;
   let routesFailed = 0;
   
-  // Attendance routes (OPTIONAL)
+  // Attendance routes (REQUIRED - make it fail if routes don't load)
   try {
     const attendanceRoutes = require('./routes/attendance.routes.js');
     app.use('/api/attendance', apiRateLimit, attendanceRoutes);
     routesLoaded++;
-    logger.info('✅ attendance.routes.js loaded');
+    logger.info('✅ attendance.routes.js loaded successfully', { 
+      routesCount: attendanceRoutes.stack?.length || 'unknown'
+    });
   } catch (error) {
     routesFailed++;
-    logger.warn('⚠️  attendance.routes.js SKIPPED (optional)', { error: error.message });
-    console.log('⚠️  Attendance routes skipped - service will continue without them');
+    logger.error('❌ attendance.routes.js FAILED to load', { 
+      error: error.message, 
+      stack: error.stack 
+    });
+    console.error('❌ Attendance routes failed to load:', error.message);
+    // Don't throw - allow service to start but log the error clearly
   }
   
   // Geofencing routes (OPTIONAL)
@@ -356,35 +362,7 @@ app.get('/api/attendance/geofencing', (req, res) => {
 });
 
 
-// Enhanced 404 handler with route information
-app.use((req, res) => {
-  // Try to get route information if available
-  const routesInfo = [];
-  
-  // Common routes that should exist
-  routesInfo.push('GET /health');
-  routesInfo.push(`GET /api/attendance/status`);
-  routesInfo.push(`GET /api/attendance/health`);
-  
-  res.status(404).json({
-    success: false,
-    message: 'Route not found - The requested endpoint does not exist or may require authentication',
-    path: req.path,
-    method: req.method,
-    service: 'attendance-service',
-    port: 3003,
-    hint: 'Most routes require authentication. Include Authorization header with Bearer token.',
-    availableEndpoints: routesInfo,
-    timestamp: new Date().toISOString(),
-    troubleshooting: {
-      authentication: 'Add header: Authorization: Bearer <token>',
-      dynamicRoutes: 'Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)',
-      basePath: `All routes are under /api/attendance/`
-    }
-  });
-});
-
-// Error handling
+// Error handling middleware (must be before 404 handler)
 app.use((err, req, res, next) => {
   logger.error('attendance-service Error', {
     error: err.message,
@@ -405,6 +383,37 @@ const startServer = async () => {
   try {
     await connectDB();
     loadRoutes();
+    
+    // Enhanced 404 handler with route information - MUST be after loadRoutes()
+    app.use((req, res) => {
+      // Try to get route information if available
+      const routesInfo = [];
+      
+      // Common routes that should exist
+      routesInfo.push('GET /health');
+      routesInfo.push(`GET /api/attendance/status`);
+      routesInfo.push(`GET /api/attendance/health`);
+      routesInfo.push(`GET /api/attendance/stats`);
+      routesInfo.push(`POST /api/attendance/clock-in`);
+      routesInfo.push(`GET /api/attendance/records`);
+      
+      res.status(404).json({
+        success: false,
+        message: 'Route not found - The requested endpoint does not exist or may require authentication',
+        path: req.path,
+        method: req.method,
+        service: 'attendance-service',
+        port: 3003,
+        hint: 'Most routes require authentication. Include Authorization header with Bearer token.',
+        availableEndpoints: routesInfo,
+        timestamp: new Date().toISOString(),
+        troubleshooting: {
+          authentication: 'Add header: Authorization: Bearer <token>',
+          dynamicRoutes: 'Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)',
+          basePath: `All routes are under /api/attendance/`
+        }
+      });
+    });
     
     const PORT = process.env.PORT || 3003;
     

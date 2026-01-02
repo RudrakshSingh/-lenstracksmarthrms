@@ -196,25 +196,15 @@ app.use(compression({
 // Database connection with improved timeout handling for Azure Cosmos DB
 const connectDB = async () => {
   try {
-    // Get MONGO_URI from Azure Key Vault or environment variable
-    // Never hardcode connection strings in code!
-    // Support both MONGO_URI and MONGODB_URI (common variations)
-    let mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
-    
-    // Log what we found for debugging
-    if (mongoUri) {
-      logger.info('MongoDB connection string found', {
-        source: process.env.MONGO_URI ? 'MONGO_URI' : 'MONGODB_URI',
-        hasDatabase: mongoUri.includes('/') && !mongoUri.endsWith('/'),
-        length: mongoUri.length
-      });
-    }
+    // Get MONGODB_URI from environment (support both MONGO_URI and MONGODB_URI)
+    // Use global MONGODB_URI - connection string used as-is, dbName specified in options
+    let mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
     
     // If not in environment, try Key Vault (only if enabled)
     if (!mongoUri && process.env.USE_KEY_VAULT === 'true') {
       try {
         const keyVault = require('../../shared/utils/keyVault');
-        mongoUri = await keyVault.getSecret('MONGO_URI');
+        mongoUri = await keyVault.getSecret('MONGO_URI') || await keyVault.getSecret('MONGODB_URI');
       } catch (error) {
         logger.warn('Key Vault not available, falling back to default');
       }
@@ -223,105 +213,33 @@ const connectDB = async () => {
     // Fallback to local MongoDB for development
     if (!mongoUri) {
       mongoUri = `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'hr_service'}`;
-      logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
+      logger.warn('MONGODB_URI not set. Using local MongoDB. Set MONGODB_URI environment variable.');
     }
     
-    // Ensure database name is specified in connection string - ALWAYS use MAIN database
-    // Get target database name - prioritize env vars, but ensure it's MAIN database
-    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
+    // Get target database name - use hr-db for HR service
+    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME || 'hr-db';
     
-    // If no env var or env var contains "test", use main production database
-    if (!targetDbName || targetDbName.toLowerCase().includes('test')) {
-      targetDbName = 'etelios_hr_service';
-      if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test')) {
-        logger.error('⚠️  ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
-          provided: process.env.MONGO_DB_NAME,
-          using: targetDbName
-        });
-      }
+    // Ensure we're not using test database
+    if (targetDbName.toLowerCase().includes('test')) {
+      targetDbName = 'hr-db';
+      logger.error('ERROR: DB_NAME contains "test"! Using main production database instead.', {
+        provided: process.env.DB_NAME || process.env.MONGO_DB_NAME,
+        using: targetDbName
+      });
     }
     
-    // Parse connection string to extract and set database name
-    // Format: mongodb://[username:password@]host[:port]/[database][?options]
-    // or: mongodb://[username:password@]host[:port]/?options (no database)
-    
-    try {
-      const url = new URL(mongoUri);
-      const existingDbName = url.pathname ? url.pathname.substring(1).split('?')[0] : '';
-      
-      // Check if existing database name is test or empty
-      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
-        if (existingDbName && existingDbName.toLowerCase().includes('test')) {
-          logger.error('⚠️  ERROR: Connection string points to TEST database! Replacing with main production database.', {
-            testDbName: existingDbName,
-            mainDbName: targetDbName
-          });
-        }
-        
-        // Set the database name in the URL
-        // For mongodb+srv://, ensure pathname is set correctly
-        url.pathname = `/${targetDbName}`;
-        mongoUri = url.toString();
-        
-        // Log the modified connection string (masked) for debugging
-        logger.info('✅ Database name set in connection string', { 
-          database: targetDbName,
-          wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test'),
-          wasEmpty: !existingDbName || existingDbName.trim() === '',
-          connectionFormat: mongoUri.startsWith('mongodb+srv://') ? 'mongodb+srv' : 'mongodb',
-          maskedUri: mongoUri.replace(/(:\/\/[^:]+:)([^@]+)(@)/, '$1****$3')
-        });
-      } else if (existingDbName !== targetDbName) {
-        // Database name exists but doesn't match target - FORCE to main DB
-        logger.warn('⚠️  Database name in connection string differs from target. Forcing to main database.', {
-          uriDbName: existingDbName,
-          targetDbName: targetDbName
-        });
-        url.pathname = `/${targetDbName}`;
-        mongoUri = url.toString();
-        logger.info('✅ Database name forced to main database', { database: targetDbName });
-      } else {
-        logger.info('✅ Database name already correct', { database: existingDbName });
-      }
-    } catch (urlError) {
-      // If URL parsing fails, try regex-based approach
-      logger.warn('URL parsing failed, using regex-based database name extraction', { error: urlError.message });
-      
-      // Try to extract database name using regex
-      // Pattern: /database_name or /database_name?options
-      const dbNameMatch = mongoUri.match(/\/([^/?]+)(\?|$)/);
-      const existingDbName = dbNameMatch ? dbNameMatch[1] : null;
-      
-      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
-        // Replace or add database name
-        if (mongoUri.includes('?')) {
-          // Has query string - insert database name before ?
-          mongoUri = mongoUri.replace(/\/(\?)/, `/${targetDbName}$1`);
-        } else if (mongoUri.endsWith('/')) {
-          // Ends with / - append database name
-          mongoUri = `${mongoUri}${targetDbName}`;
-        } else {
-          // Find last / and replace what's after it
-          const lastSlashIndex = mongoUri.lastIndexOf('/');
-          if (lastSlashIndex !== -1) {
-            const beforeSlash = mongoUri.substring(0, lastSlashIndex + 1);
-            const afterSlash = mongoUri.substring(lastSlashIndex + 1);
-            // Check if afterSlash contains @ (it's part of host) or ? (it's query)
-            if (afterSlash.includes('@') || afterSlash.includes('?')) {
-              mongoUri = `${beforeSlash}${targetDbName}${afterSlash.includes('?') ? '' : '?'}${afterSlash.includes('?') ? afterSlash.substring(afterSlash.indexOf('?')) : ''}`;
-            } else {
-              mongoUri = `${beforeSlash}${targetDbName}`;
-            }
-          } else {
-            mongoUri = `${mongoUri}/${targetDbName}`;
-          }
-        }
-        
-        logger.info('✅ Database name set using regex method', { database: targetDbName });
-      }
-    }
+    // Use connection string as-is - don't modify it
+    // Database name will be specified in connection options
+    logger.info('Using MONGODB_URI from environment', {
+      hasUri: !!mongoUri,
+      dbName: targetDbName,
+      uriSource: process.env.MONGODB_URI ? 'MONGODB_URI' : (process.env.MONGO_URI ? 'MONGO_URI' : 'fallback')
+    });
     
     // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)
+    const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
+    
+    // Determine if this is Cosmos DB
     const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
     
     // Set connection options optimized for Azure Cosmos DB
@@ -332,10 +250,10 @@ const connectDB = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      // retryWrites: true, // Already in connection string - causes duplicate error
-      // retryReads: true,
-      // Add heartbeat to detect dead connections
-      heartbeatFrequencyMS: 10000
+      retryWrites: true,
+      retryReads: true,
+      dbName: targetDbName, // Explicitly set database name - this is the key!
+      heartbeatFrequencyMS: 10000 // Add heartbeat to detect dead connections
     };
     
     // Azure Cosmos DB specific options (only if Cosmos DB)
@@ -343,18 +261,8 @@ const connectDB = async () => {
       // Use tls options instead of deprecated sslValidate for Node.js 22
       connectionOptions.tls = true;
       connectionOptions.tlsInsecure = false; // Validate certificates
-      // Cosmos DB requires retrywrites - but it's already in the connection string from secret
-      // Do NOT add it again to avoid "URI option cannot appear more than once" error
-      // connectionOptions.retryWrites = true;  // ← REMOVED - already in connection string
-      if (!mongoUri.includes('replicaSet=globaldb')) {
-        // Add replicaSet for Cosmos DB
-        mongoUri = mongoUri.includes('?') 
-          ? `${mongoUri}&replicaSet=globaldb` 
-          : `${mongoUri}?replicaSet=globaldb`;
-      }
       logger.info('Connecting to Azure Cosmos DB (MongoDB API)', {
-        host: mongoUri.split('@')[1]?.split('/')[0] || 'unknown',
-        database: mongoUri.split('/').pop()?.split('?')[0] || 'unknown'
+        dbName: targetDbName
       });
     }
     
@@ -371,14 +279,8 @@ const connectDB = async () => {
       logger.info('MongoDB reconnected');
     });
     
-    // CRITICAL: Explicitly set database name in connection options to prevent defaulting to 'test'
-    // This ensures we always connect to the main database, even if URL parsing fails
-    const finalConnectionOptions = {
-      ...connectionOptions,
-      dbName: targetDbName // Explicitly set database name
-    };
-    
-    await mongoose.connect(mongoUri, finalConnectionOptions);
+    // Connect to database - dbName is already set in connectionOptions
+    await mongoose.connect(mongoUri, connectionOptions);
     
     // Log detailed connection information
     const actualDbName = mongoose.connection.name;
@@ -687,9 +589,11 @@ const loadRoutes = () => {
   
   try {
     const documentRoutes = require('./routes/document.routes.js');
+    // Mount at both /api/documents and /api/hr/documents for compatibility
     app.use('/api/documents', apiRateLimit, documentRoutes);
+    app.use('/api/hr/documents', apiRateLimit, documentRoutes);
     routesLoaded.push('document.routes.js');
-    logger.info('document.routes.js loaded successfully at /api/documents');
+    logger.info('document.routes.js loaded successfully at /api/documents and /api/hr/documents');
   } catch (error) {
     routesFailed.push({ route: 'document.routes.js', error: error.message });
     logger.error('document.routes.js failed to load', { error: error.message, stack: error.stack });

@@ -83,15 +83,15 @@ app.use(greywallSystem.greywallMiddleware());
 // Database connection - optimized for performance and Azure Cosmos DB
 const connectDB = async () => {
   try {
-    // Get MONGO_URI from Azure Key Vault or environment variable
-    // Never hardcode connection strings in code!
-    let mongoUri = process.env.MONGO_URI;
+    // Get MONGODB_URI from environment (support both MONGO_URI and MONGODB_URI)
+    // Use global MONGODB_URI - connection string used as-is, dbName specified in options
+    let mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
     
     // If not in environment, try Key Vault (only if enabled)
     if (!mongoUri && process.env.USE_KEY_VAULT === 'true') {
       try {
         const keyVault = require('../../shared/utils/keyVault');
-        mongoUri = await keyVault.getSecret('MONGO_URI');
+        mongoUri = await keyVault.getSecret('MONGO_URI') || await keyVault.getSecret('MONGODB_URI');
       } catch (error) {
         logger.warn('Key Vault not available, falling back to default');
       }
@@ -100,81 +100,28 @@ const connectDB = async () => {
     // Fallback to local MongoDB for development
     if (!mongoUri) {
       mongoUri = `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'auth_service'}`;
-      logger.warn('MONGO_URI not set. Using local MongoDB. Set MONGO_URI environment variable or configure Azure Key Vault.');
+      logger.warn('MONGODB_URI not set. Using local MongoDB. Set MONGODB_URI environment variable.');
     }
     
-    // Get target database name - prioritize env vars, but ensure it's MAIN database
-    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
+    // Get target database name - use auth-db for auth service
+    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME || 'auth-db';
     
-    // If no env var or env var contains "test", use main production database
-    if (!targetDbName || targetDbName.toLowerCase().includes('test')) {
+    // Ensure we're not using test database
+    if (targetDbName.toLowerCase().includes('test')) {
       targetDbName = 'auth-db';
-      if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test')) {
-        logger.error('ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
-          provided: process.env.MONGO_DB_NAME,
-          using: targetDbName
-        });
-      }
+      logger.error('ERROR: DB_NAME contains "test"! Using main production database instead.', {
+        provided: process.env.DB_NAME || process.env.MONGO_DB_NAME,
+        using: targetDbName
+      });
     }
     
-    // Parse connection string to extract and set database name
-    try {
-      const url = new URL(mongoUri);
-      const existingDbName = url.pathname ? url.pathname.substring(1).split('?')[0] : '';
-      
-      // Check if existing database name is test or empty
-      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
-        if (existingDbName && existingDbName.toLowerCase().includes('test')) {
-          logger.error('ERROR: Connection string points to TEST database! Replacing with main production database.', {
-            testDbName: existingDbName,
-            mainDbName: targetDbName
-          });
-        }
-        url.pathname = `/${targetDbName}`;
-        mongoUri = url.toString();
-        logger.info('Database name set in connection string', { 
-          database: targetDbName,
-          wasTestDb: existingDbName && existingDbName.toLowerCase().includes('test'),
-          wasEmpty: !existingDbName || existingDbName.trim() === ''
-        });
-      } else if (existingDbName !== targetDbName) {
-        logger.warn('Database name in connection string differs from target. Forcing to main database.', {
-          uriDbName: existingDbName,
-          targetDbName: targetDbName
-        });
-        url.pathname = `/${targetDbName}`;
-        mongoUri = url.toString();
-        logger.info('Database name forced to main database', { database: targetDbName });
-      } else {
-        logger.info('Database name already correct', { database: existingDbName });
-      }
-    } catch (urlError) {
-      logger.warn('URL parsing failed, using regex-based database name extraction', { error: urlError.message });
-      const dbNameMatch = mongoUri.match(/\/([^/?]+)(\?|$)/);
-      const existingDbName = dbNameMatch ? dbNameMatch[1] : null;
-      
-      if (!existingDbName || existingDbName.trim() === '' || existingDbName.toLowerCase().includes('test')) {
-        if (mongoUri.includes('?')) {
-          mongoUri = mongoUri.replace(/\/(\?)/, `/${targetDbName}$1`);
-        } else if (mongoUri.endsWith('/')) {
-          mongoUri = `${mongoUri}${targetDbName}`;
-        } else {
-          const lastSlashIndex = mongoUri.lastIndexOf('/');
-          if (lastSlashIndex !== -1) {
-            const beforeSlash = mongoUri.substring(0, lastSlashIndex + 1);
-            const afterSlash = mongoUri.substring(lastSlashIndex + 1);
-            if (afterSlash.includes('@') || afterSlash.includes('?')) {
-              mongoUri = `${beforeSlash}${targetDbName}${afterSlash.includes('?') ? '' : '?'}${afterSlash.includes('?') ? afterSlash.substring(afterSlash.indexOf('?')) : ''}`;
-            } else {
-              mongoUri = `${beforeSlash}${targetDbName}`;
-            }
-          } else {
-            mongoUri = `${mongoUri}/${targetDbName}`;
-          }
-        }
-        logger.info('Database name set using regex method', { database: targetDbName });
-      }
-    }
+    // Use connection string as-is - don't modify it
+    // Database name will be specified in connection options
+    logger.info('Using MONGODB_URI from environment', {
+      hasUri: !!mongoUri,
+      dbName: targetDbName,
+      uriSource: process.env.MONGODB_URI ? 'MONGODB_URI' : (process.env.MONGO_URI ? 'MONGO_URI' : 'fallback')
+    });
     
     // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)
     const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');

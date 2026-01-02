@@ -11,6 +11,12 @@ const emergencyLockMiddleware = async (req, res, next) => {
     const skipPaths = [
       '/health',
       '/api/auth/login',
+      '/api/auth/register',
+      '/api/auth/mock-login',
+      '/api/auth/mock-login-fast',
+      '/api/auth/refresh-token',
+      '/api/auth/request-password-reset',
+      '/api/auth/reset-password',
       '/api/auth/emergency/unlock',
       '/api/auth/emergency/status',
       '/api/auth/emergency/recovery',

@@ -243,10 +243,20 @@ const loadRoutes = () => {
     const authRoutes = require('./routes/auth.routes.js');
     app.use('/api/auth', apiRateLimit, authRoutes);
     routesLoaded++;
-    if (!isProduction) logger.info('✅ auth.routes.js loaded');
+    logger.info('✅ auth.routes.js loaded successfully', { 
+      routesCount: authRoutes.stack?.length || 'unknown',
+      production: isProduction 
+    });
   } catch (error) {
-    logger.warn('⚠️  auth.routes.js SKIPPED (optional)', { error: error.message });
-    console.log('⚠️  Auth routes skipped - service will continue');
+    logger.error('❌ auth.routes.js FAILED to load', { 
+      error: error.message, 
+      stack: error.stack,
+      name: error.name 
+    });
+    console.error('❌ Auth routes failed to load:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
+    // Don't continue if auth routes fail - this is critical
+    throw error;
   }
   try {
     const realUsersRoutes = require('./routes/realUsers.routes.js');

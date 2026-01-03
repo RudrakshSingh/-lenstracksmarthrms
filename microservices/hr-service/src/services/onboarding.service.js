@@ -69,18 +69,20 @@ const registerBasicInfo = async (registerData) => {
     }
 
     // Get role (Role model automatically converts to lowercase)
-    const roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
+    let roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
     if (!roleDoc) {
       // Try to seed roles if they don't exist
       try {
         const { seedRoles } = require('../utils/seedRoles');
         await seedRoles();
-        const retryRole = await Role.findByName(role.toLowerCase());
-        if (!retryRole) {
+        // Retry finding the role after seeding
+        roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
+        if (!roleDoc) {
           throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
         }
-        return retryRole;
+        // Continue with user creation (don't return early)
       } catch (seedError) {
+        logger.error('Error seeding roles', { error: seedError.message, stack: seedError.stack, role: role.toLowerCase() });
         throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
       }
     }

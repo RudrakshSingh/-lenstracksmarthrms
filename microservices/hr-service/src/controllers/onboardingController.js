@@ -17,7 +17,24 @@ const register = async (req, res, next) => {
       data: result
     });
   } catch (error) {
-    logger.error('Registration error', { error: error.message });
+    logger.error('Registration error', { 
+      error: error.message,
+      stack: error.stack,
+      statusCode: error.statusCode,
+      code: error.code,
+      body: req.body
+    });
+    
+    // Handle ApiError properly
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message,
+        code: error.code || 'REGISTRATION_ERROR'
+      });
+    }
+    
+    // Handle other errors
     next(error);
   }
 };

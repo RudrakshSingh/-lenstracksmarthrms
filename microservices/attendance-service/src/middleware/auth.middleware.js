@@ -78,42 +78,57 @@ const authenticate = async (req, res, next) => {
     }
 
     // Get user from database (if User model exists)
+    // Note: User may exist in auth-db but not in attendance-db
+    // So we use token data as fallback to avoid "User not found" errors
     try {
       const User = require('../models/User.model');
       const user = await User.findById(decoded.userId || decoded.id);
       
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not found',
-          code: 'USER_NOT_FOUND'
-        });
-      }
+      if (user) {
+        // User exists in attendance-db, use it
+        if (!user.is_active && user.status !== 'active') {
+          return res.status(401).json({
+            success: false,
+            message: 'Account is inactive',
+            code: 'ACCOUNT_INACTIVE'
+          });
+        }
 
-      if (!user.is_active && user.status !== 'active') {
-        return res.status(401).json({
-          success: false,
-          message: 'Account is inactive',
-          code: 'ACCOUNT_INACTIVE'
-        });
+        req.user = {
+          id: user._id,
+          userId: user._id,
+          employee_id: user.employee_id,
+          name: user.name,
+          email: user.email,
+          role: user.role || decoded.role,
+          status: user.status
+        };
+      } else {
+        // User not found in attendance-db, use token data (user exists in auth-db)
+        req.user = {
+          id: decoded.userId || decoded.id || 'unknown',
+          userId: decoded.userId || decoded.id,
+          employee_id: decoded.employee_id || decoded.employeeId || 'UNKNOWN',
+          name: decoded.name || 'Unknown User',
+          email: decoded.email || 'unknown@example.com',
+          role: decoded.role || 'user',
+          status: 'active' // Assume active if not in attendance-db
+        };
       }
-
-      req.user = {
-        id: user._id,
-        userId: user._id,
-        employee_id: user.employee_id,
-        name: user.name,
-        email: user.email,
-        role: user.role || decoded.role,
-        status: user.status
-      };
     } catch (dbError) {
       // If User model doesn't exist or DB lookup fails, use token data
+      logger.warn('User lookup failed in attendance-db, using token data', {
+        userId: decoded.userId,
+        error: dbError.message
+      });
       req.user = {
         id: decoded.userId || decoded.id || 'unknown',
         userId: decoded.userId || decoded.id,
+        employee_id: decoded.employee_id || decoded.employeeId || 'UNKNOWN',
+        name: decoded.name || 'Unknown User',
+        email: decoded.email || 'unknown@example.com',
         role: decoded.role || 'user',
-        email: decoded.email || 'unknown@example.com'
+        status: 'active'
       };
     }
 

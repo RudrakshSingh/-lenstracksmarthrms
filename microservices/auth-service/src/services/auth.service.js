@@ -70,10 +70,33 @@ class AuthService {
         throw new Error('User with this email or employee ID already exists');
       }
 
-      // Validate role exists
-      const roleExists = await Role.findOne({ name: role, is_active: true });
+      // Validate role exists, create if it doesn't
+      let roleExists = await Role.findOne({ name: role.toLowerCase(), is_active: true });
       if (!roleExists) {
-        throw new Error('Invalid role specified');
+        // Check if role exists but is inactive
+        roleExists = await Role.findOne({ name: role.toLowerCase() });
+        if (roleExists) {
+          // Reactivate the role
+          roleExists.is_active = true;
+          await roleExists.save();
+          logger.info('Reactivated existing role', { role: role.toLowerCase() });
+        } else {
+          // Create the role if it doesn't exist (for standard roles)
+          const validRoles = ['admin', 'hr', 'manager', 'employee', 'superadmin', 'accountant', 'store_manager', 'sales', 'optometrist'];
+          if (validRoles.includes(role.toLowerCase())) {
+            roleExists = new Role({
+              name: role.toLowerCase(),
+              display_name: role.charAt(0).toUpperCase() + role.slice(1),
+              description: `${role.charAt(0).toUpperCase() + role.slice(1)} role`,
+              is_active: true,
+              is_system: true
+            });
+            await roleExists.save();
+            logger.info('Created new role', { role: role.toLowerCase() });
+          } else {
+            throw new Error(`Invalid role specified: ${role}. Valid roles are: ${validRoles.join(', ')}`);
+          }
+        }
       }
 
       // Create user

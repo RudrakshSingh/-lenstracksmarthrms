@@ -73,17 +73,42 @@ const registerBasicInfo = async (registerData) => {
     if (!roleDoc) {
       // Try to seed roles if they don't exist
       try {
+        logger.info('Role not found, attempting to seed roles', { role: role.toLowerCase() });
         const { seedRoles } = require('../utils/seedRoles');
         await seedRoles();
         // Retry finding the role after seeding
         roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
         if (!roleDoc) {
-          throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
+          // Check if role exists but is inactive
+          const inactiveRole = await Role.findOne({ name: role.toLowerCase(), is_active: false });
+          if (inactiveRole) {
+            inactiveRole.is_active = true;
+            await inactiveRole.save();
+            roleDoc = inactiveRole;
+            logger.info('Reactivated inactive role', { role: role.toLowerCase() });
+          } else {
+            logger.error('Role not found after seeding', { 
+              role: role.toLowerCase(),
+              availableRoles: await Role.find({}).select('name').lean().then(roles => roles.map(r => r.name))
+            });
+            throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
+          }
+        } else {
+          logger.info('Role found after seeding', { role: role.toLowerCase() });
         }
         // Continue with user creation (don't return early)
       } catch (seedError) {
-        logger.error('Error seeding roles', { error: seedError.message, stack: seedError.stack, role: role.toLowerCase() });
-        throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
+        logger.error('Error seeding roles', { 
+          error: seedError.message, 
+          stack: seedError.stack, 
+          role: role.toLowerCase() 
+        });
+        // Try to find role one more time (might have been created by another request)
+        roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
+        if (!roleDoc) {
+          throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
+        }
+        logger.info('Role found after error recovery', { role: role.toLowerCase() });
       }
     }
 

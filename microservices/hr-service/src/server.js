@@ -391,29 +391,8 @@ const loadRoutes = () => {
   const routesFailed = [];
   
   try {
-    const authRoutes = require('./routes/auth.routes.js');
-    // Mount auth routes at /api/auth (as per frontend spec)
-    app.use('/api/auth', authRoutes);
-    routesLoaded.push('auth.routes.js');
-    logger.info('auth.routes.js loaded successfully at /api/auth');
-  } catch (error) {
-    routesFailed.push({ route: 'auth.routes.js', error: error.message });
-    logger.error('auth.routes.js failed to load', { error: error.message, stack: error.stack });
-  }
-  
-  try {
-    const onboardingRoutes = require('./routes/onboarding.routes.js');
-    // Mount onboarding routes at /api/hr (includes work-details, statutory, complete-onboarding, drafts)
-    app.use('/api/hr', apiRateLimit, onboardingRoutes);
-    routesLoaded.push('onboarding.routes.js');
-    logger.info('onboarding.routes.js loaded successfully');
-  } catch (error) {
-    routesFailed.push({ route: 'onboarding.routes.js', error: error.message });
-    logger.error('onboarding.routes.js failed to load', { error: error.message, stack: error.stack });
-  }
-  
-  try {
-    // Register endpoint at /api/auth/register (public endpoint, separate from /api/hr)
+    // Register endpoint at /api/auth/register FIRST (public endpoint, before authRoutes)
+    // This ensures it's not intercepted by any middleware in authRoutes
     const onboardingController = require('./controllers/onboardingController');
     const { validateRequest } = require('./middleware/validateRequest.wrapper');
     const asyncHandler = require('./utils/asyncHandler');
@@ -440,10 +419,33 @@ const loadRoutes = () => {
     };
     app.post('/api/auth/register', validateRequest(registerSchema), asyncHandler(onboardingController.register));
     routesLoaded.push('register.route');
-    logger.info('register.route loaded successfully at /api/auth/register');
+    logger.info('register.route loaded successfully at /api/auth/register (PUBLIC endpoint)');
   } catch (error) {
     routesFailed.push({ route: 'register.route', error: error.message });
     logger.error('register.route failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  // Load authRoutes AFTER register route to avoid interception
+  try {
+    const authRoutes = require('./routes/auth.routes.js');
+    // Mount auth routes at /api/auth (as per frontend spec)
+    app.use('/api/auth', authRoutes);
+    routesLoaded.push('auth.routes.js');
+    logger.info('auth.routes.js loaded successfully at /api/auth');
+  } catch (error) {
+    routesFailed.push({ route: 'auth.routes.js', error: error.message });
+    logger.error('auth.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
+    const onboardingRoutes = require('./routes/onboarding.routes.js');
+    // Mount onboarding routes at /api/hr (includes work-details, statutory, complete-onboarding, drafts)
+    app.use('/api/hr', apiRateLimit, onboardingRoutes);
+    routesLoaded.push('onboarding.routes.js');
+    logger.info('onboarding.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'onboarding.routes.js', error: error.message });
+    logger.error('onboarding.routes.js failed to load', { error: error.message, stack: error.stack });
   }
   
   try {
@@ -772,18 +774,19 @@ const startServer = async () => {
       // Don't exit - allow service to start for health checks
     }
     
-    // Seed default roles only if ENABLE_ROLE_SEEDING is true (disabled by default for production)
-    if (process.env.ENABLE_ROLE_SEEDING === 'true') {
+    // Seed default roles - always check and create if missing (for production stability)
+    if (dbConnected) {
       try {
         const { seedRoles } = require('./utils/seedRoles');
         await seedRoles();
-        logger.info('Default roles checked/created (seeding enabled)');
+        logger.info('Default roles checked/created');
       } catch (seedError) {
         logger.warn('Failed to seed roles', { error: seedError.message });
-        // Don't fail startup if role seeding fails
+        // Don't fail startup if role seeding fails, but log warning
+        // Roles will be created on-demand during registration
       }
     } else {
-      logger.info('Role seeding disabled - using real data from database');
+      logger.warn('Database not connected - role seeding skipped (roles will be created on-demand)');
     }
     
     // Ensure super admin exists (always run, but only creates if doesn't exist)

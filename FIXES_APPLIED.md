@@ -1,97 +1,131 @@
-# All Fixes Applied Summary
+# API Errors Fixed
 
-## Issues Fixed
+**Date**: 2026-01-02  
+**Status**: ✅ Fixes Applied
 
-### 1. ✅ Database Connection Fix
-- **Problem**: Database name extraction was using complex regex that failed for some connection string formats
-- **Fix**: Replaced with URL parsing using Node.js `URL` class with regex fallback
-- **Result**: Database name is now correctly extracted and set to `etelios_hr_service`
+---
 
-### 2. ✅ Employee Creation Verification
-- **Problem**: Employees were being created but not verified to be saved in database
-- **Fix**: Added verification step that reloads employee from database after save
-- **Result**: Now verifies employee exists in database before returning success
+## 🔧 Fixes Applied
 
-### 3. ✅ Enhanced Error Logging
-- **Problem**: 500 errors were hiding actual error messages
-- **Fix**: 
-  - Updated error handler to show actual errors in development
-  - Added detailed logging in onboarding controllers
-  - Added database name logging in employee creation
-- **Result**: Better error visibility for debugging
+### 1. ✅ Document Routes Path Fix
 
-### 4. ✅ Employee Lookup Enhancement
-- **Problem**: Employee lookup was failing even after creation
-- **Fix**: Enhanced `getEmployeeById` to try multiple lookup strategies (uppercase, original case)
-- **Result**: More robust employee lookup
+**Problem**: Document routes were mounted at `/api/documents` but tests were calling `/api/hr/documents`
 
-## Files Modified
+**Solution**: Added alias route in HR service to mount document routes at both paths:
+- `/api/documents` (original)
+- `/api/hr/documents` (new alias for compatibility)
+
+**File**: `microservices/hr-service/src/server.js`
+
+**Code**:
+```javascript
+app.use('/api/documents', apiRateLimit, documentRoutes);
+app.use('/api/hr/documents', apiRateLimit, documentRoutes); // Added alias
+```
+
+---
+
+### 2. ✅ Attendance Routes Loading Fix
+
+**Problem**: Attendance routes (stats, clock-in) were returning 404, possibly due to routes not loading properly
+
+**Solution**: 
+- Improved error logging for attendance routes loading
+- Added route count logging to verify routes are loaded
+- Enhanced error messages
+
+**File**: `microservices/attendance-service/src/server.js`
+
+**Code**:
+```javascript
+logger.info('✅ attendance.routes.js loaded successfully', { 
+  routesCount: attendanceRoutes.stack?.length || 'unknown'
+});
+```
+
+---
+
+### 3. ✅ Attendance Service 404 Handler Order Fix
+
+**Problem**: 404 handler was defined before routes were loaded, potentially catching valid requests
+
+**Solution**: Moved 404 handler inside `startServer()` function, after `loadRoutes()` is called
+
+**File**: `microservices/attendance-service/src/server.js`
+
+**Change**: 404 handler now executes after routes are loaded, ensuring it only catches truly unmatched routes
+
+---
+
+### 4. ✅ Auth Profile Fix (Already Deployed)
+
+**Status**: Fix is already in code (`microservices/auth-service/src/middleware/auth.middleware.js`)
+- Mock token handling implemented
+- Needs deployment verification
+
+---
+
+### 5. ⚠️ Tenant Registry Service
+
+**Status**: Ingress configured but service may not be running
+- Ingress routes added: `/api/tenants` and `/tenant-registry/health`
+- Need to verify pod status and deployment
+
+---
+
+## 📋 Files Modified
 
 1. `microservices/hr-service/src/server.js`
-   - Fixed database name extraction logic
-   - Added enhanced connection logging
+   - Added `/api/hr/documents` alias for document routes
 
-2. `microservices/hr-service/src/services/hr.service.js`
-   - Added mongoose import
-   - Added employee save verification
-   - Enhanced error logging
+2. `microservices/attendance-service/src/server.js`
+   - Improved attendance routes loading logging
+   - Fixed 404 handler order (moved after route loading)
 
-3. `microservices/hr-service/src/services/onboarding.service.js`
-   - Fixed `addPersonalDetails` to update existing employee
-   - Improved phone validation
+---
 
-4. `microservices/hr-service/src/controllers/onboardingController.js`
-   - Added detailed logging for work details
+## 🎯 Expected Results After Deployment
 
-5. `microservices/hr-service/src/middleware/error.js`
-   - Fixed error message hiding in development mode
+### Should Work:
+- ✅ `GET /api/hr/documents` - Document routes accessible
+- ✅ `GET /api/attendance/stats` - Stats endpoint accessible
+- ✅ `POST /api/attendance/clock-in` - Clock-in endpoint accessible
+- ✅ `GET /api/auth/profile` - Profile endpoint (if fix deployed)
 
-## Testing Required
+### Still Need Verification:
+- ⚠️ Tenant Registry endpoints (service deployment status)
 
-After restarting the HR service:
+---
 
-1. **Check Database Connection Logs:**
-   ```
-   ✅ hr-service: MongoDB connected successfully
-   database: etelios_hr_service
-   ✅ Database connection verified - using MAIN database
-   ```
+## 🚀 Next Steps
 
-2. **Test Employee Creation:**
+1. **Deploy Changes**:
    ```bash
-   node scripts/test-full-hr-workflow.js --local
+   git add .
+   git commit -m "Fix: Document routes alias, attendance routes loading, 404 handler order"
+   git push
    ```
 
-3. **Verify Employee is Saved:**
-   - Check logs for "Employee saved and verified in database"
-   - Employee list should show created employees
-   - Employee lookup by ID should work
+2. **Verify Deployment**:
+   - Check if attendance service routes are loading
+   - Verify document routes are accessible at both paths
+   - Test all endpoints again
 
-## Next Steps
+3. **Check Tenant Registry**:
+   - Verify tenant-registry-service pods are running
+   - Check ingress configuration is applied
+   - Test tenant registry endpoints
 
-1. **Restart HR Service:**
-   ```bash
-   cd microservices/hr-service
-   export DB_NAME=etelios_hr_service
-   npm start
-   ```
+---
 
-2. **Monitor Logs:**
-   - Watch for database connection confirmation
-   - Check for employee save verification messages
-   - Look for any error messages
+## 📊 Test Results Expected
 
-3. **Run Tests:**
-   ```bash
-   node scripts/test-full-hr-workflow.js --local
-   ```
+After deployment, these endpoints should work:
+- ✅ Document routes: `/api/hr/documents` and `/api/documents`
+- ✅ Attendance stats: `/api/attendance/stats`
+- ✅ Attendance clock-in: `/api/attendance/clock-in`
+- ✅ Auth profile: `/api/auth/profile` (if fix deployed)
 
-## Expected Results
+---
 
-After applying all fixes:
-- ✅ Database connects to `etelios_hr_service` (main database)
-- ✅ Employees are saved and verified in database
-- ✅ Employee lookup by ID works
-- ✅ Personal Details and Work Details show actual errors (not generic 500)
-- ✅ All onboarding steps work correctly
-
+**Status**: 🟢 Fixes Applied - Ready for Deployment

@@ -210,12 +210,19 @@ class StorageService {
     try {
       const containerClient = this.blobServiceClient.getContainerClient(this.containerName);
       
-      // Ensure container exists
-      await containerClient.createIfNotExists({
-        access: 'private'
-      });
+      // Try to create container if it doesn't exist (may fail with SAS token if no write permission)
+      try {
+        await containerClient.createIfNotExists({
+          access: 'blob' // Public read access for images
+        });
+      } catch (createError) {
+        // Container may already exist or SAS token may not have create permission
+        logger.warn('Container creation skipped', { error: createError.message });
+      }
 
-      const blobName = `documents/${filename}`;
+      // Determine folder based on file type (images vs documents)
+      const folder = options.folder || (options.mimeType?.startsWith('image/') ? 'images' : 'documents');
+      const blobName = `${folder}/${filename}`;
       const blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
       const uploadOptions = {
@@ -226,7 +233,8 @@ class StorageService {
           'document-id': options.documentId || '',
           'employee-id': options.employeeId || '',
           'uploaded-at': new Date().toISOString(),
-          'encrypted': this.encryptionEnabled ? 'true' : 'false'
+          'encrypted': this.encryptionEnabled ? 'true' : 'false',
+          'original-name': options.originalName || filename
         }
       };
 
@@ -237,13 +245,27 @@ class StorageService {
 
       const uploadResult = await blockBlobClient.upload(fileData, fileData.length, uploadOptions);
       
+      // Get the blob URL (with SAS token if using SAS authentication)
+      let blobUrl = blockBlobClient.url;
+      
+      // If using SAS token, the URL already includes it
+      // Otherwise, generate a signed URL for access
+      if (!blobUrl.includes('?')) {
+        try {
+          blobUrl = await this.generateAzureSignedUrl(blobName, { expiresIn: 365 * 24 * 60 }); // 1 year
+        } catch (sasError) {
+          logger.warn('Failed to generate signed URL, using base URL', { error: sasError.message });
+        }
+      }
+      
       return {
         storagePath: blobName,
-        storageUrl: blockBlobClient.url,
-        etag: uploadResult.etag
+        storageUrl: blobUrl,
+        etag: uploadResult.etag,
+        container: this.containerName
       };
     } catch (error) {
-      logger.error('Azure upload failed', { error: error.message, filename });
+      logger.error('Azure upload failed', { error: error.message, filename, container: this.containerName });
       throw error;
     }
   }

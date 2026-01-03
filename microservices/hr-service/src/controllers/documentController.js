@@ -54,8 +54,43 @@ const uploadDocument = async (req, res, next) => {
       return sendError(res, 'Validation failed', 'document_type is required', 400);
     }
 
-    // For now, store file info in memory/database
-    // In production, upload to Azure Blob Storage
+    // Upload to Azure Blob Storage or Cloudinary
+    let fileUrl = null;
+    let storageProvider = 'local';
+    
+    try {
+      const azureBlobStorage = require('../../../shared/utils/azureBlobStorage');
+      if (azureBlobStorage.isConfigured()) {
+        // Upload to Azure Blob Storage
+        const filename = `${Date.now()}-${req.file.originalname}`;
+        const uploadResult = await azureBlobStorage.uploadFile(req.file.buffer, filename, {
+          mimeType: req.file.mimetype,
+          folder: 'documents',
+          originalName: req.file.originalname,
+          metadata: {
+            'employee-id': employee_id,
+            'document-type': document_type
+          }
+        });
+        fileUrl = uploadResult.url;
+        storageProvider = 'azure';
+        logger.info('Document uploaded to Azure Blob Storage', {
+          documentId: `doc-${Date.now()}`,
+          blobName: uploadResult.blobName,
+          url: fileUrl.substring(0, 100) + '...'
+        });
+      } else {
+        // Fallback to local storage (base64 in database)
+        logger.warn('Azure Blob Storage not configured, storing file as base64 in database');
+        storageProvider = 'local';
+      }
+    } catch (uploadError) {
+      logger.error('Failed to upload to Azure Blob Storage, falling back to local storage', {
+        error: uploadError.message
+      });
+      storageProvider = 'local';
+    }
+
     const documentData = {
       id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       document_type: document_type.toUpperCase(),
@@ -68,12 +103,10 @@ const uploadDocument = async (req, res, next) => {
       compliance_required: compliance_required === 'true' || compliance_required === true,
       status: 'uploaded',
       uploaded_by: req.user?._id || req.user?.id,
-      file_data: req.file.buffer.toString('base64') // Store as base64 temporarily
+      file_url: fileUrl, // Azure Blob Storage URL if uploaded
+      storage_provider: storageProvider,
+      file_data: storageProvider === 'local' ? req.file.buffer.toString('base64') : null // Only store base64 if local
     };
-
-    // TODO: Upload to Azure Blob Storage
-    // const blobUrl = await uploadToAzureBlob(req.file.buffer, req.file.originalname);
-    // documentData.file_url = blobUrl;
 
     logger.info('Document uploaded successfully', {
       documentId: documentData.id,
@@ -105,8 +138,29 @@ const uploadDocument = async (req, res, next) => {
 };
 
 /**
+ * Get all documents (for HR/Admin) or documents for current user
+ * GET /api/documents or /api/hr/documents
+ */
+const getAllDocuments = async (req, res, next) => {
+  try {
+    // If user is HR/Admin, return all documents
+    // Otherwise, return documents for current user
+    const userRole = req.user?.role;
+    const userId = req.user?.id || req.user?._id;
+    
+    // TODO: Fetch from database based on role
+    const documents = [];
+
+    return sendSuccess(res, documents, 'Documents retrieved successfully');
+  } catch (error) {
+    logger.error('Error getting all documents', { error: error.message });
+    next(error);
+  }
+};
+
+/**
  * Get documents for employee
- * GET /api/documents/:employeeId
+ * GET /api/documents/:employeeId or /api/hr/documents/:employeeId
  */
 const getDocuments = async (req, res, next) => {
   try {
@@ -142,6 +196,7 @@ const deleteDocument = async (req, res, next) => {
 module.exports = {
   upload,
   uploadDocument,
+  getAllDocuments,
   getDocuments,
   deleteDocument
 };

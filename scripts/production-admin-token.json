@@ -1,0 +1,9 @@
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJtb2NrX2FkbWluX01PQ0tBRE1JTjAwMSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc2NzM1OTg3NCwiZXhwIjoxNzY3MzYwNzc0LCJhdWQiOiJocm1zLWZyb250ZW5kIiwiaXNzIjoiaHJtcy1iYWNrZW5kIn0.tD45_0l4Dop6Z-MW_wDUZqhf6Qy9x3evb52Xnz6zT8k",
+  "user": {
+    "email": "admin@etelios.com",
+    "role": "admin"
+  },
+  "createdAt": "2026-01-02T13:17:54.380Z",
+  "source": "production-api"
+}

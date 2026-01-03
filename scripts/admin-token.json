@@ -1,0 +1,12 @@
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTU3YzQ0NWQ3YjVkOGNkMzczODAxYjYiLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3NjczNTk4MDIsImV4cCI6MTc2NzM2MDcwMiwiYXVkIjoiaHJtcy1mcm9udGVuZCIsImlzcyI6ImhybXMtYmFja2VuZCJ9.MPIzn4kzSQEoKaW-b0NJ4_vuJTpqTtYCtLyMiCNNOSA",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTU3YzQ0NWQ3YjVkOGNkMzczODAxYjYiLCJpYXQiOjE3NjczNTk4MDIsImV4cCI6MTc2Nzk2NDYwMiwiYXVkIjoiaHJtcy1mcm9udGVuZCIsImlzcyI6ImhybXMtYmFja2VuZCJ9.rHOfWMNRwuwLpQ_jhz4aOH74lUKfQEy8WoPYl4LideI",
+  "user": {
+    "id": "6957c445d7b5d8cd373801b6",
+    "email": "admin@etelios.com",
+    "employee_id": "ADMIN-001",
+    "name": "System Administrator",
+    "role": "admin"
+  },
+  "createdAt": "2026-01-02T13:16:42.313Z"
+}

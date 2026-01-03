@@ -528,3 +528,4 @@ CLIENT
 **Architecture:** Microservices with API Gateway
 **Database:** Azure Cosmos DB (MongoDB API)
 **Deployment:** Azure Kubernetes Service (AKS)
+

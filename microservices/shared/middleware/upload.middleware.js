@@ -146,13 +146,36 @@ const uploadFields = (fields) => {
   };
 };
 
-// Helper function to upload file to Cloudinary
+// Helper function to upload file to Cloudinary or Azure Blob Storage
 const uploadToCloudinary = async (file, folder = 'hrms') => {
   try {
     if (!file) {
       throw new Error('No file provided');
     }
 
+    // Check if Azure Blob Storage is configured (priority)
+    const azureBlobStorage = require('../utils/azureBlobStorage');
+    if (azureBlobStorage.isConfigured()) {
+      // Use Azure Blob Storage
+      const filename = `${Date.now()}-${file.originalname}`;
+      const result = await azureBlobStorage.uploadImage(file.buffer, filename, {
+        mimeType: file.mimetype,
+        folder: folder,
+        originalName: file.originalname
+      });
+
+      return {
+        public_id: result.blobName,
+        secure_url: result.url,
+        format: file.mimetype.split('/')[1],
+        width: null,
+        height: null,
+        bytes: result.size,
+        provider: 'azure'
+      };
+    }
+
+    // Fallback to Cloudinary
     // Convert buffer to base64
     const base64String = file.buffer.toString('base64');
     const dataURI = `data:${file.mimetype};base64,${base64String}`;
@@ -171,11 +194,12 @@ const uploadToCloudinary = async (file, folder = 'hrms') => {
       format: result.format,
       width: result.width,
       height: result.height,
-      bytes: result.bytes
+      bytes: result.bytes,
+      provider: 'cloudinary'
     };
 
   } catch (error) {
-    logger.error('Cloudinary upload error', { 
+    logger.error('File upload error', { 
       error: error.message,
       fileName: file?.originalname,
       fileSize: file?.size

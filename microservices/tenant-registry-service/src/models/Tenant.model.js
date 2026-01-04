@@ -14,6 +14,24 @@ const tenantSchema = new mongoose.Schema({
     required: true, 
     trim: true 
   },
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 200
+  },
+  email: {
+    type: String,
+    required: true,
+    lowercase: true,
+    trim: true,
+    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'],
+    index: true
+  },
+  phone: {
+    type: String,
+    trim: true
+  },
   domain: { 
     type: String, 
     unique: true, 
@@ -27,6 +45,45 @@ const tenantSchema = new mongoose.Schema({
     required: true,
     trim: true,
     lowercase: true
+  },
+  address: {
+    street: { type: String, trim: true },
+    city: { type: String, trim: true },
+    state: { type: String, trim: true },
+    country: { type: String, trim: true, default: 'India' },
+    pincode: { type: String, trim: true }
+  },
+  contact: {
+    primaryContact: { type: String, trim: true },
+    primaryEmail: { type: String, lowercase: true, trim: true },
+    primaryPhone: { type: String, trim: true },
+    billingContact: { type: String, trim: true },
+    billingEmail: { type: String, lowercase: true, trim: true },
+    technicalContact: { type: String, trim: true },
+    technicalEmail: { type: String, lowercase: true, trim: true }
+  },
+  modules: [{
+    type: String,
+    enum: ['hr', 'crm', 'inventory', 'financial', 'sales', 'purchase', 'analytics', 'reports']
+  }],
+  planDetails: {
+    name: { type: String },
+    price: { type: Number, default: 0 },
+    currency: { type: String, default: 'INR' },
+    billing: { type: String, enum: ['Monthly', 'Quarterly', 'Yearly'], default: 'Monthly' },
+    features: [{ type: String }]
+  },
+  subscription: {
+    startDate: { type: Date, default: Date.now },
+    endDate: { type: Date },
+    renewalDate: { type: Date },
+    autoRenewal: { type: Boolean, default: true },
+    paymentStatus: { type: String, enum: ['Pending', 'Paid', 'Failed', 'Free'], default: 'Pending' }
+  },
+  adminUser: {
+    userId: { type: String },
+    email: { type: String, lowercase: true, trim: true },
+    name: { type: String, trim: true }
   },
   database: { 
     type: String, 

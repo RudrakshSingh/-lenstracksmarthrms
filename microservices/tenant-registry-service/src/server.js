@@ -62,6 +62,8 @@ app.use(compression({ level: 6, threshold: 1024 }));
 
 // Routes
 app.use('/api/tenants', tenantRoutes);
+// Also support /api/admin/tenants for documentation compatibility
+app.use('/api/admin/tenants', tenantRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

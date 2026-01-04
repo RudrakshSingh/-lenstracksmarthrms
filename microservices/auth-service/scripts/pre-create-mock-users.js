@@ -1,8 +1,20 @@
 /**
  * Pre-create Mock Users Script
+ * 
+ * ⚠️ DISABLED - Mock users are no longer created
+ * This script is kept for reference only
+ * 
+ * To clean up existing mock users, use: scripts/cleanup-mock-data.js
+ * 
  * Run this script to pre-create all mock users in the database
  * This eliminates the need for user creation during mock login (faster response)
  */
+
+// DISABLED - Mock users are not created anymore
+console.log('⚠️  This script is disabled. Mock users are no longer created.');
+console.log('   Use scripts/cleanup-mock-data.js to clean up existing mock users.');
+console.log('   Use admin@etelios.com / Admin@123456 to login.');
+process.exit(0);
 
 require('dotenv').config();
 const mongoose = require('mongoose');

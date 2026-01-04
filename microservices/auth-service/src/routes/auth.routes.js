@@ -107,21 +107,41 @@ router.post('/login',
   authController.login
 );
 
-// Mock login endpoint for frontend testing
-// Try fast mode first (no DB), fallback to regular mode
-const { fastMockLogin } = require('../controllers/authController.fast');
+// Mock login endpoints - DISABLED in production
+// Only enable in development for testing
+if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_MOCK_LOGIN === 'true') {
+  // Try fast mode first (no DB), fallback to regular mode
+  const { fastMockLogin } = require('../controllers/authController.fast');
 
-// Fast mock login (no database - instant response)
-router.post('/mock-login-fast', 
-  validateRequest(mockLoginSchema),
-  fastMockLogin
-);
+  // Fast mock login (no database - instant response)
+  router.post('/mock-login-fast', 
+    validateRequest(mockLoginSchema),
+    fastMockLogin
+  );
 
-// Regular mock login (with database - may timeout)
-router.post('/mock-login', 
-  validateRequest(mockLoginSchema),
-  authController.mockLogin
-);
+  // Regular mock login (with database - may timeout)
+  router.post('/mock-login', 
+    validateRequest(mockLoginSchema),
+    authController.mockLogin
+  );
+} else {
+  // In production, return error for mock login attempts
+  router.post('/mock-login-fast', (req, res) => {
+    res.status(403).json({
+      success: false,
+      message: 'Mock login is disabled in production. Use /api/auth/login with real credentials.',
+      error: 'MOCK_LOGIN_DISABLED'
+    });
+  });
+  
+  router.post('/mock-login', (req, res) => {
+    res.status(403).json({
+      success: false,
+      message: 'Mock login is disabled in production. Use /api/auth/login with real credentials.',
+      error: 'MOCK_LOGIN_DISABLED'
+    });
+  });
+}
 
 router.post('/refresh-token', 
   authController.refreshToken

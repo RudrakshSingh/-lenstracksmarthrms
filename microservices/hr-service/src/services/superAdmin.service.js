@@ -3,86 +3,97 @@ const Role = require('../models/Role.model');
 const bcrypt = require('bcryptjs');
 const logger = require('../config/logger');
 
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'superadmin@etelios.com';
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin@123';
-const SUPER_ADMIN_EMPLOYEE_ID = process.env.SUPER_ADMIN_EMPLOYEE_ID || 'SUPERADMIN001';
+// Single admin user for production
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@etelios.com';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Admin@123456';
+const ADMIN_EMPLOYEE_ID = process.env.ADMIN_EMPLOYEE_ID || 'ADMIN-001';
 
 /**
- * Create or get super admin user
- * This ensures a super admin exists in the system
+ * Create or get admin user (single admin for production)
+ * This ensures one admin exists in the system for login and employee creation
  */
 const ensureSuperAdmin = async () => {
   try {
-    // Check if super admin role exists
-    let superAdminRole = await Role.findOne({ 
+    // Check if admin role exists
+    let adminRole = await Role.findOne({ 
       $or: [
-        { name: 'superadmin' },
-        { name: 'super-admin' },
-        { name: 'SuperAdmin' }
+        { name: 'admin' },
+        { name: 'Admin' },
+        { name: 'ADMIN' }
       ]
     });
 
-    if (!superAdminRole) {
-      // Create super admin role with all permissions
-      superAdminRole = await Role.create({
-        name: 'superadmin',
-        display_name: 'Super Admin',
-        description: 'System super administrator with full access',
+    if (!adminRole) {
+      // Create admin role with all permissions
+      adminRole = await Role.create({
+        name: 'admin',
+        display_name: 'Admin',
+        description: 'System administrator with full access',
+        is_active: true,
+        is_system: true,
         permissions: ['*'] // All permissions
       });
-      logger.info('Created super admin role', { roleId: superAdminRole._id });
+      logger.info('Created admin role', { roleId: adminRole._id });
     }
 
-    // Check if super admin user exists
-    let superAdmin = await User.findOne({ 
-      email: SUPER_ADMIN_EMAIL.toLowerCase() 
+    // Check if admin user exists
+    let admin = await User.findOne({ 
+      $or: [
+        { email: ADMIN_EMAIL.toLowerCase() },
+        { employeeId: ADMIN_EMPLOYEE_ID }
+      ]
     });
 
-    if (!superAdmin) {
-      // Create super admin user
-      const hashedPassword = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 10);
-      superAdmin = await User.create({
-        employeeId: SUPER_ADMIN_EMPLOYEE_ID,
-        firstName: 'Super',
-        lastName: 'Admin',
-        email: SUPER_ADMIN_EMAIL.toLowerCase(),
+    if (!admin) {
+      // Create admin user
+      const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
+      admin = await User.create({
+        employeeId: ADMIN_EMPLOYEE_ID,
+        firstName: 'System',
+        lastName: 'Administrator',
+        email: ADMIN_EMAIL.toLowerCase(),
         phone: '+919999999999',
         password: hashedPassword,
-        role: superAdminRole._id,
-        department: 'System Administration',
-        jobTitle: 'Super Administrator',
+        role: adminRole._id,
+        department: 'TECH',
+        jobTitle: 'System Administrator',
         status: 'active',
-        is_active: true
+        is_active: true,
+        band_level: 'A',
+        hierarchy_level: 'NATIONAL',
+        joining_date: new Date()
       });
-      logger.info('Created super admin user', { 
-        userId: superAdmin._id, 
-        email: superAdmin.email,
-        employeeId: superAdmin.employeeId
+      logger.info('Created admin user', { 
+        userId: admin._id, 
+        email: admin.email,
+        employeeId: admin.employeeId
       });
     } else {
-      // Update existing user to ensure they have super admin role
-      if (superAdmin.role.toString() !== superAdminRole._id.toString()) {
-        superAdmin.role = superAdminRole._id;
-        superAdmin.is_active = true;
-        superAdmin.status = 'active';
-        await superAdmin.save();
-        logger.info('Updated user to super admin role', { userId: superAdmin._id });
+      // Update existing user to ensure they have admin role
+      if (admin.role.toString() !== adminRole._id.toString()) {
+        admin.role = adminRole._id;
       }
+      admin.is_active = true;
+      admin.status = 'active';
+      await admin.save();
+      logger.info('Updated admin user', { userId: admin._id });
     }
 
     return {
-      user: superAdmin,
-      role: superAdminRole,
-      email: SUPER_ADMIN_EMAIL,
-      password: SUPER_ADMIN_PASSWORD // Only for initial setup
+      user: admin,
+      role: adminRole,
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD // Only for initial setup
     };
   } catch (error) {
-    logger.error('Error ensuring super admin', { error: error.message });
+    logger.error('Error ensuring admin user', { error: error.message });
     throw error;
   }
 };
 
 module.exports = {
-  ensureSuperAdmin
+  ensureSuperAdmin,
+  // Alias for backward compatibility
+  ensureAdmin: ensureSuperAdmin
 };
 

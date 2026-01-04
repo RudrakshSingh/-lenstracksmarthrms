@@ -68,47 +68,83 @@ const registerBasicInfo = async (registerData) => {
       throw new ApiError(httpStatus.CONFLICT, 'Employee ID already exists');
     }
 
+    // Validate role against valid roles enum FIRST (before database lookup)
+    const validRoles = ['employee', 'hr', 'manager', 'admin', 'superadmin'];
+    const normalizedRole = role.toLowerCase();
+    
+    if (!validRoles.includes(normalizedRole)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: ${validRoles.join(', ')}`);
+    }
+
     // Get role (Role model automatically converts to lowercase)
-    let roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
+    let roleDoc = await Role.findByName(normalizedRole) || await Role.findOne({ name: normalizedRole });
+    
     if (!roleDoc) {
       // Try to seed roles if they don't exist
       try {
-        logger.info('Role not found, attempting to seed roles', { role: role.toLowerCase() });
+        logger.info('Role not found, attempting to seed roles', { role: normalizedRole });
         const { seedRoles } = require('../utils/seedRoles');
         await seedRoles();
         // Retry finding the role after seeding
-        roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
-        if (!roleDoc) {
-          // Check if role exists but is inactive
-          const inactiveRole = await Role.findOne({ name: role.toLowerCase(), is_active: false });
-          if (inactiveRole) {
-            inactiveRole.is_active = true;
-            await inactiveRole.save();
-            roleDoc = inactiveRole;
-            logger.info('Reactivated inactive role', { role: role.toLowerCase() });
-          } else {
-            logger.error('Role not found after seeding', { 
-              role: role.toLowerCase(),
-              availableRoles: await Role.find({}).select('name').lean().then(roles => roles.map(r => r.name))
-            });
-            throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
-          }
-        } else {
-          logger.info('Role found after seeding', { role: role.toLowerCase() });
-        }
-        // Continue with user creation (don't return early)
+        roleDoc = await Role.findByName(normalizedRole) || await Role.findOne({ name: normalizedRole });
       } catch (seedError) {
-        logger.error('Error seeding roles', { 
+        logger.warn('Error seeding roles, will create role directly', { 
           error: seedError.message, 
-          stack: seedError.stack, 
-          role: role.toLowerCase() 
+          role: normalizedRole 
         });
-        // Try to find role one more time (might have been created by another request)
-        roleDoc = await Role.findByName(role.toLowerCase()) || await Role.findOne({ name: role.toLowerCase() });
-        if (!roleDoc) {
-          throw new ApiError(httpStatus.BAD_REQUEST, `Invalid role specified: ${role}. Available roles: employee, hr, manager, admin, superadmin`);
+      }
+      
+      // If still not found, check for inactive role
+      if (!roleDoc) {
+        const inactiveRole = await Role.findOne({ name: normalizedRole, is_active: false });
+        if (inactiveRole) {
+          inactiveRole.is_active = true;
+          await inactiveRole.save();
+          roleDoc = inactiveRole;
+          logger.info('Reactivated inactive role', { role: normalizedRole });
         }
-        logger.info('Role found after error recovery', { role: role.toLowerCase() });
+      }
+      
+      // If still not found and role is valid, auto-create it (similar to auth-service)
+      if (!roleDoc && validRoles.includes(normalizedRole)) {
+        try {
+          roleDoc = new Role({
+            name: normalizedRole,
+            display_name: normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1),
+            description: `${normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1)} role`,
+            is_active: true,
+            is_system: true,
+            permissions: [] // Basic permissions, can be updated later via admin panel
+          });
+          await roleDoc.save();
+          logger.info('Auto-created role', { role: normalizedRole });
+        } catch (createError) {
+          logger.error('Failed to auto-create role', { 
+            error: createError.message, 
+            role: normalizedRole 
+          });
+          // Last attempt: try to find role one more time (might have been created by another request)
+          roleDoc = await Role.findByName(normalizedRole) || await Role.findOne({ name: normalizedRole });
+          if (!roleDoc) {
+            throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 
+              `Failed to create role: ${role}. Please contact administrator.`);
+          }
+        }
+      } else if (!roleDoc) {
+        // This should never happen since we validated above, but just in case
+        logger.error('Role not found and could not be created', { 
+          role: normalizedRole,
+          validRoles 
+        });
+        throw new ApiError(httpStatus.BAD_REQUEST, 
+          `Invalid role specified: ${role}. Available roles: ${validRoles.join(', ')}`);
+      }
+    } else {
+      // Role found, ensure it's active
+      if (!roleDoc.is_active) {
+        roleDoc.is_active = true;
+        await roleDoc.save();
+        logger.info('Reactivated role', { role: normalizedRole });
       }
     }
 

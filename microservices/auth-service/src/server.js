@@ -14,6 +14,16 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const logger = require('./config/logger');
+
+// Load SSL utility for HTTPS support
+let createServer;
+try {
+  const sslUtils = require('../../shared/utils/ssl');
+  createServer = sslUtils.createServer;
+} catch (error) {
+  logger.warn('SSL utility not available, using HTTP only', { error: error.message });
+  createServer = null;
+}
 const { emergencyLockMiddleware } = require('./middleware/emergencyLock.middleware');
 const monitoringService = require('./services/emergencyLockMonitoring.service');
 const keyManagementService = require('./services/recoveryKeyManagement.service');
@@ -360,13 +370,21 @@ const startServer = async () => {
     });
     
     const PORT = process.env.PORT || 3001;
+    const HOST = '0.0.0.0';
     
-    app.listen(PORT, () => {
-      logger.info(`auth-service running on port ${PORT}`);
+    // Use SSL utility if available, otherwise fallback to standard HTTP
+    const server = createServer 
+      ? createServer(app, PORT, HOST)
+      : app.listen(PORT, HOST, () => {
+          logger.info(`auth-service running on port ${PORT}`);
+        });
+    
+    if (server) {
+      logger.info(`auth-service started on ${process.env.ENABLE_SSL === 'true' ? 'https' : 'http'}://${HOST}:${PORT}`);
       
       monitoringService.startMonitoring();
       keyManagementService.startKeyRotationScheduler();
-    });
+    }
   } catch (error) {
     logger.error('auth-service startup failed', { error: error.message });
     process.exit(1);

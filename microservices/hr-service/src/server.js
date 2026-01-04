@@ -28,6 +28,16 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
+// Load SSL utility for HTTPS support
+let createServer;
+try {
+  const sslUtils = require('../../shared/utils/ssl');
+  createServer = sslUtils.createServer;
+} catch (error) {
+  logger.warn('SSL utility not available, using HTTP only', { error: error.message });
+  createServer = null;
+}
+
 // Load logger with error handling
 let logger;
 try {
@@ -851,10 +861,21 @@ const startServer = async () => {
     
     // Azure App Service sets PORT automatically, use it or default to 3002
     const PORT = process.env.PORT || process.env.WEBSITES_PORT || 3002;
+    const HOST = '0.0.0.0';
     
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      logger.info(`hr-service running on port ${PORT}`);
-      logger.info(`hr-service started on http://0.0.0.0:${PORT}`);
+    // Use SSL utility if available, otherwise fallback to standard HTTP
+    const server = createServer 
+      ? createServer(app, PORT, HOST)
+      : app.listen(PORT, HOST, () => {
+          logger.info(`hr-service running on port ${PORT}`);
+          logger.info(`hr-service started on http://${HOST}:${PORT}`);
+          logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+          logger.info(`Database: ${dbConnected ? 'connected' : 'disconnected (will retry)'}`);
+        });
+    
+    // Log startup information
+    if (server) {
+      logger.info(`hr-service started on ${process.env.ENABLE_SSL === 'true' ? 'https' : 'http'}://${HOST}:${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`Database: ${dbConnected ? 'connected' : 'disconnected (will retry)'}`);
       
@@ -874,7 +895,7 @@ const startServer = async () => {
         });
         logger.info(`Registered routes: ${routes.length} routes loaded`);
       }
-    });
+    }
     
     // Handle server errors gracefully
     server.on('error', (error) => {
@@ -907,10 +928,13 @@ const startServer = async () => {
     logger.warn('Attempting to start service in degraded mode');
     
     const PORT = process.env.PORT || process.env.WEBSITES_PORT || 3002;
-    app.listen(PORT, '0.0.0.0', () => {
-      logger.warn(`hr-service started in degraded mode on port ${PORT}`);
-      logger.warn('Some functionality may be limited');
-    });
+    const HOST = '0.0.0.0';
+    const degradedServer = createServer 
+      ? createServer(app, PORT, HOST)
+      : app.listen(PORT, HOST, () => {
+          logger.warn(`hr-service started in degraded mode on port ${PORT}`);
+          logger.warn('Some functionality may be limited');
+        });
   }
 };
 
@@ -932,11 +956,14 @@ startServer().catch((error) => {
   logger.error('Failed to start server:', { error: error.message, stack: error.stack });
   // Try to start in degraded mode
   const PORT = process.env.PORT || process.env.WEBSITES_PORT || 3002;
+  const HOST = '0.0.0.0';
   try {
-    app.listen(PORT, '0.0.0.0', () => {
-      logger.warn(`hr-service started in emergency mode on port ${PORT}`);
-      logger.warn('Limited functionality available');
-    });
+    const emergencyServer = createServer 
+      ? createServer(app, PORT, HOST)
+      : app.listen(PORT, HOST, () => {
+          logger.warn(`hr-service started in emergency mode on port ${PORT}`);
+          logger.warn('Limited functionality available');
+        });
   } catch (listenError) {
     logger.error('Failed to start server even in emergency mode:', { error: listenError.message });
     // Last resort - exit after 5 seconds to allow Azure to restart

@@ -19,6 +19,16 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const servicesConfig = require('./config/services.config');
 const axios = require('axios');
 
+// Load SSL utility for HTTPS support
+let createServer;
+try {
+  const sslUtils = require('./microservices/shared/utils/ssl');
+  createServer = sslUtils.createServer;
+} catch (error) {
+  logger.warn('SSL utility not available, using HTTP only', { error: error.message });
+  createServer = null;
+}
+
 // Initialize logger early so it can be used in middleware loading
 const isProduction = process.env.NODE_ENV === 'production';
 const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'info');
@@ -911,27 +921,53 @@ console.log('='.repeat(60));
 
 let server;
 try {
-  server = app.listen(SERVER_PORT, '0.0.0.0', async () => {
-    // Always log successful startup
-    console.log(`✅ Etelios Main Server started successfully on port ${SERVER_PORT}`);
-    console.log(`📍 Server listening on http://0.0.0.0:${SERVER_PORT}`);
-    console.log(`🏥 Health check: http://localhost:${SERVER_PORT}/health`);
-    console.log(`📋 API endpoint: http://localhost:${SERVER_PORT}/api`);
-    
-    // Also log to winston logger
-    logger.info(`Etelios Main Server started on port ${SERVER_PORT}`);
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    
-    await updateServiceStatuses();
-    
-    // Status updates every 60 seconds (reduced frequency)
-    statusUpdateInterval = setInterval(() => {
-      updateServiceStatuses().catch(() => {});
-      // Invalidate caches
-      apiEndpointCache = null;
-      adminCache = null;
-    }, 60000);
-  });
+  const HOST = '0.0.0.0';
+  const protocol = (process.env.ENABLE_SSL === 'true' || process.env.ENABLE_HTTPS === 'true') ? 'https' : 'http';
+  
+  // Use SSL utility if available, otherwise fallback to standard HTTP
+  if (createServer) {
+    server = createServer(app, SERVER_PORT, HOST);
+    // Set up callback after server is created
+    if (server && server.listening) {
+      // Server already started, just log
+      console.log(`✅ Etelios Main Server started successfully on port ${SERVER_PORT}`);
+      console.log(`📍 Server listening on ${protocol}://${HOST}:${SERVER_PORT}`);
+    } else if (server) {
+      // Wait for server to be ready
+      server.on('listening', async () => {
+        console.log(`✅ Etelios Main Server started successfully on port ${SERVER_PORT}`);
+        console.log(`📍 Server listening on ${protocol}://${HOST}:${SERVER_PORT}`);
+        await updateServiceStatuses();
+        statusUpdateInterval = setInterval(() => {
+          updateServiceStatuses().catch(() => {});
+          apiEndpointCache = null;
+          adminCache = null;
+        }, 60000);
+      });
+    }
+  } else {
+    server = app.listen(SERVER_PORT, HOST, async () => {
+      // Always log successful startup
+      console.log(`✅ Etelios Main Server started successfully on port ${SERVER_PORT}`);
+      console.log(`📍 Server listening on ${protocol}://${HOST}:${SERVER_PORT}`);
+      console.log(`🏥 Health check: ${protocol}://localhost:${SERVER_PORT}/health`);
+      console.log(`📋 API endpoint: ${protocol}://localhost:${SERVER_PORT}/api`);
+      
+      // Also log to winston logger
+      logger.info(`Etelios Main Server started on port ${SERVER_PORT}`);
+      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+      
+      await updateServiceStatuses();
+      
+      // Status updates every 60 seconds (reduced frequency)
+      statusUpdateInterval = setInterval(() => {
+        updateServiceStatuses().catch(() => {});
+        // Invalidate caches
+        apiEndpointCache = null;
+        adminCache = null;
+      }, 60000);
+    });
+  }
 
   server.on('error', (error) => {
     console.error('❌ Server startup error:', error.message);

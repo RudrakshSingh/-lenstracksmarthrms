@@ -112,3 +112,30 @@ uploads/
 yarn-debug.log*
 yarn-error.log*
 yarn.lock
+
+# SSL/TLS Certificates and Keys - NEVER commit these
+# Ignore all SSL files in ssl directory
+ssl/**/*.pem
+ssl/**/*.key
+ssl/**/*.crt
+ssl/**/*.cert
+ssl/**/*.p12
+ssl/**/*.pfx
+ssl/production/cert.pem
+ssl/production/certificate.pfx
+ssl/production/*.pfx
+ssl/production/private/
+ssl/production/private/**
+# Ignore SSL files globally (but allow examples)
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+!**/env.example
+!**/*.example
+!scripts/generate-ssl-certs.sh
+ssl/production/cert.pem
+ssl/production/certificate.pfx
+ssl/production/private/

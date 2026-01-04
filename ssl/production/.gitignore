@@ -1,0 +1,16 @@
+# Ignore ALL SSL certificates and keys - NEVER commit these to Git
+# Certificates should be stored in Azure Key Vault or Kubernetes Secrets
+*.key
+*.pem
+*.crt
+*.cert
+*.p12
+*.pfx
+key.pem
+private-key.pem
+etelios-key.pem
+cert.pem
+certificate.pfx
+private/
+private/**
+

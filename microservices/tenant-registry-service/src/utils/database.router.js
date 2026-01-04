@@ -171,8 +171,8 @@ class DatabaseRouter {
         }
       }
 
-      // Create new connection
-      const databaseName = `etelios_${tenantId}`;
+      // Create new connection - use tenant-db for all tenants
+      const databaseName = 'tenant-db';
       const tenantUrl = process.env.TENANT_DATABASE_URL || `mongodb://localhost:27017/${databaseName}`;
       
       const connection = await mongoose.createConnection(tenantUrl, {

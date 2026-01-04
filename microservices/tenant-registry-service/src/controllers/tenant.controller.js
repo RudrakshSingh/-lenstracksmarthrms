@@ -111,7 +111,7 @@ class TenantController {
 
       // Generate tenant ID
       const tenantId = subdomain.toLowerCase();
-      const database = `etelios_${tenantId}`;
+      const database = 'tenant-db';
 
       // Check if tenant already exists
       const existingTenant = await Tenant.findOne({

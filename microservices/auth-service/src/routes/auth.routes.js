@@ -147,6 +147,11 @@ router.post('/refresh-token',
   authController.refreshToken
 );
 
+// Alias for frontend compatibility
+router.post('/refresh', 
+  authController.refreshToken
+);
+
 router.post('/logout', 
   authenticate,
   authController.logout
@@ -169,6 +174,12 @@ router.post('/reset-password',
 );
 
 router.get('/profile', 
+  authenticate,
+  authController.getProfile
+);
+
+// Alias for frontend compatibility
+router.get('/me', 
   authenticate,
   authController.getProfile
 );

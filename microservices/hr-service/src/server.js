@@ -409,22 +409,29 @@ const loadRoutes = () => {
     const Joi = require('joi');
     const registerSchema = {
       body: Joi.object({
-        employee_id: Joi.string().required(),
+        employee_id: Joi.string().required().max(20),
         name: Joi.string().min(2).max(100).required(),
-        email: Joi.string().email().required(),
-        phone: Joi.string().required(),
-        password: Joi.string().min(8).required(),
+        email: Joi.string().email().required().trim().lowercase(),
+        phone: Joi.string().required().pattern(/^\+?[\d\s-()]+$/),
+        password: Joi.string().min(8).max(100).required(),
         role: Joi.string().valid('employee', 'hr', 'manager', 'admin', 'superadmin').default('employee'),
+        department: Joi.string().trim().max(100).optional(), // Frontend requires, but optional for backward compatibility
+        designation: Joi.string().trim().max(100).optional(), // Frontend requires, but optional for backward compatibility
+        joining_date: Joi.date().optional(), // Frontend requires, but optional for backward compatibility
+        storeId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional(), // Support both storeId and store
+        store: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional(), // Alternative field name
+        reportingManager: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional(), // Frontend format
+        reporting_manager: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).optional(), // Backend format
         date_of_birth: Joi.date().optional(),
         address: Joi.object({
           address_line_1: Joi.string().optional(),
           street: Joi.string().optional(),
-          city: Joi.string().required(),
-          state: Joi.string().required(),
-          pincode: Joi.string().pattern(/^\d{6}$/).required(),
+          city: Joi.string().optional(), // Made optional for frontend compatibility
+          state: Joi.string().optional(), // Made optional for frontend compatibility
+          pincode: Joi.string().pattern(/^\d{6}$/).optional(), // Made optional for frontend compatibility
           zip: Joi.string().optional(),
           country: Joi.string().default('India')
-        }).required()
+        }).optional() // Made optional for frontend compatibility
       })
     };
     app.post('/api/auth/register', validateRequest(registerSchema), asyncHandler(onboardingController.register));
@@ -614,6 +621,8 @@ const loadRoutes = () => {
   try {
     const dashboardRoutes = require('./routes/dashboard.routes.js');
     app.use('/api/hr', apiRateLimit, dashboardRoutes);
+    // Alias for frontend compatibility (HRMS-MFE expects /api/hrms/dashboard/stats)
+    app.use('/api/hrms', apiRateLimit, dashboardRoutes);
     routesLoaded.push('dashboard.routes.js');
     logger.info('dashboard.routes.js loaded successfully');
   } catch (error) {

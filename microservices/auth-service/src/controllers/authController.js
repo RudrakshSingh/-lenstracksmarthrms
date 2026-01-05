@@ -48,7 +48,12 @@ const register = async (req, res, next) => {
       });
     }
     
-    if (error.message && error.message.includes('Invalid role')) {
+    if (error.message && (error.message.includes('Invalid role') || error.message.includes('Role validation failed') || error.message.includes('Failed to create role'))) {
+      logger.error('Role validation error', { 
+        error: error.message, 
+        stack: error.stack,
+        userData: userData 
+      });
       return res.status(400).json({
         success: false,
         message: error.message

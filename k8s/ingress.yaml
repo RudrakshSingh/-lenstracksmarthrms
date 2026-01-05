@@ -51,11 +51,29 @@ spec:
   - hosts:
     - api.etelios.com
     secretName: etelios-tls
+  # Note: TLS certificate is for api.etelios.com domain only
+  # Accessing via IP (98.70.245.87) will show certificate mismatch
+  # Use https://api.etelios.com for proper SSL/TLS security
   rules:
   # Rule 1: With domain name (for production)
   - host: api.etelios.com
     http:
       paths:
+      # Health check endpoint (root level)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
       # Auth Service (Direct access - API Gateway eliminated)
       - path: /api/auth
         pathType: Prefix
@@ -255,6 +273,21 @@ spec:
   # Rule 2: Without host (for direct IP access - frontend development)
   - http:
       paths:
+      # Health check endpoint (root level)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
       - path: /api/auth
         pathType: Prefix
         backend:

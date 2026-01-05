@@ -284,6 +284,22 @@ const loadRoutes = () => {
   }
 };
 
+// Root path handler
+app.get('/', (req, res) => {
+  res.json({
+    service: 'etelios-api',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      status: '/api/auth/status'
+    },
+    message: 'Etelios API Gateway - Use /api/* endpoints for API access'
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({

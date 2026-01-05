@@ -113,7 +113,6 @@ const registerBasicInfo = async (registerData) => {
             display_name: normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1),
             description: `${normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1)} role`,
             is_active: true,
-            is_system: true,
             permissions: [] // Basic permissions, can be updated later via admin panel
           });
           await roleDoc.save();
@@ -121,13 +120,24 @@ const registerBasicInfo = async (registerData) => {
         } catch (createError) {
           logger.error('Failed to auto-create role', { 
             error: createError.message, 
-            role: normalizedRole 
+            role: normalizedRole,
+            stack: createError.stack
           });
           // Last attempt: try to find role one more time (might have been created by another request)
           roleDoc = await Role.findByName(normalizedRole) || await Role.findOne({ name: normalizedRole });
           if (!roleDoc) {
+            // Check if it's a validation error (enum mismatch)
+            if (createError.message && createError.message.includes('enum')) {
+              logger.error('Role enum validation failed', { 
+                role: normalizedRole,
+                validRoles: validRoles,
+                error: createError.message
+              });
+              throw new ApiError(httpStatus.BAD_REQUEST, 
+                `Invalid role: ${role}. Role must be one of: ${validRoles.join(', ')}`);
+            }
             throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 
-              `Failed to create role: ${role}. Please contact administrator.`);
+              `Failed to create role: ${role}. ${createError.message}`);
           }
         }
       } else if (!roleDoc) {
@@ -224,18 +234,23 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
       incentive_slabs
     } = workData;
 
-    // Validate store (optional)
+    // Handle special store values: "backoffice", "office", "", or actual store ID
     if (storeId) {
       const mongoose = require('mongoose');
-      // Validate ObjectId format
-      if (mongoose.Types.ObjectId.isValid(storeId)) {
+      
+      if (storeId === 'backoffice' || storeId === 'office') {
+        // Special work location types - don't validate as ObjectId
+        // Store will be null, but workLocation will be set in Employee model
+        logger.info('Special work location type selected', { storeId, type: storeId });
+      } else if (storeId !== '' && mongoose.Types.ObjectId.isValid(storeId)) {
+        // Actual store ID - validate
         const store = await Store.findById(storeId);
         if (store) {
           user.store = store._id;
         } else {
           logger.warn('Store not found, proceeding without store assignment', { storeId });
         }
-      } else {
+      } else if (storeId !== '') {
         logger.warn('Invalid store ID format, proceeding without store assignment', { storeId });
       }
     }
@@ -459,10 +474,18 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
     const {
       bankAccount,
       uan,
-      esiNo,
+      esiNo: esiNoFromData,
+      esi_number, // Support frontend field name
       panNumber,
+      pan_number, // Support frontend field name
       previousEmployment
     } = statutoryData;
+    
+    // Support both field names (esiNo and esi_number)
+    const esiNo = esiNoFromData || esi_number;
+    
+    // Support both field names (panNumber and pan_number)
+    const panNumberFinal = panNumber || pan_number;
 
     // Validate bank account
     if (bankAccount) {
@@ -472,7 +495,7 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
       }
 
       // Validate PAN (10 characters: 5 letters + 4 digits + 1 letter)
-      if (panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumber.toUpperCase())) {
+      if (panNumberFinal && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(panNumberFinal.toUpperCase())) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_PAN', 'PAN must be 10 characters (5 letters + 4 digits + 1 letter)');
       }
 
@@ -523,7 +546,7 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
     
     if (uan) updateData.uan = uan;
     if (esiNo) updateData.esiNo = esiNo;
-    if (panNumber) updateData.panNumber = panNumber.toUpperCase();
+    if (panNumberFinal) updateData.panNumber = panNumberFinal.toUpperCase();
     
     if (previousEmployment) {
       updateData.previousEmployment = {

@@ -49,12 +49,25 @@ const createEmployee = async (employeeData, createdBy) => {
       throw new ApiError(httpStatus.BAD_REQUEST, `Specified role not found: ${roleName}`);
     }
 
-    // Find store if provided
+    // Handle special store values: "backoffice", "office", "", or actual store ID
     let store = null;
+    let workLocationType = null;
+    
     if (storeId) {
-      store = await Store.findById(storeId);
-      if (!store) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Specified store not found');
+      if (storeId === 'backoffice' || storeId === 'office') {
+        // Special work location types - don't validate as ObjectId
+        workLocationType = storeId;
+        store = null; // No actual store object
+      } else if (storeId !== '') {
+        // Actual store ID - validate as MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(storeId)) {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid store ID format');
+        }
+        store = await Store.findById(storeId);
+        if (!store) {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'Specified store not found');
+        }
+        workLocationType = 'store';
       }
     }
 
@@ -160,13 +173,37 @@ const createEmployee = async (employeeData, createdBy) => {
         }
         
         // Add work location if available
-        if (store) {
+        if (workLocationType) {
+          if (workLocationType === 'backoffice' || workLocationType === 'office') {
+            // Special work location types
+            employeeData.workLocation = {
+              storeId: storeId, // Store as string: "backoffice" or "office"
+              storeName: workLocationType === 'backoffice' ? 'Backoffice' : 'Office',
+              type: workLocationType,
+              city: rest.work_location_city || rest.workLocation?.city || '',
+              state: rest.work_location_state || rest.workLocation?.state || '',
+              pincode: rest.work_location_pincode || rest.workLocation?.pincode || ''
+            };
+          } else if (store) {
+            // Actual store
+            employeeData.workLocation = {
+              storeId: store._id.toString(),
+              storeName: store.name || '',
+              type: 'store',
+              city: rest.work_location_city || store.city || rest.workLocation?.city || '',
+              state: rest.work_location_state || store.state || rest.workLocation?.state || '',
+              pincode: rest.work_location_pincode || store.pincode || rest.workLocation?.pincode || ''
+            };
+          }
+        } else if (rest.work_location_city || rest.workLocation?.city) {
+          // Work location without store
           employeeData.workLocation = {
-            storeId: store._id.toString(),
-            storeName: store.name || '',
-            city: store.city || '',
-            state: store.state || '',
-            pincode: store.pincode || ''
+            storeId: '',
+            storeName: '',
+            type: 'manual',
+            city: rest.work_location_city || rest.workLocation?.city || '',
+            state: rest.work_location_state || rest.workLocation?.state || '',
+            pincode: rest.work_location_pincode || rest.workLocation?.pincode || ''
           };
         }
         

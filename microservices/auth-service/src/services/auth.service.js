@@ -70,33 +70,64 @@ class AuthService {
         throw new Error('User with this email or employee ID already exists');
       }
 
+      // Validate and normalize role
+      const normalizedRole = role ? role.toLowerCase().trim() : 'employee';
+      
       // Validate role exists, create if it doesn't
-      let roleExists = await Role.findOne({ name: role.toLowerCase(), is_active: true });
+      let roleExists = await Role.findOne({ name: normalizedRole, is_active: true });
       if (!roleExists) {
         // Check if role exists but is inactive
-        roleExists = await Role.findOne({ name: role.toLowerCase() });
+        roleExists = await Role.findOne({ name: normalizedRole });
         if (roleExists) {
           // Reactivate the role
           roleExists.is_active = true;
           await roleExists.save();
-          logger.info('Reactivated existing role', { role: role.toLowerCase() });
+          logger.info('Reactivated existing role', { role: normalizedRole });
         } else {
           // Create the role if it doesn't exist (for standard roles)
           const validRoles = ['admin', 'hr', 'manager', 'employee', 'superadmin', 'accountant', 'store_manager', 'sales', 'optometrist'];
-          if (validRoles.includes(role.toLowerCase())) {
-            roleExists = new Role({
-              name: role.toLowerCase(),
-              display_name: role.charAt(0).toUpperCase() + role.slice(1),
-              description: `${role.charAt(0).toUpperCase() + role.slice(1)} role`,
-              is_active: true,
-              is_system: true
-            });
-            await roleExists.save();
-            logger.info('Created new role', { role: role.toLowerCase() });
+          
+          if (validRoles.includes(normalizedRole)) {
+            try {
+              roleExists = new Role({
+                name: normalizedRole,
+                display_name: normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1),
+                description: `${normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1)} role`,
+                is_active: true
+              });
+              await roleExists.save();
+              logger.info('Created new role', { role: normalizedRole });
+            } catch (saveError) {
+              // If save fails (e.g., duplicate key), try to find the role again
+              logger.warn('Failed to create role, trying to find existing role', { 
+                error: saveError.message, 
+                role: normalizedRole 
+              });
+              roleExists = await Role.findOne({ name: normalizedRole });
+              if (!roleExists) {
+                logger.error('Role creation failed and role not found', { 
+                  error: saveError.message, 
+                  role: normalizedRole,
+                  stack: saveError.stack
+                });
+                throw new Error(`Failed to create role: ${normalizedRole}. ${saveError.message}`);
+              }
+            }
           } else {
+            logger.error('Invalid role specified', { 
+              role: role, 
+              normalizedRole: normalizedRole,
+              validRoles: validRoles 
+            });
             throw new Error(`Invalid role specified: ${role}. Valid roles are: ${validRoles.join(', ')}`);
           }
         }
+      }
+
+      // Ensure we have a valid role (use normalizedRole from above)
+      if (!roleExists) {
+        logger.error('Role not found after validation', { role: normalizedRole });
+        throw new Error(`Role validation failed: ${normalizedRole}`);
       }
 
       // Create user
@@ -106,7 +137,7 @@ class AuthService {
         email,
         phone,
         password,
-        role,
+        role: normalizedRole, // Use normalized role
         department,
         designation,
         joining_date,

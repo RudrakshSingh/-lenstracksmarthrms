@@ -436,17 +436,10 @@ const loadRoutes = () => {
     };
     // NOTE: Register endpoint already defined at line 212 - REMOVED duplicate
   
-  // Load authRoutes AFTER register route to avoid interception
-  try {
-    const authRoutes = require('./routes/auth.routes.js');
-    // Mount auth routes at /api/auth (as per frontend spec)
-    app.use('/api/auth', authRoutes);
-    routesLoaded.push('auth.routes.js');
-    logger.info('auth.routes.js loaded successfully at /api/auth');
-  } catch (error) {
-    routesFailed.push({ route: 'auth.routes.js', error: error.message });
-    logger.error('auth.routes.js failed to load', { error: error.message, stack: error.stack });
-  }
+  // NOTE: Auth routes are handled by auth-service, NOT hr-service
+  // HR service only handles /api/auth/register for employee registration
+  // DO NOT mount auth.routes.js here - it will intercept /api/auth/register
+  // The register route is already defined at line 212 (before loadRoutes)
   
   try {
     const onboardingRoutes = require('./routes/onboarding.routes.js');

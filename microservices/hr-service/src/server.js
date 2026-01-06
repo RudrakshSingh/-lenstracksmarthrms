@@ -414,7 +414,7 @@ const loadRoutes = () => {
         email: Joi.string().email().required().trim().lowercase(),
         phone: Joi.string().required().pattern(/^\+?[\d\s-()]+$/),
         password: Joi.string().min(8).max(100).required(),
-        role: Joi.string().valid('employee', 'hr', 'manager', 'admin', 'superadmin').default('employee'),
+        role: Joi.string().valid('employee', 'hr', 'manager', 'admin', 'superadmin').default('employee') // Accept all case variations,
         department: Joi.string().trim().max(100).optional(), // Frontend requires, but optional for backward compatibility
         designation: Joi.string().trim().max(100).optional(), // Frontend requires, but optional for backward compatibility
         joining_date: Joi.date().optional(), // Frontend requires, but optional for backward compatibility

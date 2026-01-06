@@ -139,3 +139,7 @@ ssl/production/private/**
 ssl/production/cert.pem
 ssl/production/certificate.pfx
 ssl/production/private/
+
+# SSL Private Keys
+private-key.pem
+key.pem

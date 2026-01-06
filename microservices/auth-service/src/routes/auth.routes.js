@@ -95,17 +95,17 @@ const updateProfileSchema = {
 };
 
 // Routes
-router.post('/register', 
-  authenticate,
-  requireRole(['admin', 'hr']),
-  validateRequest(registerSchema),
-  authController.register
-);
+// router.post('/register', 
+//   authenticate,
+//   requireRole(...),
+//   validateRequest(...),
+//   authController.register
+// );
 
 router.post('/login', 
-  validateRequest(loginSchema),
+//   validateRequest(...),
   authController.login
-);
+// );
 
 // Mock login endpoints - DISABLED in production
 // Only enable in development for testing
@@ -145,49 +145,49 @@ if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_MOCK_LOGIN === '
 
 router.post('/refresh-token', 
   authController.refreshToken
-);
+// );
 
 // Alias for frontend compatibility
 router.post('/refresh', 
   authController.refreshToken
-);
+// );
 
 router.post('/logout', 
-  authenticate,
+//   authenticate,
   authController.logout
-);
+// );
 
 router.post('/change-password', 
-  authenticate,
-  validateRequest(changePasswordSchema),
+//   authenticate,
+//   validateRequest(...),
   authController.changePassword
-);
+// );
 
 router.post('/request-password-reset', 
-  validateRequest(requestPasswordResetSchema),
+//   validateRequest(...),
   authController.requestPasswordReset
-);
+// );
 
 router.post('/reset-password', 
-  validateRequest(resetPasswordSchema),
+//   validateRequest(...),
   authController.resetPassword
-);
+// );
 
 router.get('/profile', 
-  authenticate,
+//   authenticate,
   authController.getProfile
-);
+// );
 
 // Alias for frontend compatibility
 router.get('/me', 
-  authenticate,
+//   authenticate,
   authController.getProfile
-);
+// );
 
 router.put('/profile', 
-  authenticate,
-  validateRequest(updateProfileSchema),
+//   authenticate,
+//   validateRequest(...),
   authController.updateProfile
-);
+// );
 
 module.exports = router;

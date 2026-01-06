@@ -434,13 +434,7 @@ const loadRoutes = () => {
         }).optional() // Made optional for frontend compatibility
       })
     };
-    app.post('/api/auth/register', validateRequest(registerSchema), asyncHandler(onboardingController.register));
-    routesLoaded.push('register.route');
-    logger.info('register.route loaded successfully at /api/auth/register (PUBLIC endpoint)');
-  } catch (error) {
-    routesFailed.push({ route: 'register.route', error: error.message });
-    logger.error('register.route failed to load', { error: error.message, stack: error.stack });
-  }
+    // NOTE: Register endpoint already defined at line 212 - REMOVED duplicate
   
   // Load authRoutes AFTER register route to avoid interception
   try {

@@ -250,7 +250,6 @@ const connectDB = async () => {
     const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
     
     // Determine if this is Cosmos DB
-    const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
     
     // Set connection options optimized for Azure Cosmos DB
     const connectionOptions = {

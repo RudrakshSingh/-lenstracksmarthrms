@@ -143,9 +143,16 @@ if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_MOCK_LOGIN === '
 }
 
 router.post('/refresh-token', 
+router.post('/refresh-token', 
+  validateRequest(refreshTokenSchema),
+  authController.refreshToken
+);
+
+// Alias for frontend compatibility
 router.post('/refresh', 
   validateRequest(refreshTokenSchema),
   authController.refreshToken
+);
 
 // Alias for frontend compatibility
 router.post('/refresh', 

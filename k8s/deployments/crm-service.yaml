@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: crm-service
-        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/crm-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/crm-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3005
@@ -41,7 +41,7 @@ spec:
               key: CRM_SERVICE_SERVICE_DB_URI
         - name: DB_NAME
           value: "crm_db"
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         envFrom:
         - configMapRef:
             name: etelios-config-prod

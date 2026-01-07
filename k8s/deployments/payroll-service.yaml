@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: payroll-service
-        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/payroll-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/payroll-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3004
@@ -41,7 +41,7 @@ spec:
               key: PAYROLL_SERVICE_SERVICE_DB_URI
         - name: DB_NAME
           value: "payroll_db"
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         envFrom:
         - configMapRef:
             name: etelios-config-prod

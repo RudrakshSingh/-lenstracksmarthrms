@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: purchase-service
-        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/purchase-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/purchase-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3008
@@ -41,7 +41,7 @@ spec:
               key: PURCHASE_SERVICE_SERVICE_DB_URI
         - name: DB_NAME
           value: "purchase_db"
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         envFrom:
         - configMapRef:
             name: etelios-config-prod

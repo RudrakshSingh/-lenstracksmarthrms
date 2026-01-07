@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: sales-service
-        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/sales-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/sales-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3007
@@ -41,7 +41,7 @@ spec:
               key: SALES_SERVICE_SERVICE_DB_URI
         - name: DB_NAME
           value: "sales_db"
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         envFrom:
         - configMapRef:
             name: etelios-config-prod

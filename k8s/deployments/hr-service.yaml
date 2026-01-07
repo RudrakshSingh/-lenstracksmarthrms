@@ -34,7 +34,7 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         - name: MONGO_URI
           valueFrom:
             secretKeyRef:

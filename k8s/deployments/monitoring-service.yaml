@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: monitoring-service
-        image: etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io/monitoring-service:latest
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/monitoring-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3016
@@ -41,7 +41,7 @@ spec:
               key: MONITORING_SERVICE_SERVICE_DB_URI
         - name: DB_NAME
           value: "monitoring_db"
-          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
         envFrom:
         - configMapRef:
             name: etelios-config-prod

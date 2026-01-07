@@ -37,7 +37,7 @@ spec:
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:
-              name: etelios-secrets-prod
+              name: etelios-secrets
               key: SALES_SERVICE_SERVICE_DB_URI
         - name: DB_NAME
           value: "sales_db"
@@ -46,7 +46,7 @@ spec:
         - configMapRef:
             name: etelios-config-prod
         - secretRef:
-            name: etelios-secrets-prod
+            name: etelios-secrets
         resources:
           requests:
             memory: "256Mi"

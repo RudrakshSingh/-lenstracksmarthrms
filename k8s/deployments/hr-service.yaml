@@ -38,12 +38,12 @@ spec:
         - name: MONGO_URI
           valueFrom:
             secretKeyRef:
-              name: etelios-secrets-prod
+              name: etelios-secrets
               key: HR_SERVICE_DB_URI
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:
-              name: etelios-secrets-prod
+              name: etelios-secrets
               key: HR_SERVICE_DB_URI
         - name: DB_NAME
           value: "hr-database"
@@ -51,7 +51,7 @@ spec:
         - configMapRef:
             name: etelios-config-prod
         - secretRef:
-            name: etelios-secrets-prod
+            name: etelios-secrets
         resources:
           requests:
             memory: "256Mi"

@@ -100,7 +100,6 @@ const updateProfileSchema = {
 //   requireRole(...),
 //   validateRequest(...),
 //   authController.register
-);
 
 router.post('/login', 
   validateRequest(loginSchema),

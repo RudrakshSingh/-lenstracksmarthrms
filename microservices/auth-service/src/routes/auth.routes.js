@@ -103,8 +103,6 @@ const updateProfileSchema = {
 // );
 
 router.post('/login', 
-//   validateRequest(...),
-router.post('/login', 
   validateRequest(loginSchema),
   authController.login
 );

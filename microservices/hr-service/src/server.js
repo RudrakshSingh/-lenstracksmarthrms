@@ -28,17 +28,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
-// Load SSL utility for HTTPS support
-let createServer;
-try {
-  const sslUtils = require('../../shared/utils/ssl');
-  createServer = sslUtils.createServer;
-} catch (error) {
-  logger.warn('SSL utility not available, using HTTP only', { error: error.message });
-  createServer = null;
-}
-
-// Load logger with error handling
+// Load logger with error handling FIRST - needed by other modules
 let logger;
 try {
   logger = require('./config/logger');
@@ -50,6 +40,16 @@ try {
     warn: (...args) => console.warn('[WARN]', ...args)
   };
   console.warn('Failed to load logger config, using fallback logger');
+}
+
+// Load SSL utility for HTTPS support
+let createServer;
+try {
+  const sslUtils = require('../../shared/utils/ssl');
+  createServer = sslUtils.createServer;
+} catch (error) {
+  logger.warn('SSL utility not available, using HTTP only', { error: error.message });
+  createServer = null;
 }
 
 // Load azure config with error handling

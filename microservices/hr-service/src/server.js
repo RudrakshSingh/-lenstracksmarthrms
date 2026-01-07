@@ -433,7 +433,15 @@ const loadRoutes = () => {
         }).optional() // Made optional for frontend compatibility
       })
     };
-    // NOTE: Register endpoint already defined at line 212 - REMOVED duplicate
+    
+    // Register the public /api/auth/register endpoint (no authentication required)
+    app.post(
+      '/api/auth/register',
+      validateRequest(registerSchema),
+      asyncHandler(onboardingController.register)
+    );
+    routesLoaded.push('/api/auth/register');
+    logger.info('✅ Public register endpoint mounted at /api/auth/register');
   } catch (error) {
     routesFailed.push({ route: 'register-schema', error: error.message });
     logger.error('Failed to initialize register schema', { error: error.message, stack: error.stack });

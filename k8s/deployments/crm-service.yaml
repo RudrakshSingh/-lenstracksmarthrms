@@ -6,6 +6,7 @@ metadata:
   namespace: etelios-backend-prod
   labels:
     app: crm-service
+    version: "latest"
 spec:
   replicas: 2
   selector:
@@ -15,6 +16,7 @@ spec:
     metadata:
       labels:
         app: crm-service
+        version: "latest"
     spec:
       containers:
       - name: crm-service
@@ -34,26 +36,19 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-        - name: MONGODB_URI
-          valueFrom:
-            secretKeyRef:
-              name: etelios-secrets
-              key: CRM_SERVICE_SERVICE_DB_URI
-        - name: DB_NAME
-          value: "crm_db"
-          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
+          value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
-            name: etelios-config-prod
+            name: etelios-config
         - secretRef:
             name: etelios-secrets
         resources:
           requests:
             memory: "256Mi"
-            cpu: "50m"
+            cpu: "100m"
           limits:
             memory: "512Mi"
-            cpu: "200m"
+            cpu: "500m"
         livenessProbe:
           httpGet:
             path: /health

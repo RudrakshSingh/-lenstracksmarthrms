@@ -104,8 +104,10 @@ const updateProfileSchema = {
 
 router.post('/login', 
 //   validateRequest(...),
+router.post('/login', 
+  validateRequest(loginSchema),
   authController.login
-// );
+);
 
 // Mock login endpoints - DISABLED in production
 // Only enable in development for testing

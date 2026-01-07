@@ -146,7 +146,6 @@ router.post('/refresh-token',
 router.post('/refresh', 
   validateRequest(refreshTokenSchema),
   authController.refreshToken
-);
 
 // Alias for frontend compatibility
 router.post('/refresh', 

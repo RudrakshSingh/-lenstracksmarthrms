@@ -434,6 +434,10 @@ const loadRoutes = () => {
       })
     };
     // NOTE: Register endpoint already defined at line 212 - REMOVED duplicate
+  } catch (error) {
+    routesFailed.push({ route: 'register-schema', error: error.message });
+    logger.error('Failed to initialize register schema', { error: error.message, stack: error.stack });
+  }
   
   // NOTE: Auth routes are handled by auth-service, NOT hr-service
   // HR service only handles /api/auth/register for employee registration

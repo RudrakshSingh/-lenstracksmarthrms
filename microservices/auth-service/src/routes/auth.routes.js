@@ -100,7 +100,7 @@ const updateProfileSchema = {
 //   requireRole(...),
 //   validateRequest(...),
 //   authController.register
-// );
+);
 
 router.post('/login', 
   validateRequest(loginSchema),
@@ -152,44 +152,44 @@ router.post('/refresh',
 // Alias for frontend compatibility
 router.post('/refresh', 
   authController.refreshToken
-// );
+);
 
 router.post('/logout', 
 //   authenticate,
   authController.logout
-// );
+);
 
 router.post('/change-password', 
 //   authenticate,
 //   validateRequest(...),
   authController.changePassword
-// );
+);
 
 router.post('/request-password-reset', 
 //   validateRequest(...),
   authController.requestPasswordReset
-// );
+);
 
 router.post('/reset-password', 
 //   validateRequest(...),
   authController.resetPassword
-// );
+);
 
 router.get('/profile', 
 //   authenticate,
   authController.getProfile
-// );
+);
 
 // Alias for frontend compatibility
 router.get('/me', 
 //   authenticate,
   authController.getProfile
-// );
+);
 
 router.put('/profile', 
 //   authenticate,
 //   validateRequest(...),
   authController.updateProfile
-// );
+);
 
 module.exports = router;

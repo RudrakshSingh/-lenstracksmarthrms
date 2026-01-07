@@ -197,4 +197,4 @@ router.put('/profile',
   authController.updateProfile
 );
 
-module.exports = router;
+module.exports = router;module.exports = router;

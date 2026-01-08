@@ -15,6 +15,21 @@ const loginSchema = {
   }).or("emailOrEmployeeId", "email")
 };
 
+const registerSchema = {
+  body: Joi.object({
+    employee_id: Joi.string().required().trim().min(3).max(50),
+    name: Joi.string().required().trim().min(2).max(100),
+    email: Joi.string().email().required().trim().lowercase(),
+    phone: Joi.string().optional().trim(),
+    password: Joi.string().required().min(8),
+    role: Joi.string().valid('admin', 'hr', 'manager', 'employee', 'superadmin').default('employee'),
+    department: Joi.string().optional().trim(),
+    designation: Joi.string().optional().trim(),
+    joining_date: Joi.date().optional(),
+    status: Joi.string().valid('active', 'inactive', 'pending').default('active')
+  })
+};
+
 const refreshTokenSchema = {
   body: Joi.object({
     refreshToken: Joi.string().required()
@@ -22,6 +37,11 @@ const refreshTokenSchema = {
 };
 
 // Routes
+router.post("/register",
+  validateRequest(registerSchema),
+  authController.register
+);
+
 router.post("/login",
   validateRequest(loginSchema),
   authController.login

@@ -3,12 +3,44 @@ const logger = require('../config/logger');
 
 /**
  * Register a new user
+ * Allows public registration if no users exist in the database (first admin user)
+ * Otherwise requires authentication
  */
 const register = async (req, res, next) => {
   try {
     const userData = req.body;
     const createdBy = req.user?._id || req.user?.id;
     
+    // Check if this is the first user registration
+    // Allow public registration ONLY for the first admin user
+    const User = require('../models/User.model');
+    const userCount = await User.countDocuments();
+    
+    if (userCount === 0) {
+      // First user - allow public registration
+      // Must be admin or superadmin role
+      if (!['admin', 'superadmin'].includes(userData.role)) {
+        return res.status(403).json({
+          success: false,
+          message: 'First user must be admin or superadmin'
+        });
+      }
+      logger.info('First user registration (no authentication required)', { 
+        email: userData.email,
+        role: userData.role 
+      });
+      
+      // Use a system user ID for createdBy
+      const result = await authService.register(userData, 'system');
+
+      return res.status(201).json({
+        success: true,
+        message: 'Admin user registered successfully',
+        data: result
+      });
+    }
+    
+    // Not first user - require authentication
     if (!createdBy) {
       return res.status(401).json({
         success: false,

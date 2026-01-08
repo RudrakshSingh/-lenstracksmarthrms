@@ -35,11 +35,15 @@ const createEmployeeSchema = {
     lastName: Joi.string().allow('').optional(), // Allow empty lastName (fullName will be created from firstName if lastName is empty)
     fullName: Joi.string().allow('').optional(), // Allow fullName (will be created from firstName + lastName if not provided)
     email: Joi.string().email().required(),
-    password: Joi.string().min(8).required(),
-    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee', 'hr', 'admin', 'superadmin', 'manager', 'employee').required(),
+    password: Joi.string().min(8).optional(), // Optional - auth service handles password
+    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee', 'hr', 'admin', 'superadmin', 'manager', 'employee').optional(), // Optional - defaults to 'employee'
     phone: Joi.string().optional(),
     jobTitle: Joi.string().optional(),
     department: Joi.string().optional(),
+    designation: Joi.string().optional(), // Frontend compatibility
+    doj: Joi.date().optional(), // Date of joining
+    joining_date: Joi.date().optional(), // Frontend compatibility
+    status: Joi.string().valid('active', 'inactive', 'on-leave', 'terminated').optional(),
     storeId: Joi.string().optional(),
     dateOfBirth: Joi.date().optional(),
     address: Joi.object({
@@ -60,10 +64,12 @@ const updateEmployeeSchema = {
     phone: Joi.string().optional(),
     jobTitle: Joi.string().optional(),
     department: Joi.string().optional(),
+    designation: Joi.string().optional(), // Frontend compatibility
     roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee').optional(),
     storeId: Joi.string().optional(),
-    status: Joi.string().valid('active', 'on_leave', 'terminated', 'pending').optional(),
+    status: Joi.string().valid('active', 'inactive', 'on-leave', 'terminated', 'pending').optional(),
     dateOfBirth: Joi.date().optional(),
+    doj: Joi.date().optional(), // Date of joining
     address: Joi.object({
       street: Joi.string().optional(),
       city: Joi.string().optional(),

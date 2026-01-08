@@ -297,7 +297,7 @@ const connectDB = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      retryWrites: true,
+      retryWrites: false, // Azure Cosmos DB (MongoDB API) doesn't support retryable writes
       retryReads: true,
       dbName: targetDbName, // Explicitly set database name - this is the key!
       heartbeatFrequencyMS: 10000 // Add heartbeat to detect dead connections

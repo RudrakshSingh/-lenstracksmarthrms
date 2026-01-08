@@ -126,11 +126,11 @@ stages:
   displayName: 'Security Scan'
   dependsOn: Build
   condition: succeeded()
-  # Continue even if security scan fails/times out
-  continueOnError: true
   jobs:
   - job: TrivyScan
     displayName: 'Trivy File System Scan'
+    # Continue even if security scan fails/times out
+    continueOnError: true
     pool:
       vmImage: 'ubuntu-latest'
     steps:

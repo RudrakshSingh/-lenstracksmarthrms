@@ -49,7 +49,7 @@ const userSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    required: true,
+    required: false, // Optional - not always provided during employee creation
     trim: true,
     match: [/^\+?[\d\s-()]+$/, 'Please enter a valid phone number']
   },
@@ -59,7 +59,7 @@ const userSchema = new mongoose.Schema({
   // ============================================
   password: {
     type: String,
-    required: true,
+    required: false, // Optional - auth service handles password creation
     minlength: 6,
     select: false
   },
@@ -74,7 +74,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Role',
-    required: true
+    required: false // Optional - will be assigned after employee creation
   },
   
   // ============================================

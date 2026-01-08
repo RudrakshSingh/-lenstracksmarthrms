@@ -506,6 +506,37 @@ stages:
                 kubectl apply --validate=false -f k8s/secrets.yaml -n $(NAMESPACE)
                 echo "✅ Secrets applied"
           
+          - task: Bash@3
+            displayName: 'Create ACR Image Pull Secret'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -e
+                ACR_NAME="$(ACR_NAME)"
+                ACR_SERVER="$(ACR_LOGIN_SERVER)"
+                NAMESPACE="$(NAMESPACE)"
+                
+                echo "Creating ACR image pull secret..."
+                echo "ACR: $ACR_NAME"
+                echo "Server: $ACR_SERVER"
+                echo "Namespace: $NAMESPACE"
+                
+                # Get ACR credentials
+                ACR_USERNAME=$(az acr credential show --name $ACR_NAME --query username -o tsv)
+                ACR_PASSWORD=$(az acr credential show --name $ACR_NAME --query "passwords[0].value" -o tsv)
+                
+                # Delete existing secret if it exists
+                kubectl delete secret acr-secret -n $NAMESPACE 2>/dev/null || true
+                
+                # Create new secret
+                kubectl create secret docker-registry acr-secret \
+                  --docker-server=$ACR_SERVER \
+                  --docker-username=$ACR_USERNAME \
+                  --docker-password=$ACR_PASSWORD \
+                  -n $NAMESPACE
+                
+                echo "✅ ACR image pull secret created"
+          
           # API Gateway eliminated - using direct Ingress routing to microservices
           # - task: Bash@3
           #   displayName: 'Deploy API Gateway'

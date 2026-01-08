@@ -509,7 +509,7 @@ stages:
           - task: AzureCLI@2
             displayName: 'Create ACR Image Pull Secret'
             inputs:
-              azureSubscription: 'Etelios-AKS-Service-Connection'
+              azureSubscription: 'Azure-Service-Connection'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |

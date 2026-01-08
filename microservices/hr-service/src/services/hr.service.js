@@ -28,25 +28,50 @@ const createEmployee = async (employeeData, createdBy) => {
     // Check if employeeId already exists
     const existingEmployeeId = await User.findOne({ employeeId: normalizedEmployeeId });
     if (existingEmployeeId) {
-      throw new ApiError(httpStatus.CONFLICT, 'Employee ID already exists');
+      logger.warn('Employee ID already exists, skipping creation', { 
+        employeeId: normalizedEmployeeId, 
+        email 
+      });
+      // Return existing employee instead of throwing error (for onboarding flow)
+      const existing = await User.findById(existingEmployeeId._id)
+        .populate('role', 'name permissions')
+        .populate('store', 'name address');
+      return existing;
     }
 
     // Check if email already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new ApiError(httpStatus.CONFLICT, 'User with this email already exists');
+      logger.warn('User with email already exists, returning existing user', { 
+        employeeId: normalizedEmployeeId, 
+        email,
+        existingEmployeeId: existingUser.employeeId
+      });
+      // Return existing user instead of throwing error (for onboarding flow)
+      const existing = await User.findById(existingUser._id)
+        .populate('role', 'name permissions')
+        .populate('store', 'name address');
+      return existing;
     }
 
-    // Find role (case-insensitive)
-    const role = await Role.findOne({ 
+    // Find role (default to 'employee' if not provided)
+    const roleNameToFind = roleName || 'employee';
+    let role = await Role.findOne({ 
       $or: [
-        { name: roleName },
-        { name: roleName.toLowerCase() },
-        { name: roleName.charAt(0).toUpperCase() + roleName.slice(1).toLowerCase() }
+        { name: roleNameToFind },
+        { name: roleNameToFind.toLowerCase() },
+        { name: roleNameToFind.charAt(0).toUpperCase() + roleNameToFind.slice(1).toLowerCase() }
       ]
     });
+    
     if (!role) {
-      throw new ApiError(httpStatus.BAD_REQUEST, `Specified role not found: ${roleName}`);
+      logger.error('Role not found, trying to find any default role', { roleName: roleNameToFind });
+      // Try to find 'employee' role as fallback
+      role = await Role.findOne({ name: 'employee' }) || await Role.findOne();
+      if (!role) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `No roles found in system. Please create roles first.`);
+      }
+      logger.warn('Using fallback role', { roleName: role.name, roleId: role._id });
     }
 
     // Handle special store values: "backoffice", "office", "", or actual store ID
@@ -71,15 +96,47 @@ const createEmployee = async (employeeData, createdBy) => {
       }
     }
 
-    let employee = new User({
+    // Prepare employee data
+    const userData = {
       employeeId: normalizedEmployeeId, // Explicitly set employeeId
+      code: normalizedEmployeeId, // Also set code
       email,
-      password,
       role: role._id,
       store: store?._id,
       status: 'active',
       ...rest
-    });
+    };
+    
+    // Ensure firstName/lastName exist (required by User model)
+    if (!userData.firstName && userData.fullName) {
+      // Split fullName into firstName and lastName
+      const nameParts = userData.fullName.trim().split(' ');
+      userData.firstName = nameParts[0] || userData.fullName;
+      userData.lastName = nameParts.slice(1).join(' ') || nameParts[0];
+      logger.info('Generated firstName/lastName from fullName', { 
+        fullName: userData.fullName,
+        firstName: userData.firstName,
+        lastName: userData.lastName
+      });
+    }
+    
+    // Ensure fullName exists (virtual field needs firstName)
+    if (!userData.firstName) {
+      userData.firstName = email.split('@')[0]; // Use email prefix as firstName
+      userData.lastName = '';
+      logger.warn('No firstName provided, using email prefix', { firstName: userData.firstName });
+    }
+    
+    // Only add password if provided (user might already be registered via auth service)
+    if (password) {
+      userData.password = password;
+    } else {
+      // Generate a random password if not provided (will be hashed by pre-save hook)
+      userData.password = `TempPass${Date.now()}!`;
+      logger.warn('No password provided, generated temporary password', { employeeId: normalizedEmployeeId });
+    }
+    
+    let employee = new User(userData);
 
     // Save employee and verify
     try {
@@ -118,11 +175,44 @@ const createEmployee = async (employeeData, createdBy) => {
     } catch (saveError) {
       logger.error('Error saving employee to database', {
         error: saveError.message,
+        code: saveError.code,
+        name: saveError.name,
         employeeId: normalizedEmployeeId,
         email,
         database: mongoose.connection.name,
         stack: saveError.stack
       });
+      
+      // If duplicate key error (email or employeeId), try to find and return existing
+      if (saveError.code === 11000 || saveError.message?.includes('duplicate')) {
+        logger.warn('Duplicate employee detected during save, fetching existing', { employeeId: normalizedEmployeeId, email });
+        const existing = await User.findOne({ 
+          $or: [
+            { employeeId: normalizedEmployeeId },
+            { email }
+          ]
+        })
+          .populate('role', 'name permissions')
+          .populate('store', 'name address');
+        
+        if (existing) {
+          logger.info('Returning existing employee instead of creating new one', { 
+            employeeId: existing.employeeId,
+            email: existing.email 
+          });
+          return existing;
+        }
+      }
+      
+      // If validation error, provide helpful message
+      if (saveError.name === 'ValidationError') {
+        const validationErrors = Object.keys(saveError.errors || {}).map(key => {
+          return `${key}: ${saveError.errors[key].message}`;
+        }).join(', ');
+        logger.error('Validation error details', { validationErrors });
+        throw new ApiError(httpStatus.BAD_REQUEST, `Validation failed: ${validationErrors || saveError.message}`);
+      }
+      
       throw saveError;
     }
     
@@ -148,7 +238,7 @@ const createEmployee = async (employeeData, createdBy) => {
           roleFamily: roleFamilyValue,
           department: departmentValue,
           doj: rest.joining_date ? new Date(rest.joining_date) : new Date(), // Date of joining
-          status: employee.status === 'active' ? 'ACTIVE' : 'INACTIVE'
+          status: (employee.status || 'active').toLowerCase() // CRITICAL: lowercase only!
         };
         
         // Add optional fields if available
@@ -417,7 +507,13 @@ const getEmployeeById = async (employeeId) => {
  */
 const updateEmployee = async (employeeId, updateData, updatedBy) => {
   try {
-    const { roleName, storeId, uan, esiNo, panNumber, bankAccount, aadharMasked, previousEmployment, ...rest } = updateData;
+    // Extract all fields that need special handling
+    const { 
+      roleName, 
+      storeId, 
+      status,
+      ...rest 
+    } = updateData;
 
     // Check if employeeId is a valid MongoDB ObjectId
     const mongoose = require('mongoose');
@@ -438,7 +534,25 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
-    // Update role if provided
+    // ============================================
+    // Status Validation (CRITICAL: lowercase only)
+    // ============================================
+    if (status) {
+      const validStatuses = ['active', 'inactive', 'on-leave', 'terminated', 'pending'];
+      const normalizedStatus = status.toLowerCase().trim();
+      
+      if (!validStatuses.includes(normalizedStatus)) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST, 
+          `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+        );
+      }
+      rest.status = normalizedStatus;
+    }
+
+    // ============================================
+    // Role Update
+    // ============================================
     if (roleName) {
       const role = await Role.findOne({ name: roleName });
       if (!role) {
@@ -447,7 +561,9 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       rest.role = role._id;
     }
 
-    // Update store if provided
+    // ============================================
+    // Store Update
+    // ============================================
     if (storeId) {
       const store = await Store.findById(storeId);
       if (!store) {
@@ -455,70 +571,86 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       }
       rest.store = store._id;
     }
-
-    // Update User model
+    
+    // ============================================
+    // Handle Code Field (same as employeeId)
+    // ============================================
+    if (!rest.code && rest.employeeId) {
+      rest.code = rest.employeeId;
+    }
+    
+    // ============================================
+    // Handle Date Fields (normalize to Date objects)
+    // ============================================
+    if (rest.doj && typeof rest.doj === 'string') {
+      rest.doj = new Date(rest.doj);
+    }
+    if (rest.dob && typeof rest.dob === 'string') {
+      rest.dob = new Date(rest.dob);
+      rest.dateOfBirth = rest.dob; // Sync both fields
+    }
+    if (rest.dateOfBirth && typeof rest.dateOfBirth === 'string') {
+      rest.dateOfBirth = new Date(rest.dateOfBirth);
+      rest.dob = rest.dateOfBirth; // Sync both fields
+    }
+    
+    // ============================================
+    // Handle Full Name (compute from firstName/lastName if not provided)
+    // ============================================
+    if (!rest.fullName && (rest.firstName || rest.lastName)) {
+      rest.fullName = `${rest.firstName || employee.firstName || ''} ${rest.lastName || employee.lastName || ''}`.trim();
+    }
+    
+    // ============================================
+    // Handle Job Title (sync with designation)
+    // ============================================
+    if (rest.designation && !rest.jobTitle) {
+      rest.jobTitle = rest.designation;
+    }
+    if (rest.jobTitle && !rest.designation) {
+      rest.designation = rest.jobTitle;
+    }
+    
+    // ============================================
+    // Handle Grade Band (sync both formats)
+    // ============================================
+    if (rest.grade_band && !rest.gradeBand) {
+      rest.gradeBand = rest.grade_band;
+    }
+    if (rest.gradeBand && !rest.grade_band) {
+      rest.grade_band = rest.gradeBand;
+    }
+    
+    // ============================================
+    // Handle Address Fields (sync old and new formats)
+    // ============================================
+    if (rest.currentAddress && !rest.address) {
+      rest.address = {
+        street: rest.currentAddress.lines ? rest.currentAddress.lines.join(', ') : '',
+        city: rest.currentAddress.city,
+        state: rest.currentAddress.state,
+        zip: rest.currentAddress.pincode,
+        country: rest.currentAddress.country || 'India'
+      };
+    }
+    
+    // ============================================
+    // Update User Model with All Fields
+    // ============================================
     const updatedEmployee = await User.findOneAndUpdate(
       query,
-      rest,
+      { $set: rest },
       { new: true, runValidators: true }
     ).populate('role', 'name permissions').populate('store', 'name address');
 
-    // Handle statutory information updates (UAN, ESI, PAN, Bank Account)
-    // These are stored in CompensationProfile, not User model
-    if (uan || esiNo || panNumber || bankAccount || previousEmployment) {
-      const CompensationProfile = require('../models/CompensationProfile.model');
-      const employeeIdStr = employee.employeeId || employeeId.toUpperCase();
-      
-      // Find or create CompensationProfile
-      let compensationProfile = await CompensationProfile.findOne({ 
-        $or: [
-          { employee: employee._id },
-          { employeeId: employeeIdStr }
-        ]
-      });
-      
-      if (!compensationProfile) {
-        compensationProfile = new CompensationProfile({
-          employee: employee._id,
-          employeeId: employeeIdStr,
-          updatedBy: updatedBy
-        });
-      }
-      
-      // Update statutory fields
-      if (uan) compensationProfile.uan = uan;
-      if (esiNo) compensationProfile.esiNo = esiNo;
-      if (panNumber) compensationProfile.panNumber = panNumber.toUpperCase();
-      if (aadharMasked) compensationProfile.aadharMasked = aadharMasked;
-      
-      if (bankAccount) {
-        compensationProfile.bankAccount = {
-          accountNumber: bankAccount.account_number || bankAccount.accountNumber,
-          ifscCode: (bankAccount.ifsc_code || bankAccount.ifscCode)?.toUpperCase(),
-          bankName: bankAccount.bank_name || bankAccount.bankName,
-          accountType: bankAccount.account_type || bankAccount.accountType
-        };
-      }
-      
-      if (previousEmployment) {
-        compensationProfile.previousEmployment = {
-          hasPreviousEmployment: previousEmployment.has_previous_employment || previousEmployment.hasPreviousEmployment,
-          employerName: previousEmployment.employer_name || previousEmployment.employerName,
-          fromDate: previousEmployment.from_date ? new Date(previousEmployment.from_date) : (previousEmployment.fromDate ? new Date(previousEmployment.fromDate) : undefined),
-          toDate: previousEmployment.to_date ? new Date(previousEmployment.to_date) : (previousEmployment.toDate ? new Date(previousEmployment.toDate) : undefined)
-        };
-      }
-      
-      compensationProfile.updatedBy = updatedBy;
-      await compensationProfile.save();
-      
-      logger.info('Statutory information updated in CompensationProfile', {
-        employeeId: employeeIdStr,
-        hasUAN: !!uan,
-        hasESI: !!esiNo,
-        hasPAN: !!panNumber,
-        hasBankAccount: !!bankAccount
-      });
+    // ============================================
+    // NOTE: All statutory fields now stored directly in User model
+    // (uan, esiNo, panNumber, bankAccount, previousEmployment, etc.)
+    // CompensationProfile is no longer used - simplified architecture
+    // ============================================
+    
+    if (!updatedEmployee) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found after update');
     }
 
     // Record audit log

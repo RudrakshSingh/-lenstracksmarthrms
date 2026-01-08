@@ -1,7 +1,27 @@
 // Load environment variables from .env in development; ignore missing module in production
 try {
   // eslint-disable-next-line global-require
-  require('dotenv').config();
+  const path = require('path');
+  const dotenv = require('dotenv');
+  
+  // 1. Load root .env first (shared configuration like MONGO_URI, JWT_SECRET)
+  const rootEnvPath = path.resolve(__dirname, '../../../.env');
+  dotenv.config({ path: rootEnvPath });
+  console.log('✅ Loaded root .env from:', rootEnvPath);
+  
+  // 2. Load service-specific .env (overrides like PORT, SERVICE_NAME, DB_NAME)
+  const serviceEnvPath = path.resolve(__dirname, '../.env');
+  dotenv.config({ path: serviceEnvPath });
+  console.log('✅ Loaded service .env from:', serviceEnvPath);
+  
+  // Log critical env vars for debugging
+  console.log('📂 Environment Configuration:');
+  console.log('  Service Name:', process.env.SERVICE_NAME || 'auth-service');
+  console.log('  Port:', process.env.PORT || 3001);
+  console.log('  Database:', process.env.DB_NAME || process.env.MONGO_DB_NAME || 'auth-db');
+  console.log('  Mongo URI:', (process.env.MONGO_URI || process.env.MONGODB_URI) ? '✅ Set' : '❌ Missing');
+  console.log('  JWT Secret:', process.env.JWT_SECRET ? '✅ Set' : '❌ Missing');
+  console.log('  NODE_ENV:', process.env.NODE_ENV || 'development');
 } catch (err) {
   // eslint-disable-next-line no-console
   if (process.env.NODE_ENV !== 'production') {

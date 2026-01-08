@@ -181,20 +181,68 @@ function formatDate(date) {
 function formatEmployee(employee) {
   if (!employee) return null;
 
+  // Convert Mongoose document to plain object if needed
+  const emp = employee.toObject ? employee.toObject() : employee;
+
   return {
-    id: employee._id?.toString() || employee.id,
-    fullName: employee.fullName || `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
-    email: employee.email,
-    phone: employee.phone,
-    employeeId: employee.employeeId || employee.employeeCode,
-    department: employee.department,
-    designation: employee.designation || employee.position,
-    status: employee.status,
-    store: employee.store,
-    manager: employee.manager,
-    joinDate: formatDate(employee.joinDate),
-    salary: employee.salary,
-    avatar: employee.avatar || `/avatars/${employee.employeeId || employee._id}.jpg`
+    // Basic Info
+    id: emp._id?.toString() || emp.id,
+    employeeId: emp.employeeId || emp.employeeCode || emp.code,
+    code: emp.code || emp.employeeId,
+    firstName: emp.firstName,
+    lastName: emp.lastName,
+    fullName: emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`.trim(),
+    email: emp.email,
+    phone: emp.phone,
+    avatar: emp.avatar || `/avatars/${emp.employeeId || emp._id}.jpg`,
+    
+    // Work Details
+    department: emp.department,
+    designation: emp.designation || emp.position,
+    jobTitle: emp.jobTitle || emp.designation,
+    roleFamily: emp.roleFamily,
+    grade_band: emp.grade_band || emp.gradeBand,
+    gradeBand: emp.gradeBand || emp.grade_band,
+    status: emp.status ? emp.status.toLowerCase() : 'active',
+    salary: emp.salary,
+    
+    // Dates
+    doj: emp.doj,
+    dob: emp.dob,
+    joinDate: formatDate(emp.joinDate || emp.doj),
+    confirmationDate: emp.confirmationDate,
+    
+    // Reporting Manager
+    reportingManager: emp.reportingManager,
+    reportingManagerName: emp.reportingManagerName || emp.reportingManagerDetails?.name,
+    manager: emp.manager,
+    
+    // Work Location
+    workLocation: emp.workLocation,
+    store: emp.store,
+    
+    // Address
+    currentAddress: emp.currentAddress,
+    
+    // Emergency Contact
+    emergencyContact: emp.emergencyContact,
+    
+    // Statutory Information
+    uan: emp.uan,
+    esiNo: emp.esiNo,
+    aadharMasked: emp.aadharMasked,
+    panNumber: emp.panNumber,
+    bankAccount: emp.bankAccount,
+    
+    // Previous Employment
+    previousEmployment: emp.previousEmployment,
+    
+    // Documents
+    documents: emp.documents,
+    
+    // Timestamps
+    createdAt: emp.createdAt || emp.created_at,
+    updatedAt: emp.updatedAt || emp.updated_at
   };
 }
 

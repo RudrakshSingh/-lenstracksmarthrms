@@ -2,13 +2,20 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
+  // ============================================
   // Basic Information
+  // ============================================
   employeeId: {
     type: String,
     required: true,
     trim: true,
     uppercase: true,
     index: true
+  },
+  code: {
+    type: String,
+    trim: true,
+    uppercase: true
   },
   firstName: {
     type: String,
@@ -18,11 +25,19 @@ const userSchema = new mongoose.Schema({
   },
   lastName: {
     type: String,
-    required: false, // Made optional to handle cases where only firstName is provided
+    required: false,
     trim: true,
     maxlength: 100,
-    default: '' // Default to empty string if not provided
+    default: ''
   },
+  avatar: {
+    type: String,
+    trim: true
+  },
+  
+  // ============================================
+  // Contact Information
+  // ============================================
   email: {
     type: String,
     required: true,
@@ -38,26 +53,58 @@ const userSchema = new mongoose.Schema({
     trim: true,
     match: [/^\+?[\d\s-()]+$/, 'Please enter a valid phone number']
   },
+  
+  // ============================================
+  // Authentication
+  // ============================================
   password: {
     type: String,
     required: true,
     minlength: 6,
     select: false
   },
+  refreshToken: {
+    type: String,
+    select: false
+  },
   
+  // ============================================
   // Role and Permissions
+  // ============================================
   role: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Role',
     required: true
   },
   
-  // Department and Store
+  // ============================================
+  // Work Details
+  // ============================================
   department: {
     type: String,
     trim: true
   },
+  designation: {
+    type: String,
+    trim: true
+  },
   jobTitle: {
+    type: String,
+    trim: true
+  },
+  roleFamily: {
+    type: String,
+    trim: true
+  },
+  gradeBand: {
+    type: String,
+    trim: true
+  },
+  grade_band: {
+    type: String,
+    trim: true
+  },
+  salary: {
     type: String,
     trim: true
   },
@@ -66,25 +113,48 @@ const userSchema = new mongoose.Schema({
     ref: 'Store'
   },
   
-  // Status
-  status: {
+  // ============================================
+  // Reporting Structure
+  // ============================================
+  reportingManager: {
     type: String,
-    enum: ['active', 'on_leave', 'terminated', 'pending'],
-    default: 'active',
-    index: true
+    trim: true
   },
-  is_active: {
-    type: Boolean,
-    default: true,
-    index: true
-  },
-  isDeleted: {
-    type: Boolean,
-    default: false,
-    index: true
+  reportingManagerName: {
+    type: String,
+    trim: true
   },
   
-  // Address
+  // ============================================
+  // Work Location (Nested Object)
+  // ============================================
+  workLocation: {
+    storeId: {
+      type: String,
+      trim: true
+    },
+    storeName: {
+      type: String,
+      trim: true
+    },
+    city: {
+      type: String,
+      trim: true
+    },
+    state: {
+      type: String,
+      trim: true
+    },
+    pincode: {
+      type: String,
+      trim: true
+    }
+  },
+  
+  // ============================================
+  // Addresses
+  // ============================================
+  // Legacy address field (backward compatibility)
   address: {
     street: { type: String, trim: true },
     city: { type: String, trim: true },
@@ -92,13 +162,134 @@ const userSchema = new mongoose.Schema({
     zip: { type: String, trim: true },
     country: { type: String, trim: true, default: 'India' }
   },
+  // Current address (new format)
+  currentAddress: {
+    lines: [String],
+    city: String,
+    state: String,
+    pincode: String,
+    country: {
+      type: String,
+      default: 'India'
+    }
+  },
   
-  // Date of Birth
+  // ============================================
+  // Emergency Contact
+  // ============================================
+  emergencyContact: {
+    name: {
+      type: String,
+      trim: true
+    },
+    relationship: {
+      type: String,
+      enum: ['Father', 'Mother', 'Spouse', 'Sibling', 'Child', 'Friend', 'Other'],
+      trim: true
+    },
+    phone: {
+      type: String,
+      trim: true
+    }
+  },
+  
+  // ============================================
+  // Important Dates
+  // ============================================
+  doj: {
+    type: Date
+  },
+  dob: {
+    type: Date
+  },
   dateOfBirth: {
     type: Date
   },
+  confirmationDate: {
+    type: Date
+  },
   
-  // Onboarding Documents
+  // ============================================
+  // Statutory Information
+  // ============================================
+  uan: {
+    type: String,
+    trim: true
+  },
+  esiNo: {
+    type: String,
+    trim: true
+  },
+  panNumber: {
+    type: String,
+    trim: true,
+    uppercase: true
+  },
+  aadharMasked: {
+    type: String,
+    trim: true
+  },
+  
+  // ============================================
+  // Bank Details
+  // ============================================
+  bankAccount: {
+    accountNumber: {
+      type: String,
+      trim: true
+    },
+    ifscCode: {
+      type: String,
+      trim: true,
+      uppercase: true
+    },
+    bankName: {
+      type: String,
+      trim: true
+    },
+    branchName: {
+      type: String,
+      trim: true
+    },
+    accountType: {
+      type: String,
+      enum: ['Savings', 'Current', 'Salary'],
+      trim: true
+    }
+  },
+  
+  // ============================================
+  // Previous Employment
+  // ============================================
+  previousEmployment: {
+    has_previous_employment: Boolean,
+    employer_name: String,
+    from_date: Date,
+    to_date: Date,
+    form_16_available: Boolean
+  },
+  
+  // ============================================
+  // Documents (New Format)
+  // ============================================
+  documents: [{
+    type: {
+      type: String,
+      trim: true
+    },
+    url: {
+      type: String,
+      trim: true
+    },
+    uploaded_at: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  
+  // ============================================
+  // Onboarding Documents (Legacy Format)
+  // ============================================
   onboardingDocuments: [{
     type: {
       type: String,
@@ -148,18 +339,33 @@ const userSchema = new mongoose.Schema({
     }
   }],
   
-  // Refresh Token
-  refreshToken: {
+  // ============================================
+  // Status (CRITICAL: lowercase with hyphen)
+  // ============================================
+  status: {
     type: String,
-    select: false
+    enum: ['active', 'inactive', 'on-leave', 'terminated', 'pending'],
+    default: 'active',
+    lowercase: true,
+    index: true
+  },
+  is_active: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
   },
   
-  // Last login tracking
+  // ============================================
+  // Tracking
+  // ============================================
   lastLogin: {
     type: Date
   },
-  
-  // Timestamps
   createdAt: {
     type: Date,
     default: Date.now

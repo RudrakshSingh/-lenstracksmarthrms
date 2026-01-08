@@ -2,7 +2,45 @@
 // Load environment variables from .env in development; ignore missing module in production
 try {
   // eslint-disable-next-line global-require
-  require('dotenv').config();
+  const path = require('path');
+  const dotenv = require('dotenv');
+  
+  // 1. Load root .env first (shared configuration like MONGO_URI, JWT_SECRET)
+  const rootEnvPath = path.resolve(__dirname, '../../../.env');
+  const rootResult = dotenv.config({ path: rootEnvPath });
+  if (rootResult.error) {
+    console.log('❌ Failed to load root .env:', rootResult.error.message);
+  } else {
+    console.log('✅ Loaded root .env from:', rootEnvPath);
+    console.log('   Parsed', Object.keys(rootResult.parsed || {}).length, 'variables');
+  }
+  
+  // 2. Load service-specific .env (overrides like PORT, SERVICE_NAME, DB_NAME)
+  const serviceEnvPath = path.resolve(__dirname, '../.env');
+  const serviceResult = dotenv.config({ path: serviceEnvPath });
+  if (serviceResult.error) {
+    console.log('❌ Failed to load service .env:', serviceResult.error.message);
+  } else {
+    console.log('✅ Loaded service .env from:', serviceEnvPath);
+    console.log('   Parsed', Object.keys(serviceResult.parsed || {}).length, 'variables');
+  }
+  
+  // Log critical env vars for debugging (with detailed checks)
+  console.log('📂 Environment Configuration:');
+  console.log('  Service Name:', process.env.SERVICE_NAME || 'hr-service');
+  console.log('  Port:', process.env.PORT || 3002);
+  console.log('  Database:', process.env.DB_NAME || process.env.MONGO_DB_NAME || 'hr-db');
+  
+  // Debug MONGO_URI
+  const hasMongoUri = !!(process.env.MONGO_URI || process.env.MONGODB_URI);
+  const mongoUriLength = (process.env.MONGO_URI || process.env.MONGODB_URI || '').length;
+  console.log('  Mongo URI:', hasMongoUri ? `✅ Set (${mongoUriLength} chars)` : '❌ Missing');
+  console.log('    - MONGO_URI:', process.env.MONGO_URI ? `Set (${process.env.MONGO_URI.length} chars)` : 'Not set');
+  console.log('    - MONGODB_URI:', process.env.MONGODB_URI ? `Set (${process.env.MONGODB_URI.length} chars)` : 'Not set');
+  
+  // Debug JWT_SECRET
+  console.log('  JWT Secret:', process.env.JWT_SECRET ? `✅ Set (${process.env.JWT_SECRET.length} chars)` : '❌ Missing');
+  console.log('  NODE_ENV:', process.env.NODE_ENV || 'development');
 } catch (err) {
   // eslint-disable-next-line no-console
   if (process.env.NODE_ENV !== 'production') {

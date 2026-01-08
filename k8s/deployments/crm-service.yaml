@@ -18,6 +18,8 @@ spec:
         app: crm-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: crm-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/crm-service:latest

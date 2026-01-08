@@ -18,6 +18,8 @@ spec:
         app: cpp-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: cpp-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/cpp-service:latest

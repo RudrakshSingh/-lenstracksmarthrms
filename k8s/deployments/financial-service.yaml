@@ -18,6 +18,8 @@ spec:
         app: financial-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: financial-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/financial-service:latest

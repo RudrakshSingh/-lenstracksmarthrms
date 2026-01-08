@@ -18,6 +18,8 @@ spec:
         app: prescription-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: prescription-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/prescription-service:latest

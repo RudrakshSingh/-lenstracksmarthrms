@@ -18,6 +18,8 @@ spec:
         app: realtime-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: realtime-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/realtime-service:latest

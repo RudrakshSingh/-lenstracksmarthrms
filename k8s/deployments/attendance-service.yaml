@@ -16,6 +16,8 @@ spec:
       labels:
         app: attendance-service
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: attendance-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/attendance-service:latest

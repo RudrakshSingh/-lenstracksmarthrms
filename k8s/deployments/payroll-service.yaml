@@ -18,6 +18,8 @@ spec:
         app: payroll-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: payroll-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/payroll-service:latest

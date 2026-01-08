@@ -18,6 +18,8 @@ spec:
         app: service-management
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: service-management
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/service-management:latest

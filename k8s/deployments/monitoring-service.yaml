@@ -18,6 +18,8 @@ spec:
         app: monitoring-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: monitoring-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/monitoring-service:latest

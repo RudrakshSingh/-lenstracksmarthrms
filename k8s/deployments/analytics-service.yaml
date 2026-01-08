@@ -18,6 +18,8 @@ spec:
         app: analytics-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: analytics-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/analytics-service:latest

@@ -18,6 +18,8 @@ spec:
         app: tenant-registry-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: tenant-registry-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/tenant-registry-service:latest

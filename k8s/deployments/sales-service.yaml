@@ -18,6 +18,8 @@ spec:
         app: sales-service
         version: "latest"
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: sales-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/sales-service:latest

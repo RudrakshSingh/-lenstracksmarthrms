@@ -3,8 +3,25 @@ const Joi = require("joi");
 const authController = require("../controllers/authController");
 const { authenticate } = require("../middleware/auth.middleware");
 const { validateRequest } = require("../middleware/validateRequest.wrapper");
+const jwt = require("jsonwebtoken");
 
 const router = express.Router();
+
+// Optional authentication middleware - sets req.user if token is valid, but doesn't block if missing
+const optionalAuthenticate = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
+      // Get user from database to set req.user
+      const User = require("../models/User.model");
+      req.user = await User.findById(decoded.userId).select('-password');
+    }
+  } catch (error) {
+    // Token invalid or expired - continue without authentication
+  }
+  next();
+};
 
 // Validation schemas
 const loginSchema = {
@@ -39,6 +56,7 @@ const refreshTokenSchema = {
 // Routes
 router.post("/register",
   validateRequest(registerSchema),
+  optionalAuthenticate,
   authController.register
 );
 

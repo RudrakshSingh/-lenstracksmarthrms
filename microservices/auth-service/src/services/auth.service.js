@@ -132,6 +132,7 @@ class AuthService {
 
       // Create user
       const user = new User({
+        tenantId: userData.tenantId || 'default', // Default tenant for now
         employee_id: employee_id.toUpperCase(),
         name,
         email,
@@ -140,7 +141,7 @@ class AuthService {
         role: normalizedRole, // Use normalized role
         department,
         designation,
-        joining_date,
+        joining_date: joining_date || new Date(), // Default to current date if not provided
         stores,
         reporting_manager,
         created_by: createdBy

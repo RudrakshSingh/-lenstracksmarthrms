@@ -1,0 +1,750 @@
+{
+  "timestamp": "2026-01-07T12:26:47.603Z",
+  "baseUrl": "https://98.70.245.87",
+  "summary": {
+    "total": 61,
+    "passed": 9,
+    "failed": 52,
+    "skipped": 0
+  },
+  "passed": [
+    {
+      "name": "Health Check",
+      "endpoint": "/api/auth/health",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Status Check",
+      "endpoint": "/api/auth/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Login (Invalid)",
+      "endpoint": "/api/auth/login",
+      "method": "POST",
+      "status": 400
+    },
+    {
+      "name": "Refresh Token (Invalid)",
+      "endpoint": "/api/auth/refresh-token",
+      "method": "POST",
+      "status": 401
+    },
+    {
+      "name": "Request Password Reset",
+      "endpoint": "/api/auth/request-password-reset",
+      "method": "POST",
+      "status": 404
+    },
+    {
+      "name": "Attendance Health Check",
+      "endpoint": "/api/attendance/health",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Attendance Status",
+      "endpoint": "/api/attendance/status",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Get Attendance Records",
+      "endpoint": "/api/attendance/records",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "name": "Get Attendance Reports",
+      "endpoint": "/api/attendance/reports",
+      "method": "GET",
+      "status": 200
+    }
+  ],
+  "failed": [
+    {
+      "name": "Mock Login Fast",
+      "endpoint": "/api/auth/mock-login-fast",
+      "method": "POST",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: POST /api/auth/mock-login-fast",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Mock Login",
+      "endpoint": "/api/auth/mock-login",
+      "method": "POST",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: POST /api/auth/mock-login",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Get Profile",
+      "endpoint": "/api/auth/profile",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required"
+      }
+    },
+    {
+      "name": "Update Profile",
+      "endpoint": "/api/auth/profile",
+      "method": "PUT",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: PUT /api/auth/profile",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Change Password (Unauthorized)",
+      "endpoint": "/api/auth/change-password",
+      "method": "POST",
+      "expected": [
+        401,
+        403
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: POST /api/auth/change-password",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Logout",
+      "endpoint": "/api/auth/logout",
+      "method": "POST",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required"
+      }
+    },
+    {
+      "name": "Get Real Users",
+      "endpoint": "/api/real-users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required"
+      }
+    },
+    {
+      "name": "Get Real User Profile",
+      "endpoint": "/api/real-users/profile",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required"
+      }
+    },
+    {
+      "name": "Get All Permissions",
+      "endpoint": "/api/permission/permissions",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required"
+      }
+    },
+    {
+      "name": "Get Users with Permissions",
+      "endpoint": "/api/permission/users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required"
+      }
+    },
+    {
+      "name": "Emergency Status",
+      "endpoint": "/api/emergency/status",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: GET /api/emergency/status",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Verify Recovery Keys",
+      "endpoint": "/api/emergency/verify-keys",
+      "method": "POST",
+      "expected": [
+        200,
+        400
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: POST /api/emergency/verify-keys",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "HR Health Check",
+      "endpoint": "/api/hr/health",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "HR Status",
+      "endpoint": "/api/hr/status",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "HR Service Info",
+      "endpoint": "/api/hr",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Departments",
+      "endpoint": "/api/hr/departments",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Create Department",
+      "endpoint": "/api/hr/departments",
+      "method": "POST",
+      "expected": [
+        200,
+        201,
+        409
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Employees",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "expected": [
+        200
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Employees (HR)",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "expected": [
+        200
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Employees (Manager)",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "expected": [
+        200,
+        403
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Employees (Employee)",
+      "endpoint": "/api/hr/employees",
+      "method": "GET",
+      "expected": [
+        200,
+        403
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Stores",
+      "endpoint": "/api/hr/stores",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Create Store",
+      "endpoint": "/api/hr/stores",
+      "method": "POST",
+      "expected": [
+        200,
+        201,
+        409
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Onboarding Draft",
+      "endpoint": "/api/hr/onboarding/draft",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Save Onboarding Draft",
+      "endpoint": "/api/hr/onboarding/draft",
+      "method": "POST",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Leave Requests",
+      "endpoint": "/api/hr/leave",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Leave Balance",
+      "endpoint": "/api/hr/leave/balance",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Leave Summary",
+      "endpoint": "/api/hr/leave/summary",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Payroll Runs",
+      "endpoint": "/api/hr/payroll/runs",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Employee Reports",
+      "endpoint": "/api/hr/reports/employees",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Attendance Reports",
+      "endpoint": "/api/hr/reports/attendance",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Leave Reports",
+      "endpoint": "/api/hr/reports/leave",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get All Users (Admin)",
+      "endpoint": "/api/admin/users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: GET /api/admin/users",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Get All Roles",
+      "endpoint": "/api/admin/roles",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: GET /api/admin/roles",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Get All Permissions",
+      "endpoint": "/api/admin/permissions",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: GET /api/admin/permissions",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Get System Settings",
+      "endpoint": "/api/admin/system-settings",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: GET /api/admin/system-settings",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Get Transfers",
+      "endpoint": "/api/transfers",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get HR Letters",
+      "endpoint": "/api/hr-letter/letters",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get HR Letter Stats",
+      "endpoint": "/api/hr-letter/stats",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get F&F Cases",
+      "endpoint": "/api/hr/fnf/cases",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Audit Logs",
+      "endpoint": "/api/hr/audit/logs",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Statutory Returns",
+      "endpoint": "/api/hr/statutory/returns",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Incentive Claims",
+      "endpoint": "/api/hr/incentive/claims",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Documents (Unauthorized)",
+      "endpoint": "/api/documents/invalid",
+      "method": "GET",
+      "expected": [
+        400,
+        404,
+        403
+      ],
+      "actual": 503,
+      "error": {}
+    },
+    {
+      "name": "Get Attendance History",
+      "endpoint": "/api/attendance/history",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "Get Attendance Summary",
+      "endpoint": "/api/attendance/summary",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "Get All Attendance Records",
+      "endpoint": "/api/attendance",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "Get Geofencing Settings",
+      "endpoint": "/api/geofencing/settings",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "Get Geofencing Users",
+      "endpoint": "/api/geofencing/users",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "Check Geofencing",
+      "endpoint": "/api/geofencing/check",
+      "method": "POST",
+      "expected": [
+        200,
+        400
+      ],
+      "actual": 401,
+      "error": {
+        "success": false,
+        "message": "Access token required",
+        "hint": "Include Authorization header: Bearer <token>",
+        "code": "AUTH_REQUIRED"
+      }
+    },
+    {
+      "name": "Get Security Violations",
+      "endpoint": "/api/security/violations",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: GET /api/security/violations",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    },
+    {
+      "name": "Get IP Geolocation",
+      "endpoint": "/api/security/ip-geolocation",
+      "method": "GET",
+      "expected": [
+        200,
+        201
+      ],
+      "actual": 404,
+      "error": {
+        "success": false,
+        "message": "Route not found: GET /api/security/ip-geolocation",
+        "error": "ROUTE_NOT_FOUND",
+        "service": "auth-service"
+      }
+    }
+  ],
+  "skipped": []
+}

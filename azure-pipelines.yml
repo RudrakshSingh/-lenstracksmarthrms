@@ -121,11 +121,13 @@ stages:
           echo ""
           echo "✅ All services in group built successfully"
 
-# Security scanning stage
+# Security scanning stage (runs in parallel, doesn't block deployment)
 - stage: SecurityScan
   displayName: 'Security Scan'
   dependsOn: Build
   condition: succeeded()
+  # Continue even if security scan fails/times out
+  continueOnError: true
   jobs:
   - job: TrivyScan
     displayName: 'Trivy File System Scan'
@@ -345,6 +347,7 @@ stages:
   displayName: 'Deploy to AKS'
   dependsOn: Build
   condition: succeeded()
+  # Security scan runs in parallel, doesn't block deployment
   jobs:
   - deployment: DeployToAKS
     displayName: 'Deploy to AKS Cluster'

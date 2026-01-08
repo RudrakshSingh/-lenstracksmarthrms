@@ -84,7 +84,7 @@ const register = async (req, res, next) => {
       logger.error('Role validation error', { 
         error: error.message, 
         stack: error.stack,
-        userData: userData 
+        requestBody: req.body 
       });
       return res.status(400).json({
         success: false,

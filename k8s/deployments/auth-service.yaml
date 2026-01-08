@@ -16,6 +16,8 @@ spec:
       labels:
         app: auth-service
     spec:
+      imagePullSecrets:
+      - name: acr-secret
       containers:
       - name: auth-service
         image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:latest

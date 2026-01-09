@@ -4,11 +4,11 @@ const Store = require('../models/Store.model');
 const { isWithinGeofence } = require('../utils/geoUtils');
 const logger = require('../config/logger');
 const { recordAuditLog } = require('../utils/audit');
-const { getEmployeeById, getEmployeeStore } = require('../utils/hrServiceClient');
+const { getEmployeeByUser, getEmployeeStore } = require('../utils/hrServiceClient');
 
 /**
  * Records employee clock-in with GPS location and selfie
- * @param {string} employeeId - Employee ID (MongoDB _id)
+ * @param {Object} user - User object from req.user (has _id, employee_id, email)
  * @param {number} latitude - GPS latitude
  * @param {number} longitude - GPS longitude
  * @param {string} selfieUrl - Selfie image URL
@@ -16,10 +16,10 @@ const { getEmployeeById, getEmployeeStore } = require('../utils/hrServiceClient'
  * @param {string} token - JWT token for HR service API calls
  * @returns {Promise<Object>} Attendance record
  */
-const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '', token = null) => {
+const clockIn = async (user, latitude, longitude, selfieUrl, notes = '', token = null) => {
   try {
     // Fetch employee from HR service (microservice pattern)
-    const employee = await getEmployeeById(employeeId, token);
+    const employee = await getEmployeeByUser(user, token);
     if (!employee) {
       const error = new Error('Employee not found in HR system');
       error.statusCode = 404;
@@ -27,12 +27,14 @@ const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '', t
     }
 
     // Fetch employee's assigned store
-    const store = await getEmployeeStore(employeeId, token);
+    const store = await getEmployeeStore(user, token);
     if (!store) {
       const error = new Error('Employee not assigned to any store. Please contact HR.');
       error.statusCode = 400;
       throw error;
     }
+    
+    const employeeId = user._id || user.id;
 
     // Check if there's an open clock-in (not clocked out yet)
     // Allow multiple clock-ins per day, but not simultaneous ones

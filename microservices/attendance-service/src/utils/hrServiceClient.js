@@ -5,42 +5,66 @@ const logger = require('../config/logger');
 const HR_SERVICE_URL = process.env.HR_SERVICE_URL || 'http://hr-service:3002';
 
 /**
- * Fetch employee details from HR service
- * @param {string} employeeId - MongoDB _id of the employee
+ * Fetch employee details from HR service by user object
+ * @param {Object} user - User object from req.user (has _id, employee_id, email)
  * @param {string} token - JWT token for authentication
  * @returns {Promise<Object>} Employee data
  */
-const getEmployeeById = async (employeeId, token) => {
+const getEmployeeByUser = async (user, token) => {
   try {
-    const response = await axios.get(`${HR_SERVICE_URL}/api/hr/employees/${employeeId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 5000 // 5 second timeout
-    });
+    // Try to get employee using employee_id field first (most reliable)
+    const employeeId = user.employee_id || user.employeeId;
+    
+    if (employeeId) {
+      // Search by employee_id field (e.g., "EMP-TEST-001")
+      const response = await axios.get(`${HR_SERVICE_URL}/api/hr/employees`, {
+        params: { employeeId },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000
+      });
 
-    if (response.data && response.data.success && response.data.data) {
-      return response.data.data;
+      if (response.data && response.data.success) {
+        const employees = response.data.data || response.data.employees || [];
+        if (employees.length > 0) {
+          return employees[0]; // Return first match
+        }
+      }
     }
 
-    logger.warn('HR service returned unexpected response format', {
-      employeeId,
-      status: response.status
+    // Fallback: try by MongoDB _id
+    if (user._id || user.id) {
+      const userId = user._id || user.id;
+      const response = await axios.get(`${HR_SERVICE_URL}/api/hr/employees/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000
+      });
+
+      if (response.data && response.data.success && response.data.data) {
+        return response.data.data;
+      }
+    }
+
+    logger.warn('Employee not found in HR service', {
+      employeeId: employeeId || 'unknown',
+      userId: user._id || user.id
     });
     return null;
   } catch (error) {
     if (error.response) {
       logger.error('HR service API error', {
-        employeeId,
         status: error.response.status,
         message: error.response.data?.message || error.message
       });
     } else if (error.code === 'ECONNABORTED') {
-      logger.error('HR service request timeout', { employeeId });
+      logger.error('HR service request timeout');
     } else {
       logger.error('Failed to fetch employee from HR service', {
-        employeeId,
         error: error.message
       });
     }
@@ -50,13 +74,13 @@ const getEmployeeById = async (employeeId, token) => {
 
 /**
  * Get employee's assigned store from HR service
- * @param {string} employeeId - MongoDB _id of the employee
+ * @param {Object} user - User object from req.user
  * @param {string} token - JWT token for authentication
  * @returns {Promise<Object|null>} Store data or null
  */
-const getEmployeeStore = async (employeeId, token) => {
+const getEmployeeStore = async (user, token) => {
   try {
-    const employee = await getEmployeeById(employeeId, token);
+    const employee = await getEmployeeByUser(user, token);
     if (!employee) {
       return null;
     }
@@ -108,11 +132,10 @@ const getEmployeeStore = async (employeeId, token) => {
       }
     }
 
-    logger.warn('Employee has no store assigned', { employeeId });
+    logger.warn('Employee has no store assigned');
     return null;
   } catch (error) {
     logger.error('Failed to get employee store', {
-      employeeId,
       error: error.message
     });
     return null;
@@ -120,7 +143,7 @@ const getEmployeeStore = async (employeeId, token) => {
 };
 
 module.exports = {
-  getEmployeeById,
+  getEmployeeByUser,
   getEmployeeStore
 };
 

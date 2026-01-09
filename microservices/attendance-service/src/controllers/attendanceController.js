@@ -97,8 +97,9 @@ const clockIn = async (req, res, next) => {
     // Extract token from request for HR service API calls
     const token = req.headers.authorization?.split(' ')[1] || null;
     
+    // Pass entire user object for proper employee lookup
     const attendance = await AttendanceService.clockIn(
-      employeeId,
+      req.user, // Pass full user object (has employee_id, email, _id)
       parseFloat(latitude),
       parseFloat(longitude),
       selfieUrl,

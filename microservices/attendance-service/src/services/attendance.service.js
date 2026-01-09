@@ -37,7 +37,7 @@ const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '') =
 
     const existingAttendance = await Attendance.findOne({
       employee: employeeId,
-      'clockIn.time': { $gte: today, $lt: tomorrow }
+      check_in_time: { $gte: today, $lt: tomorrow }
     });
 
     if (existingAttendance) {
@@ -46,31 +46,37 @@ const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '') =
       throw error;
     }
 
-    // Check geofence
-    const isWithinGeofenceArea = isWithinGeofence(
-      latitude,
-      longitude,
-      employee.store.location.coordinates[1], // latitude
-      employee.store.location.coordinates[0], // longitude
-      employee.store.geofenceRadiusKm
-    );
+    // Check geofence - using store coordinates from the model
+    let isWithinGeofenceArea = false;
+    if (employee.store.coordinates && employee.store.coordinates.latitude && employee.store.coordinates.longitude) {
+      isWithinGeofenceArea = isWithinGeofence(
+        latitude,
+        longitude,
+        employee.store.coordinates.latitude,
+        employee.store.coordinates.longitude,
+        employee.store.geofenceRadius || 100 // Default 100 meters
+      );
+    }
 
     const attendance = new Attendance({
       employee: employeeId,
+      employee_id: employee.employee_id || employee.employeeId,
       store: employee.store._id,
-      clockIn: {
-        time: new Date(),
-        location: {
-          type: 'Point',
-          coordinates: [longitude, latitude]
-        },
-        selfie: {
-          url: selfieUrl,
-          public_id: `selfie_${employeeId}_${Date.now()}`
-        }
+      store_code: employee.store.code,
+      date: new Date(),
+      check_in_time: new Date(),
+      check_in_location: {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        address: notes || ''
+      },
+      check_in_selfie: {
+        secure_url: selfieUrl,
+        public_id: `selfie_${employeeId}_${Date.now()}`,
+        uploaded_at: new Date()
       },
       status: 'present',
-      isGeofenceValid: isWithinGeofenceArea,
+      geofence_status: isWithinGeofenceArea ? 'valid' : 'invalid',
       notes
     });
 
@@ -119,8 +125,8 @@ const clockOut = async (employeeId, latitude, longitude, selfieUrl, notes = '') 
 
     const attendance = await Attendance.findOne({
       employee: employeeId,
-      'clockIn.time': { $gte: today, $lt: tomorrow },
-      'clockOut.time': { $exists: false }
+      check_in_time: { $gte: today, $lt: tomorrow },
+      check_out_time: { $exists: false }
     });
 
     if (!attendance) {
@@ -129,25 +135,28 @@ const clockOut = async (employeeId, latitude, longitude, selfieUrl, notes = '') 
       throw error;
     }
 
-    // Check geofence
-    const isWithinGeofenceArea = isWithinGeofence(
-      latitude,
-      longitude,
-      employee.store.location.coordinates[1], // latitude
-      employee.store.location.coordinates[0], // longitude
-      employee.store.geofenceRadiusKm
-    );
+    // Check geofence - using store coordinates from the model
+    let isWithinGeofenceArea = false;
+    if (employee.store.coordinates && employee.store.coordinates.latitude && employee.store.coordinates.longitude) {
+      isWithinGeofenceArea = isWithinGeofence(
+        latitude,
+        longitude,
+        employee.store.coordinates.latitude,
+        employee.store.coordinates.longitude,
+        employee.store.geofenceRadius || 100 // Default 100 meters
+      );
+    }
 
-    attendance.clockOut = {
-      time: new Date(),
-      location: {
-        type: 'Point',
-        coordinates: [longitude, latitude]
-      },
-      selfie: {
-        url: selfieUrl,
-        public_id: `selfie_out_${employeeId}_${Date.now()}`
-      }
+    attendance.check_out_time = new Date();
+    attendance.check_out_location = {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      address: notes || ''
+    };
+    attendance.check_out_selfie = {
+      secure_url: selfieUrl,
+      public_id: `selfie_out_${employeeId}_${Date.now()}`,
+      uploaded_at: new Date()
     };
 
     await attendance.save();
@@ -183,7 +192,7 @@ const getAttendanceHistory = async (employeeId, startDate, endDate, page = 1, li
     const query = { employee: employeeId };
 
     if (startDate && endDate) {
-      query['clockIn.time'] = {
+      query['check_in_time'] = {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       };

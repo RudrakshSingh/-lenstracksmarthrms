@@ -181,7 +181,8 @@ router.post('/employees',
 
 router.get('/employees/:id',
   authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin', 'hr', 'admin', 'superadmin'], ['user:read', 'read_users']),
+  // Allow all roles to view employee details (for attendance, profile, etc)
+  // Authorization check inside controller to ensure employees can only view their own data
   asyncHandler(getEmployeeById)
 );
 
@@ -259,7 +260,7 @@ router.post('/stores',
 
 router.get('/stores/:id',
   authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['store:read']),
+  // Allow all authenticated users to view store details (needed for attendance geofencing)
   asyncHandler(getStoreById)
 );
 

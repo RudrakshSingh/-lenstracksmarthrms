@@ -119,19 +119,20 @@ const createStoreSchema = {
     address: Joi.object({
       street: Joi.string().required(),
       city: Joi.string().required(),
-      state: Joi.string().required(),
-      country: Joi.string().required(),
-      zipCode: Joi.string().required()
+      state: Joi.string().optional(), // Optional
+      country: Joi.string().optional().default('India'), // Optional with default
+      zipCode: Joi.string().optional(), // Optional
+      zip: Joi.string().optional() // Alternative field name
     }).required(),
     coordinates: Joi.object({
-      latitude: Joi.number().required(),
-      longitude: Joi.number().required()
-    }).required(),
-    geofenceRadius: Joi.number().required(),
+      latitude: Joi.number().optional(), // Optional - can be added later
+      longitude: Joi.number().optional() // Optional - can be added later
+    }).optional(), // Entire coordinates object optional
+    geofenceRadius: Joi.number().optional().default(100), // Optional with default
     contact: Joi.object({
-      phone: Joi.string().required(),
-      email: Joi.string().email().required()
-    }).required(),
+      phone: Joi.string().optional(), // Optional
+      email: Joi.string().email().optional() // Optional
+    }).optional(), // Entire contact object optional
     operatingHours: Joi.object().optional()
   })
 };

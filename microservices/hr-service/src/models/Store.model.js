@@ -134,7 +134,8 @@ const storeSchema = new mongoose.Schema({
   },
   opening_date: {
     type: Date,
-    required: true
+    required: false, // Optional - defaults to current date if not provided
+    default: Date.now
   },
   closing_date: {
     type: Date

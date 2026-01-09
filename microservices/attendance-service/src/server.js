@@ -382,6 +382,11 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     await connectDB();
+    
+    // Initialize Azure Blob Storage for selfie uploads
+    const { initializeBlobStorage } = require('./config/azureStorage');
+    await initializeBlobStorage();
+    
     loadRoutes();
     
     // Enhanced 404 handler with route information - MUST be after loadRoutes()

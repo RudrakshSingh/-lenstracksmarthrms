@@ -4,7 +4,8 @@ const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const checkEmployeeStatus = require('../middleware/statusCheck.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
-const { upload, uploadToCloudinary } = require('../middleware/upload.middleware');
+const { upload } = require('../middleware/upload.middleware');
+const { uploadToBlobStorage } = require('../middleware/blobUpload.middleware');
 const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
@@ -59,8 +60,8 @@ router.post('/clock-in',
   authenticate,
   checkEmployeeStatus(['active']),
   // All active employees can clock-in (no special permission needed)
-  upload.single('selfie'),
-  uploadToCloudinary,
+  upload.single('selfie'), // Selfie upload is optional
+  uploadToBlobStorage, // Upload selfie to Azure Blob Storage
   validateRequest(clockInSchema),
   clockIn
 );
@@ -69,8 +70,8 @@ router.post('/clock-out',
   authenticate,
   checkEmployeeStatus(['active']),
   // All active employees can clock-out (no special permission needed)
-  upload.single('selfie'),
-  uploadToCloudinary,
+  upload.single('selfie'), // Selfie upload is optional
+  uploadToBlobStorage, // Upload selfie to Azure Blob Storage
   validateRequest(clockOutSchema),
   clockOut
 );
@@ -142,8 +143,8 @@ router.post('/check-in',
   authenticate,
   checkEmployeeStatus(['active']),
   // All active employees can clock-in (no special permission needed)
-  upload.single('selfie'),
-  uploadToCloudinary,
+  upload.single('selfie'), // Selfie upload is optional
+  uploadToBlobStorage, // Upload selfie to Azure Blob Storage
   validateRequest(clockInSchema),
   clockIn
 );
@@ -152,8 +153,8 @@ router.post('/check-out',
   authenticate,
   checkEmployeeStatus(['active']),
   // All active employees can clock-out (no special permission needed)
-  upload.single('selfie'),
-  uploadToCloudinary,
+  upload.single('selfie'), // Selfie upload is optional
+  uploadToBlobStorage, // Upload selfie to Azure Blob Storage
   validateRequest(clockOutSchema),
   clockOut
 );

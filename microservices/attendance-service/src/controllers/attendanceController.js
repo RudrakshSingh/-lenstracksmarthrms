@@ -43,9 +43,8 @@ const clockIn = async (req, res, next) => {
       return sendError(res, validationError.error, validationError.message, 400);
     }
 
-    if (!req.file || !req.file.cloudinaryUrl) {
-      return sendError(res, 'Selfie is required', 'Validation failed', 400);
-    }
+    // Selfie is optional (Azure Blob Storage will handle upload if provided)
+    // No validation required here
 
     // Prepare location data for security validation
     const locationData = {
@@ -63,7 +62,7 @@ const clockIn = async (req, res, next) => {
       deviceSecurity: deviceSecurity,
       appState: appState,
       satelliteInfo: satelliteInfo,
-      selfie: req.file.cloudinaryUrl, // For face verification
+      selfie: req.file?.blobUrl || 'no-selfie', // For face verification
       timestamp: timestamp || Date.now()
     };
 
@@ -92,12 +91,13 @@ const clockIn = async (req, res, next) => {
       });
     }
 
-    // Proceed with clock-in
+    // Proceed with clock-in (selfie URL from Azure Blob Storage)
+    const selfieUrl = req.file?.blobUrl || null;
     const attendance = await AttendanceService.clockIn(
       employeeId,
       parseFloat(latitude),
       parseFloat(longitude),
-      req.file.cloudinaryUrl,
+      selfieUrl,
       notes
     );
 
@@ -161,9 +161,8 @@ const clockOut = async (req, res, next) => {
       return sendError(res, validationError.error, validationError.message, 400);
     }
 
-    if (!req.file || !req.file.cloudinaryUrl) {
-      return sendError(res, 'Selfie is required', 'Validation failed', 400);
-    }
+    // Selfie is optional
+    const selfieUrl = req.file?.blobUrl || null;
 
     // Prepare location data for security validation
     const locationData = {
@@ -181,7 +180,7 @@ const clockOut = async (req, res, next) => {
       deviceSecurity: deviceSecurity,
       appState: appState,
       satelliteInfo: satelliteInfo,
-      selfie: req.file.cloudinaryUrl, // For face verification
+      selfie: selfieUrl || 'no-selfie', // For face verification
       timestamp: timestamp || Date.now()
     };
 
@@ -210,12 +209,12 @@ const clockOut = async (req, res, next) => {
       });
     }
 
-    // Proceed with clock-out
+    // Proceed with clock-out (selfie URL from Azure Blob Storage)
     const attendance = await AttendanceService.clockOut(
       employeeId,
       parseFloat(latitude),
       parseFloat(longitude),
-      req.file.cloudinaryUrl,
+      selfieUrl,
       notes
     );
 

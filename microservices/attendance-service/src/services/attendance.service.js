@@ -17,6 +17,9 @@ const { getEmployeeByUser, getEmployeeStore } = require('../utils/hrServiceClien
  * @returns {Promise<Object>} Attendance record
  */
 const clockIn = async (user, latitude, longitude, selfieUrl, notes = '', token = null) => {
+  // Define employeeId outside try block for use in catch block
+  const employeeId = user._id || user.id;
+  
   try {
     // Fetch employee from HR service (microservice pattern)
     const employee = await getEmployeeByUser(user, token);
@@ -33,8 +36,6 @@ const clockIn = async (user, latitude, longitude, selfieUrl, notes = '', token =
       error.statusCode = 400;
       throw error;
     }
-    
-    const employeeId = user._id || user.id;
 
     // Check if there's an open clock-in (not clocked out yet)
     // Allow multiple clock-ins per day, but not simultaneous ones

@@ -449,8 +449,8 @@ const createStore = async (req, res, next) => {
       return sendError(res, 'Authentication required', 'Authentication required', 401);
     }
 
-    // Validate required fields
-    const requiredFields = ['name', 'code', 'address', 'gst'];
+    // Validate required fields (minimal - allow progressive data entry)
+    const requiredFields = ['name', 'code', 'address'];
     const validationError = validateRequired(storeData, requiredFields);
     if (validationError) {
       return sendError(res, validationError.error, validationError.message, 400);

@@ -93,12 +93,17 @@ const clockIn = async (req, res, next) => {
 
     // Proceed with clock-in (selfie URL from Azure Blob Storage)
     const selfieUrl = req.file?.blobUrl || null;
+    
+    // Extract token from request for HR service API calls
+    const token = req.headers.authorization?.split(' ')[1] || null;
+    
     const attendance = await AttendanceService.clockIn(
       employeeId,
       parseFloat(latitude),
       parseFloat(longitude),
       selfieUrl,
-      notes
+      notes,
+      token
     );
 
     // Add security info to response

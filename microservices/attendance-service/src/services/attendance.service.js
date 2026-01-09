@@ -4,27 +4,32 @@ const Store = require('../models/Store.model');
 const { isWithinGeofence } = require('../utils/geoUtils');
 const logger = require('../config/logger');
 const { recordAuditLog } = require('../utils/audit');
+const { getEmployeeById, getEmployeeStore } = require('../utils/hrServiceClient');
 
 /**
  * Records employee clock-in with GPS location and selfie
- * @param {string} employeeId - Employee ID
+ * @param {string} employeeId - Employee ID (MongoDB _id)
  * @param {number} latitude - GPS latitude
  * @param {number} longitude - GPS longitude
  * @param {string} selfieUrl - Selfie image URL
  * @param {string} notes - Optional notes
+ * @param {string} token - JWT token for HR service API calls
  * @returns {Promise<Object>} Attendance record
  */
-const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '') => {
+const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '', token = null) => {
   try {
-    const employee = await User.findById(employeeId).populate('store');
+    // Fetch employee from HR service (microservice pattern)
+    const employee = await getEmployeeById(employeeId, token);
     if (!employee) {
-      const error = new Error('Employee not found');
+      const error = new Error('Employee not found in HR system');
       error.statusCode = 404;
       throw error;
     }
 
-    if (!employee.store) {
-      const error = new Error('Employee not assigned to any store');
+    // Fetch employee's assigned store
+    const store = await getEmployeeStore(employeeId, token);
+    if (!store) {
+      const error = new Error('Employee not assigned to any store. Please contact HR.');
       error.statusCode = 400;
       throw error;
     }
@@ -43,23 +48,23 @@ const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '') =
       throw error;
     }
 
-    // Check geofence - using store coordinates from the model
+    // Check geofence - using store coordinates
     let isWithinGeofenceArea = false;
-    if (employee.store.coordinates && employee.store.coordinates.latitude && employee.store.coordinates.longitude) {
+    if (store.coordinates && store.coordinates.latitude && store.coordinates.longitude) {
       isWithinGeofenceArea = isWithinGeofence(
         latitude,
         longitude,
-        employee.store.coordinates.latitude,
-        employee.store.coordinates.longitude,
-        employee.store.geofenceRadius || 100 // Default 100 meters
+        store.coordinates.latitude,
+        store.coordinates.longitude,
+        store.geofenceRadius || 100 // Default 100 meters
       );
     }
 
     const attendance = new Attendance({
       employee: employeeId,
-      employee_id: employee.employee_id || employee.employeeId,
-      store: employee.store._id,
-      store_code: employee.store.code,
+      employee_id: employee.employeeId || employee.employee_id || 'UNKNOWN',
+      store: store._id || store.id,
+      store_code: store.code || 'UNKNOWN',
       date: new Date(),
       check_in_time: new Date(),
       check_in_location: {
@@ -79,13 +84,13 @@ const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '') =
 
     await attendance.save();
     await recordAuditLog(employeeId, 'CLOCK_IN', { 
-      storeId: employee.store._id, 
+      storeId: store._id || store.id, 
       isGeofenceValid: isWithinGeofenceArea 
     });
 
     logger.info('Employee clocked in successfully', { 
       employeeId, 
-      storeId: employee.store._id,
+      storeId: store._id || store.id,
       isGeofenceValid: isWithinGeofenceArea 
     });
 

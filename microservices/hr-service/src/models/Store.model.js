@@ -37,7 +37,7 @@ const storeSchema = new mongoose.Schema({
     },
     state: {
       type: String,
-      required: true,
+      required: false, // Optional - not all regions have states
       trim: true
     },
     country: {
@@ -48,23 +48,27 @@ const storeSchema = new mongoose.Schema({
     },
     zipCode: {
       type: String,
-      required: true,
-      trim: true,
-      match: [/^\d{6}$/, 'Pincode must be 6 digits']
+      required: false, // Optional - can use 'zip' field from request
+      trim: true
+    },
+    zip: {
+      type: String,
+      required: false,
+      trim: true
     }
   },
 
-  // Geographic Coordinates
+  // Geographic Coordinates (optional - can be added later)
   coordinates: {
     latitude: {
       type: Number,
-      required: true,
+      required: false, // Optional - not always available during initial store creation
       min: -90,
       max: 90
     },
     longitude: {
       type: Number,
-      required: true,
+      required: false, // Optional - not always available during initial store creation
       min: -180,
       max: 180
     }
@@ -83,7 +87,7 @@ const storeSchema = new mongoose.Schema({
   contact: {
     phone: {
       type: String,
-      required: true,
+      required: false, // Optional - not always available during store creation
       trim: true,
       match: [/^\+?[\d\s-()]+$/, 'Please enter a valid phone number']
     },

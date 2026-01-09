@@ -157,6 +157,20 @@ const attendanceSchema = new mongoose.Schema({
     maxlength: 1000
   },
 
+  // Geofencing Status
+  geofence_status: {
+    type: String,
+    enum: ['valid', 'invalid', 'not_checked'],
+    default: 'not_checked'
+  },
+  
+  // Logout Information
+  logout_reason: {
+    type: String,
+    enum: ['manual', 'auto_geofence', 'admin_action', 'system'],
+    default: 'manual'
+  },
+
   // Flags
   is_late: {
     type: Boolean,

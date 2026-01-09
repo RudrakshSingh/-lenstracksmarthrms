@@ -516,6 +516,213 @@ const getAttendanceReports = async (req, res, next) => {
   }
 };
 
+/**
+ * Track location and auto-logout if out of geofence
+ * POST /api/attendance/track-location
+ * Required: latitude, longitude
+ */
+const trackLocation = async (req, res, next) => {
+  try {
+    const { latitude, longitude } = req.body;
+    const employeeId = req.user._id || req.user.id;
+
+    // Find current open attendance session
+    const openAttendance = await Attendance.findOne({
+      employee: employeeId,
+      check_in_time: { $exists: true },
+      check_out_time: { $exists: false }
+    }).populate('store').sort({ check_in_time: -1 });
+
+    if (!openAttendance) {
+      return sendSuccess(res, { 
+        message: 'No active session',
+        action: 'none'
+      }, 'No active clock-in session found', null, 200);
+    }
+
+    // Check geofence
+    const store = openAttendance.store;
+    if (!store || !store.coordinates || !store.coordinates.latitude || !store.coordinates.longitude) {
+      return sendSuccess(res, {
+        message: 'Store coordinates not configured',
+        action: 'none',
+        withinGeofence: true // Don't auto-logout if store config missing
+      }, 'Location tracked', null, 200);
+    }
+
+    // Calculate distance using Haversine formula
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371e3; // Earth radius in meters
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      return R * c; // Distance in meters
+    };
+
+    const distance = calculateDistance(
+      parseFloat(latitude),
+      parseFloat(longitude),
+      store.coordinates.latitude,
+      store.coordinates.longitude
+    );
+
+    const geofenceRadius = store.geofenceRadius || 100; // Default 100 meters
+    const withinGeofence = distance <= geofenceRadius;
+
+    if (!withinGeofence) {
+      // Auto clock-out due to geofence violation
+      openAttendance.check_out_time = new Date();
+      openAttendance.check_out_location = {
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude),
+        address: `Auto-logout: ${Math.round(distance)}m from store`
+      };
+      openAttendance.logout_reason = 'auto_geofence';
+      
+      // Calculate total hours
+      if (openAttendance.check_in_time) {
+        const diffMs = openAttendance.check_out_time - openAttendance.check_in_time;
+        openAttendance.total_hours = diffMs / (1000 * 60 * 60);
+      }
+
+      await openAttendance.save();
+
+      logger.info('Auto-logout due to geofence violation', {
+        employeeId,
+        distance: Math.round(distance),
+        geofenceRadius,
+        storeId: store._id
+      });
+
+      return sendSuccess(res, {
+        action: 'auto_logout',
+        withinGeofence: false,
+        distance: Math.round(distance),
+        geofenceRadius,
+        message: `Auto-logged out: You are ${Math.round(distance)}m away from store (limit: ${geofenceRadius}m)`
+      }, 'Auto-logout performed', null, 200);
+    }
+
+    // Within geofence - just acknowledge
+    return sendSuccess(res, {
+      action: 'none',
+      withinGeofence: true,
+      distance: Math.round(distance),
+      geofenceRadius,
+      message: 'Location tracked successfully'
+    }, 'Location tracked', null, 200);
+
+  } catch (error) {
+    logger.error('Error in trackLocation controller', { error: error.message, userId: req.user?._id });
+    return sendError(res, error.message || 'Failed to track location', 'Internal server error', 500);
+  }
+};
+
+/**
+ * Get daily attendance timeline for all employees (HR/Admin Dashboard)
+ * GET /api/attendance/daily-timeline
+ * Query params: date (optional, defaults to today)
+ */
+const getDailyAttendanceTimeline = async (req, res, next) => {
+  try {
+    const { date } = req.query;
+    const targetDate = date ? new Date(date) : new Date();
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get all attendance records for the day
+    const attendanceRecords = await Attendance.find({
+      check_in_time: { $gte: startOfDay, $lte: endOfDay }
+    })
+    .populate('employee', 'employeeId firstName lastName fullName email')
+    .populate('store', 'name code')
+    .sort({ check_in_time: 1 })
+    .lean();
+
+    // Group by employee and format timeline
+    const employeeTimelines = {};
+    
+    attendanceRecords.forEach(record => {
+      const empId = record.employee?._id?.toString();
+      if (!empId) return;
+
+      if (!employeeTimelines[empId]) {
+        employeeTimelines[empId] = {
+          employee: {
+            id: record.employee._id,
+            employeeId: record.employee.employeeId,
+            name: record.employee.fullName || `${record.employee.firstName || ''} ${record.employee.lastName || ''}`.trim(),
+            email: record.employee.email
+          },
+          store: record.store ? {
+            id: record.store._id,
+            name: record.store.name,
+            code: record.store.code
+          } : null,
+          sessions: [],
+          totalWorkingMinutes: 0,
+          autoLogoutCount: 0
+        };
+      }
+
+      const session = {
+        sessionId: record._id,
+        checkIn: {
+          time: record.check_in_time,
+          location: record.check_in_location,
+          selfie: record.check_in_selfie?.secure_url,
+          geofenceStatus: record.geofence_status
+        },
+        checkOut: record.check_out_time ? {
+          time: record.check_out_time,
+          location: record.check_out_location,
+          selfie: record.check_out_selfie?.secure_url,
+          type: record.logout_reason || 'manual' // 'manual' or 'auto_geofence'
+        } : null,
+        duration: record.total_hours ? Math.round(record.total_hours * 60) : null, // minutes
+        status: record.status
+      };
+
+      employeeTimelines[empId].sessions.push(session);
+
+      if (record.total_hours) {
+        employeeTimelines[empId].totalWorkingMinutes += Math.round(record.total_hours * 60);
+      }
+
+      if (record.logout_reason === 'auto_geofence') {
+        employeeTimelines[empId].autoLogoutCount += 1;
+      }
+    });
+
+    // Convert to array and add summary
+    const timeline = Object.values(employeeTimelines).map(emp => ({
+      ...emp,
+      totalWorkingHours: (emp.totalWorkingMinutes / 60).toFixed(2),
+      totalSessions: emp.sessions.length,
+      currentlyLoggedIn: emp.sessions.some(s => !s.checkOut)
+    }));
+
+    return sendSuccess(res, {
+      date: targetDate.toISOString().split('T')[0],
+      totalEmployees: timeline.length,
+      employeesLoggedIn: timeline.filter(e => e.currentlyLoggedIn).length,
+      timeline
+    }, 'Daily attendance timeline retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getDailyAttendanceTimeline controller', { error: error.message });
+    return sendError(res, error.message || 'Failed to retrieve daily attendance timeline', 'Internal server error', 500);
+  }
+};
+
 module.exports = {
   clockIn,
   clockOut,
@@ -524,5 +731,7 @@ module.exports = {
   getAttendanceRecords,
   markAttendance,
   getAttendanceStats,
-  getAttendanceReports
+  getAttendanceReports,
+  getDailyAttendanceTimeline,
+  trackLocation
 };

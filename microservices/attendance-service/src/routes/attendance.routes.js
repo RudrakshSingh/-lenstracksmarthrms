@@ -16,7 +16,9 @@ const {
   getAttendanceRecords,
   markAttendance,
   getAttendanceStats,
-  getAttendanceReports
+  getAttendanceReports,
+  getDailyAttendanceTimeline,
+  trackLocation
 } = require('../controllers/attendanceController');
 
 // Validation schemas
@@ -113,6 +115,26 @@ router.get('/reports',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['attendance:read']),
   asyncHandler(getAttendanceReports)
+);
+
+// Daily attendance timeline for HR/Admin dashboard
+router.get('/daily-timeline',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['attendance:read']),
+  asyncHandler(getDailyAttendanceTimeline)
+);
+
+// Location tracking for auto-logout (geofence violation)
+router.post('/track-location',
+  authenticate,
+  checkEmployeeStatus(['active']),
+  validateRequest({
+    body: Joi.object({
+      latitude: Joi.number().required(),
+      longitude: Joi.number().required()
+    })
+  }),
+  asyncHandler(trackLocation)
 );
 
 // Alias routes for path compatibility

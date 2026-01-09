@@ -29,19 +29,16 @@ const clockIn = async (employeeId, latitude, longitude, selfieUrl, notes = '') =
       throw error;
     }
 
-    // Check if already clocked in today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const existingAttendance = await Attendance.findOne({
+    // Check if there's an open clock-in (not clocked out yet)
+    // Allow multiple clock-ins per day, but not simultaneous ones
+    const openAttendance = await Attendance.findOne({
       employee: employeeId,
-      check_in_time: { $gte: today, $lt: tomorrow }
-    });
+      check_in_time: { $exists: true },
+      check_out_time: { $exists: false }
+    }).sort({ check_in_time: -1 });
 
-    if (existingAttendance) {
-      const error = new Error('Already clocked in today');
+    if (openAttendance) {
+      const error = new Error('Please clock out from your current session before clocking in again');
       error.statusCode = 400;
       throw error;
     }
@@ -117,20 +114,15 @@ const clockOut = async (employeeId, latitude, longitude, selfieUrl, notes = '') 
       throw error;
     }
 
-    // Find today's attendance record
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
+    // Find the most recent open attendance record (not clocked out yet)
     const attendance = await Attendance.findOne({
       employee: employeeId,
-      check_in_time: { $gte: today, $lt: tomorrow },
+      check_in_time: { $exists: true },
       check_out_time: { $exists: false }
-    });
+    }).sort({ check_in_time: -1 });
 
     if (!attendance) {
-      const error = new Error('No clock-in record found for today');
+      const error = new Error('No open clock-in session found. Please clock in first.');
       error.statusCode = 400;
       throw error;
     }

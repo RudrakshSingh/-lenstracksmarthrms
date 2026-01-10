@@ -1,5 +1,5 @@
 const LeaveService = require('../services/leave.service');
-const { sendSuccess, sendError } = require('../../../shared/utils/response.util');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util');
 const logger = require('../config/logger');
 const { asyncHandler } = require('../middleware/errorHandler.middleware');
 

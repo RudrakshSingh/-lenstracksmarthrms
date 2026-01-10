@@ -26,22 +26,59 @@ const optionalAuthenticate = async (req, res, next) => {
 // Validation schemas
 const loginSchema = {
   body: Joi.object({
-    emailOrEmployeeId: Joi.string().optional().trim(),
-    email: Joi.string().email().optional().trim().lowercase(),
-    password: Joi.string().required()
-  }).or("emailOrEmployeeId", "email")
+    emailOrEmployeeId: Joi.string().trim(),
+    email: Joi.string().email().trim().lowercase(),
+    password: Joi.string().required().min(6).max(128)
+      .messages({
+        'any.required': 'Password is required',
+        'string.empty': 'Password cannot be empty',
+        'string.min': 'Password must be at least 6 characters'
+      })
+  })
+    .or('emailOrEmployeeId', 'email')
+    .messages({
+      'object.missing': 'Either emailOrEmployeeId or email is required'
+    })
 };
 
 const registerSchema = {
   body: Joi.object({
-    employee_id: Joi.string().required().trim().min(3).max(50),
+    employee_id: Joi.string().required().trim().min(3).max(50)
+      .pattern(/^[A-Z0-9_-]+$/i, 'alphanumeric with hyphens/underscores')
+      .messages({
+        'string.pattern.name': 'Employee ID must contain only letters, numbers, hyphens, and underscores'
+      }),
     name: Joi.string().required().trim().min(2).max(100),
-    email: Joi.string().email().required().trim().lowercase(),
-    phone: Joi.string().optional().trim(),
-    password: Joi.string().required().min(8),
+    email: Joi.string()
+      .email({ tlds: { allow: true } }) // Validate TLD
+      .required()
+      .trim()
+      .lowercase()
+      .max(254) // RFC 5321
+      .messages({
+        'string.email': 'Please provide a valid email address',
+        'string.max': 'Email address is too long'
+      }),
+    phone: Joi.string()
+      .optional()
+      .trim()
+      .pattern(/^\+?[\d\s-()]{7,20}$/, 'phone number')
+      .messages({
+        'string.pattern.name': 'Please provide a valid phone number'
+      }),
+    password: Joi.string()
+      .required()
+      .min(8)
+      .max(128)
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'password strength')
+      .messages({
+        'string.pattern.name': 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+        'string.min': 'Password must be at least 8 characters long'
+      }),
     role: Joi.string().valid('admin', 'hr', 'manager', 'employee', 'superadmin').default('employee'),
-    department: Joi.string().optional().trim(),
-    designation: Joi.string().optional().trim(),
+    roleName: Joi.string().valid('Admin', 'HR', 'Manager', 'Employee', 'SuperAdmin', 'admin', 'hr', 'manager', 'employee', 'superadmin').optional(),
+    department: Joi.string().optional().trim().max(100),
+    designation: Joi.string().optional().trim().max(100),
     joining_date: Joi.date().optional(),
     status: Joi.string().valid('active', 'inactive', 'pending').default('active')
   })

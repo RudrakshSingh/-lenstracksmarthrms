@@ -130,7 +130,32 @@ const createStoreSchema = {
       latitude: Joi.number().min(-90).max(90).optional(),
       longitude: Joi.number().min(-180).max(180).optional()
     }).optional(),
-    googleMapsUrl: Joi.string().uri().optional(), // New field for Google Maps URL
+    googleMapsUrl: Joi.string()
+      .uri()
+      .optional()
+      .custom((value, helpers) => {
+        if (!value) return value;
+        
+        try {
+          const url = new URL(value);
+          const validDomains = ['maps.google.com', 'www.google.com', 'google.com', 'goo.gl'];
+          const isValid = validDomains.some(domain => url.hostname.toLowerCase().endsWith(domain));
+          
+          if (!isValid) {
+            return helpers.error('any.invalid', { 
+              message: 'Must be a valid Google Maps URL (maps.google.com, google.com/maps, or goo.gl)' 
+            });
+          }
+          
+          return value;
+        } catch {
+          return helpers.error('string.uri');
+        }
+      }, 'Google Maps URL validation')
+      .messages({
+        'string.uri': 'Must be a valid URL',
+        'any.invalid': 'Must be a valid Google Maps URL'
+      }), // Google Maps URL with custom validation
     geofenceRadius: Joi.number().min(10).max(1000).optional().default(100),
     contact: Joi.object({
       phone: Joi.string().optional(),

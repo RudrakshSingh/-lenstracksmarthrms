@@ -8,6 +8,7 @@ const logger = require('../config/logger');
 const auditUtils = require('../utils/audit');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
+const { createSafeRegex, sanitizeEmployeeId, sanitizeSearchQuery } = require('../../shared/utils/sanitize.util');
 
 /**
  * Creates a new employee
@@ -387,30 +388,54 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
     const getData = async () => {
       const query = { isDeleted: false };
 
-      // Apply filters
+      // Apply filters with sanitization
       if (filters.employeeId) {
-        // Exact match for employeeId (case-insensitive)
-        query.employeeId = filters.employeeId.toUpperCase();
+        // Sanitize and validate employeeId
+        const sanitized = sanitizeEmployeeId(filters.employeeId);
+        if (sanitized) {
+          query.employeeId = sanitized;
+        } else {
+          logger.warn('Invalid employeeId format provided', { employeeId: filters.employeeId });
+        }
       }
       if (filters.status) {
-        query.status = filters.status;
+        // Status should be from enum, so validate it
+        const validStatuses = ['active', 'inactive', 'on-leave', 'terminated'];
+        if (validStatuses.includes(filters.status.toLowerCase())) {
+          query.status = filters.status.toLowerCase();
+        }
       }
       if (filters.store) {
-        query.store = filters.store;
+        // Store should be ObjectId, validate it
+        if (mongoose.Types.ObjectId.isValid(filters.store)) {
+          query.store = filters.store;
+        }
       }
       if (filters.role) {
-        query.role = filters.role;
+        // Role should be ObjectId, validate it
+        if (mongoose.Types.ObjectId.isValid(filters.role)) {
+          query.role = filters.role;
+        }
       }
       if (filters.department) {
-        query.department = new RegExp(filters.department, 'i');
+        // Use safe regex for department search
+        const safeRegex = createSafeRegex(filters.department);
+        if (safeRegex) {
+          query.department = safeRegex;
+        }
       }
       if (filters.search) {
-        query.$or = [
-          { firstName: new RegExp(filters.search, 'i') },
-          { lastName: new RegExp(filters.search, 'i') },
-          { email: new RegExp(filters.search, 'i') },
-          { employeeId: new RegExp(filters.search, 'i') }
-        ];
+        // Use safe regex for search with sanitization
+        const sanitized = sanitizeSearchQuery(filters.search);
+        if (sanitized) {
+          const safeRegex = new RegExp(sanitized, 'i');
+          query.$or = [
+            { firstName: safeRegex },
+            { lastName: safeRegex },
+            { email: safeRegex },
+            { employeeId: safeRegex }
+          ];
+        }
       }
 
       const skip = (page - 1) * limit;

@@ -552,6 +552,16 @@ const loadRoutes = () => {
   }
   
   try {
+    const leaveBalanceRoutes = require('./routes/leaveBalance.routes.js');
+    app.use('/api/hr/leaves', apiRateLimit, leaveBalanceRoutes);
+    routesLoaded.push('leaveBalance.routes.js');
+    logger.info('✅ leaveBalance.routes.js loaded successfully');
+  } catch (error) {
+    routesFailed.push({ route: 'leaveBalance.routes.js', error: error.message });
+    logger.error('leaveBalance.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+  
+  try {
     const attendanceRoutes = require('./routes/attendance.routes.js');
     app.use('/api/hr', apiRateLimit, attendanceRoutes);
     app.use('/api', apiRateLimit, attendanceRoutes); // Also mount at /api for compatibility

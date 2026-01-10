@@ -1030,17 +1030,24 @@ const updateStore = async (storeId, updateData, updatedBy) => {
     Object.assign(store, updateData, { updatedBy, updatedAt: new Date() });
     await store.save();
 
-    // Record audit log
-    await recordAuditLog({
-      action: 'update',
-      resource: 'store',
-      resourceId: storeId,
-      userId: updatedBy,
-      details: { 
-        previousData: previousData,
-        updatedData: updateData
-      }
-    });
+    // Record audit log (non-blocking)
+    try {
+      await recordAuditLog({
+        action: 'update',
+        resource: 'store',
+        resourceId: storeId,
+        userId: updatedBy,
+        details: { 
+          previousData: previousData,
+          updatedData: updateData
+        }
+      });
+    } catch (auditError) {
+      logger.warn('Failed to record audit log for store update', { 
+        error: auditError.message, 
+        storeId 
+      });
+    }
 
     logger.info('Store updated successfully', { storeId, updatedBy });
     return store;

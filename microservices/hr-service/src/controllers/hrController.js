@@ -578,7 +578,17 @@ const verifyStoreGeofence = async (req, res, next) => {
 
     // Check if store has coordinates
     if (!store.coordinates || !store.coordinates.latitude || !store.coordinates.longitude) {
-      return sendError(res, 'Store coordinates not configured', 'Store does not have GPS coordinates set', 400);
+      return sendError(res, 
+        'Store coordinates not configured', 
+        'This store does not have GPS coordinates set. Please update the store with a Google Maps URL or coordinates to enable geofencing.', 
+        400,
+        {
+          storeId: store._id || store.id,
+          storeName: store.name,
+          storeCode: store.code,
+          suggestion: 'Update store with googleMapsUrl or coordinates'
+        }
+      );
     }
 
     // Import geofence utility

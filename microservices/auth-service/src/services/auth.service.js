@@ -149,8 +149,12 @@ class AuthService {
 
       await user.save();
 
-      // Generate tokens
-      const accessToken = generateAccessToken({ userId: user._id, role: user.role });
+      // Generate tokens (include employee_id for microservice communication)
+      const accessToken = generateAccessToken({ 
+        userId: user._id, 
+        role: user.role,
+        employee_id: user.employee_id // ← CRITICAL: Include for attendance/HR services
+      });
       const refreshToken = generateRefreshToken({ userId: user._id });
 
       // Store refresh token in Redis
@@ -252,8 +256,12 @@ class AuthService {
       user.last_activity = new Date();
       await user.save();
 
-      // Generate tokens
-      const accessToken = generateAccessToken({ userId: user._id, role: user.role });
+      // Generate tokens (include employee_id for microservice communication)
+      const accessToken = generateAccessToken({ 
+        userId: user._id, 
+        role: user.role,
+        employee_id: user.employee_id // ← CRITICAL: Include for attendance/HR services
+      });
       const refreshToken = generateRefreshToken({ userId: user._id });
 
       // Store refresh token in Redis

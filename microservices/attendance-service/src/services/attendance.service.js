@@ -37,6 +37,15 @@ const clockIn = async (user, latitude, longitude, selfieUrl, notes = '', token =
       throw error;
     }
 
+    logger.info('Store retrieved for attendance', {
+      storeId: store._id || store.id,
+      storeName: store.name,
+      hasCoordinates: !!(store.coordinates?.latitude || store.latitude),
+      coordinates: store.coordinates,
+      directLat: store.latitude,
+      directLng: store.longitude
+    });
+
     // Check if there's an open clock-in (not clocked out yet)
     // Allow multiple clock-ins per day, but not simultaneous ones
     const openAttendance = await Attendance.findOne({
@@ -51,14 +60,25 @@ const clockIn = async (user, latitude, longitude, selfieUrl, notes = '', token =
       throw error;
     }
 
+    // Extract coordinates - support both formats
+    const storeLatitude = store.coordinates?.latitude || store.latitude;
+    const storeLongitude = store.coordinates?.longitude || store.longitude;
+
+    if (!storeLatitude || !storeLongitude) {
+      logger.warn('Store has no coordinates configured', {
+        storeId: store._id || store.id,
+        storeName: store.name
+      });
+    }
+
     // Check geofence - using store coordinates
     let isWithinGeofenceArea = false;
-    if (store.coordinates && store.coordinates.latitude && store.coordinates.longitude) {
+    if (storeLatitude && storeLongitude) {
       isWithinGeofenceArea = isWithinGeofence(
         latitude,
         longitude,
-        store.coordinates.latitude,
-        store.coordinates.longitude,
+        storeLatitude,
+        storeLongitude,
         store.geofenceRadius || 100 // Default 100 meters
       );
     }

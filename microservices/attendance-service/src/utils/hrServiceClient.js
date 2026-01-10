@@ -29,7 +29,30 @@ const getEmployeeByUser = async (user, token) => {
       if (response.data && response.data.success) {
         const employees = response.data.data || response.data.employees || [];
         if (employees.length > 0) {
-          return employees[0]; // Return first match
+          const employee = employees[0];
+          
+          // If store is not populated (empty object), fetch full employee details by ID
+          if (!employee.store || Object.keys(employee.store).length === 0) {
+            const userId = employee._id || employee.id;
+            if (userId) {
+              try {
+                const fullEmpResponse = await axios.get(`${HR_SERVICE_URL}/api/hr/employees/${userId}`, {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  },
+                  timeout: 5000
+                });
+                if (fullEmpResponse.data && fullEmpResponse.data.success && fullEmpResponse.data.data) {
+                  return fullEmpResponse.data.data; // Return employee with populated store
+                }
+              } catch (err) {
+                logger.warn('Failed to fetch full employee details, using basic data', { userId });
+              }
+            }
+          }
+          
+          return employee; // Return first match
         }
       }
     }

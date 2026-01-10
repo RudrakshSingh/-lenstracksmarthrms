@@ -1,170 +1,201 @@
-const Roster = require('../models/Roster.model');
-const User = require('../models/User.model');
-const Store = require('../models/Store.model');
+const RosterService = require('../services/roster.service');
+const { sendSuccess, sendError } = require('../../../shared/utils/response.util');
 const logger = require('../config/logger');
-const { sendSuccess, sendError, createPagination, parsePagination } = require('../../shared/utils/response.util.js');
+const { asyncHandler } = require('../middleware/errorHandler.middleware');
 
 /**
- * Get roster
+ * Get roster entries
  * GET /api/hr/roster
  */
 const getRoster = async (req, res, next) => {
   try {
-    const { page, limit, skip } = parsePagination(req.query);
-    const { startDate, endDate, storeId, employeeId } = req.query;
+    const {
+      employeeId,
+      storeId,
+      startDate,
+      endDate,
+      status,
+      shift,
+      page = 1,
+      limit = 100
+    } = req.query;
 
-    const query = {};
-    if (startDate && endDate) {
-      query.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      };
-    } else if (startDate) {
-      query.date = { $gte: new Date(startDate) };
-    }
-    if (storeId) query.store_id = storeId;
-    if (employeeId) query.employee_id = employeeId;
+    const filters = {
+      employeeId,
+      storeId,
+      startDate,
+      endDate,
+      status,
+      shift,
+      tenantId: req.tenantId || 'default'
+    };
 
-    const roster = await Roster.find(query)
-      .populate('employee_id', 'fullName employeeId')
-      .populate('store_id', 'name code')
-      .sort({ date: 1, shiftStart: 1 })
-      .limit(limit)
-      .skip(skip)
-      .lean();
+    const result = await RosterService.getRoster(filters, page, limit);
 
-    const formattedRoster = roster.map(r => ({
-      id: r._id,
-      employeeId: r.employee_id?._id || r.employee_id,
-      employeeName: r.employeeName || r.employee_id?.fullName || 'N/A',
-      storeId: r.store_id?._id || r.store_id,
-      storeName: r.storeName || r.store_id?.name || 'N/A',
-      date: r.date,
-      shift: r.shift,
-      shiftStart: r.shiftStart,
-      shiftEnd: r.shiftEnd,
-      status: r.status
-    }));
-
-    const total = await Roster.countDocuments(query);
-    const pagination = createPagination(page, limit, total);
-
-    return sendSuccess(res, { roster: formattedRoster }, 'Roster retrieved successfully', pagination, 200);
+    return sendSuccess(res, result, 'Roster entries retrieved successfully');
   } catch (error) {
-    logger.error('Error in getRoster', { error: error.message, stack: error.stack });
-    return sendError(res, error.message || 'Failed to retrieve roster', 'Internal server error', 500);
+    logger.error('Error in getRoster controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
   }
 };
 
 /**
- * Create roster entry
+ * Create a new roster entry
  * POST /api/hr/roster
  */
 const createRoster = async (req, res, next) => {
   try {
-    const { employeeId, storeId, date, shift, shiftStart, shiftEnd } = req.body;
+    const rosterData = {
+      ...req.body,
+      tenantId: req.tenantId || 'default'
+    };
 
-    if (!employeeId || !storeId || !date || !shift || !shiftStart || !shiftEnd) {
-      return sendError(res, 'Validation failed', 'All fields are required', 400);
+    const createdBy = req.user?._id || req.user?.id;
+    if (!createdBy) {
+      return sendError(res, 'Authentication required', 'User not authenticated', 401);
     }
 
-    // Get employee and store details
-    const [employee, store] = await Promise.all([
-      User.findById(employeeId).select('fullName employeeId').lean(),
-      Store.findById(storeId).select('name code').lean()
-    ]);
+    const roster = await RosterService.createRoster(rosterData, createdBy);
 
-    if (!employee) {
-      return sendError(res, 'Employee not found', 'Employee not found', 404);
-    }
-    if (!store) {
-      return sendError(res, 'Store not found', 'Store not found', 404);
-    }
-
-    const roster = new Roster({
-      employee_id: employeeId,
-      employeeName: employee.fullName,
-      store_id: storeId,
-      storeName: store.name,
-      date: new Date(date),
-      shift,
-      shiftStart,
-      shiftEnd,
-      status: 'ASSIGNED',
-      created_by: req.user._id
-    });
-
-    await roster.save();
-
-    return sendSuccess(res, roster, 'Roster entry created successfully', null, 201);
+    return sendSuccess(res, roster, 'Roster created successfully', 201);
   } catch (error) {
-    logger.error('Error in createRoster', { error: error.message, stack: error.stack });
-    if (error.name === 'ValidationError') {
-      return sendError(res, error.message, 'Validation failed', 400);
-    }
-    return sendError(res, error.message || 'Failed to create roster entry', 'Internal server error', 500);
+    logger.error('Error in createRoster controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
   }
 };
 
 /**
- * Get roster settings
+ * Update a roster entry
+ * PUT /api/hr/roster
+ */
+const updateRoster = async (req, res, next) => {
+  try {
+    const { id } = req.body;
+    if (!id) {
+      return sendError(res, 'Roster ID is required', 'Validation failed', 400);
+    }
+
+    const updatedBy = req.user?._id || req.user?.id;
+    const roster = await RosterService.updateRoster(id, req.body, updatedBy);
+
+    return sendSuccess(res, roster, 'Roster updated successfully');
+  } catch (error) {
+    logger.error('Error in updateRoster controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Delete a roster entry
+ * DELETE /api/hr/roster
+ */
+const deleteRoster = async (req, res, next) => {
+  try {
+    const { id } = req.query;
+    if (!id) {
+      return sendError(res, 'Roster ID is required', 'Validation failed', 400);
+    }
+
+    await RosterService.deleteRoster(id);
+
+    return sendSuccess(res, null, 'Roster deleted successfully');
+  } catch (error) {
+    logger.error('Error in deleteRoster controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Get weekly roster for a store
+ * GET /api/hr/roster/weekly
+ */
+const getWeeklyRoster = async (req, res, next) => {
+  try {
+    const { storeId, weekStartDate } = req.query;
+
+    if (!storeId || !weekStartDate) {
+      return sendError(res, 'storeId and weekStartDate are required', 'Validation failed', 400);
+    }
+
+    const result = await RosterService.getWeeklyRoster(storeId, weekStartDate);
+
+    return sendSuccess(res, result, 'Weekly roster retrieved successfully');
+  } catch (error) {
+    logger.error('Error in getWeeklyRoster controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Bulk create roster entries
+ * POST /api/hr/roster/bulk
+ */
+const bulkCreateRoster = async (req, res, next) => {
+  try {
+    const { entries } = req.body;
+
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      return sendError(res, 'entries array is required', 'Validation failed', 400);
+    }
+
+    const createdBy = req.user?._id || req.user?.id;
+    const result = await RosterService.bulkCreateRoster(entries, createdBy);
+
+    return sendSuccess(res, result, 'Bulk roster creation completed', 201);
+  } catch (error) {
+    logger.error('Error in bulkCreateRoster controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Get roster settings for a store
  * GET /api/hr/roster/settings
  */
 const getRosterSettings = async (req, res, next) => {
   try {
-    // Return default roster settings
-    const settings = {
-      shifts: [
-        { name: 'MORNING', start: '09:00', end: '17:00' },
-        { name: 'EVENING', start: '14:00', end: '22:00' },
-        { name: 'NIGHT', start: '22:00', end: '06:00' }
-      ],
-      defaultShiftDuration: 8,
-      allowOverlap: false,
-      requireApproval: true,
-      maxConsecutiveDays: 6
-    };
+    const { storeId } = req.query;
 
-    return sendSuccess(res, settings, 'Roster settings retrieved successfully', null, 200);
-  } catch (error) {
-    logger.error('Error in getRosterSettings', { error: error.message, stack: error.stack });
-    return sendError(res, error.message || 'Failed to retrieve roster settings', 'Internal server error', 500);
-  }
-};
-
-/**
- * Upload roster (bulk)
- * POST /api/hr/roster/upload
- */
-const uploadRoster = async (req, res, next) => {
-  try {
-    // This would typically parse an uploaded file (CSV/Excel)
-    // For now, return a placeholder response
-    const { file, storeId, overwrite } = req.body;
-
-    if (!file) {
-      return sendError(res, 'Validation failed', 'File is required', 400);
+    if (!storeId) {
+      return sendError(res, 'storeId is required', 'Validation failed', 400);
     }
 
-    // Placeholder: Would parse file and create roster entries
-    const result = {
-      totalRows: 0,
-      successCount: 0,
-      errorCount: 0,
-      errors: []
-    };
+    const settings = await RosterService.getRosterSettings(storeId);
 
-    return sendSuccess(res, result, 'Roster uploaded successfully', null, 200);
+    return sendSuccess(res, settings, 'Roster settings retrieved successfully');
   } catch (error) {
-    logger.error('Error in uploadRoster', { error: error.message, stack: error.stack });
-    return sendError(res, error.message || 'Failed to upload roster', 'Internal server error', 500);
+    logger.error('Error in getRosterSettings controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
   }
 };
 
 module.exports = {
-  getRoster,
-  createRoster,
-  getRosterSettings,
-  uploadRoster
+  getRoster: asyncHandler(getRoster),
+  createRoster: asyncHandler(createRoster),
+  updateRoster: asyncHandler(updateRoster),
+  deleteRoster: asyncHandler(deleteRoster),
+  getWeeklyRoster: asyncHandler(getWeeklyRoster),
+  bulkCreateRoster: asyncHandler(bulkCreateRoster),
+  getRosterSettings: asyncHandler(getRosterSettings)
 };
-

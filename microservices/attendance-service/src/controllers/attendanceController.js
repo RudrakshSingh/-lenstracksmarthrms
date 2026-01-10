@@ -216,12 +216,14 @@ const clockOut = async (req, res, next) => {
     }
 
     // Proceed with clock-out (selfie URL from Azure Blob Storage)
+    const token = req.headers.authorization?.split(' ')[1]; // Pass token to service
     const attendance = await AttendanceService.clockOut(
-      employeeId,
+      req.user, // Pass user object instead of just employeeId
       parseFloat(latitude),
       parseFloat(longitude),
       selfieUrl,
-      notes
+      notes,
+      token // Pass token for HR service calls
     );
 
     // Add security info to response

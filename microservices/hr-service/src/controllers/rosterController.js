@@ -1,7 +1,6 @@
 const RosterService = require('../services/roster.service');
 const { sendSuccess, sendError } = require('../../shared/utils/response.util');
 const logger = require('../config/logger');
-const { asyncHandler } = require('../middleware/errorHandler.middleware');
 
 /**
  * Get roster entries
@@ -191,11 +190,11 @@ const getRosterSettings = async (req, res, next) => {
 };
 
 module.exports = {
-  getRoster: asyncHandler(getRoster),
-  createRoster: asyncHandler(createRoster),
-  updateRoster: asyncHandler(updateRoster),
-  deleteRoster: asyncHandler(deleteRoster),
-  getWeeklyRoster: asyncHandler(getWeeklyRoster),
-  bulkCreateRoster: asyncHandler(bulkCreateRoster),
-  getRosterSettings: asyncHandler(getRosterSettings)
+  getRoster,
+  createRoster,
+  updateRoster,
+  deleteRoster,
+  getWeeklyRoster,
+  bulkCreateRoster,
+  getRosterSettings
 };

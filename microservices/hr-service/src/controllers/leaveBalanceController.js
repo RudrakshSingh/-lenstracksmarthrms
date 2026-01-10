@@ -1,7 +1,6 @@
 const LeaveService = require('../services/leave.service');
 const { sendSuccess, sendError } = require('../../shared/utils/response.util');
 const logger = require('../config/logger');
-const { asyncHandler } = require('../middleware/errorHandler.middleware');
 
 /**
  * Get leave balance for an employee
@@ -164,11 +163,11 @@ const getAllLeaveBalances = async (req, res, next) => {
 };
 
 module.exports = {
-  getLeaveBalance: asyncHandler(getLeaveBalance),
-  updateLeaveBalance: asyncHandler(updateLeaveBalance),
-  deductLeave: asyncHandler(deductLeave),
-  addCompensatoryOff: asyncHandler(addCompensatoryOff),
-  resetLeaveBalance: asyncHandler(resetLeaveBalance),
-  getAllLeaveBalances: asyncHandler(getAllLeaveBalances)
+  getLeaveBalance,
+  updateLeaveBalance,
+  deductLeave,
+  addCompensatoryOff,
+  resetLeaveBalance,
+  getAllLeaveBalances
 };
 

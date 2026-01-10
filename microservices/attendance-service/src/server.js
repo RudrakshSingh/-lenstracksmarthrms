@@ -174,7 +174,7 @@ const connectDB = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      retryWrites: true,
+      retryWrites: false, // Changed from true - Cosmos DB doesn't support retryable writes
       retryReads: true,
       dbName: targetDbName, // Explicitly set the database name
     };
@@ -183,7 +183,7 @@ const connectDB = async () => {
     if (isCosmosDB) {
       connectionOptions.tls = true;
       connectionOptions.tlsInsecure = false;
-      connectionOptions.retryWrites = true;
+      connectionOptions.retryWrites = false; // Changed from true - Cosmos DB requirement
       logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
     }
     

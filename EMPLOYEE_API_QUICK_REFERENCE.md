@@ -133,12 +133,6 @@ curl -X PUT "http://localhost:3002/api/hr/employees/EMP-2026-001" \
 "status": "On Leave"         // Space
 ```
 
----
-
-## 📊 Complete Field List
-
-### GET Response Must Include:
-
 ```javascript
 {
   // === BASIC INFO ===

@@ -561,6 +561,104 @@ const deleteStore = async (req, res, next) => {
 };
 
 /**
+ * Verify geofence for store
+ * POST /api/stores/:id/verify-geofence
+ * Body: { latitude, longitude }
+ */
+const verifyStoreGeofence = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude } = req.body;
+
+    // Get store details
+    const store = await HRService.getStoreById(id);
+    if (!store) {
+      return sendNotFound(res, 'Store', id);
+    }
+
+    // Check if store has coordinates
+    if (!store.coordinates || !store.coordinates.latitude || !store.coordinates.longitude) {
+      return sendError(res, 'Store coordinates not configured', 'Store does not have GPS coordinates set', 400);
+    }
+
+    // Import geofence utility
+    const { verifyGeofence } = require('../utils/googleMaps.util');
+
+    // Verify geofence
+    const result = verifyGeofence(
+      { latitude, longitude },
+      {
+        latitude: store.coordinates.latitude,
+        longitude: store.coordinates.longitude
+      },
+      store.geofenceRadius || 100
+    );
+
+    return sendSuccess(res, {
+      withinGeofence: result.withinGeofence,
+      distance: result.distance,
+      distanceUnit: 'meters',
+      geofenceRadius: store.geofenceRadius || 100,
+      excess: result.excess,
+      store: {
+        id: store._id || store.id,
+        name: store.name,
+        code: store.code,
+        coordinates: {
+          latitude: store.coordinates.latitude,
+          longitude: store.coordinates.longitude
+        }
+      },
+      checkedAt: new Date().toISOString()
+    }, result.withinGeofence 
+      ? 'Location verified. You are within the store geofence.' 
+      : `You are ${result.excess} meters outside the store geofence.`, 
+    null, 200);
+  } catch (error) {
+    logger.error('Error in verifyStoreGeofence controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Store', req.params.id);
+    }
+    
+    next(error);
+  }
+};
+
+/**
+ * Assign manager to store
+ * POST /api/stores/:id/manager
+ * Body: { employeeId }
+ */
+const assignStoreManager = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { employeeId } = req.body;
+    const updatedBy = req.user._id;
+
+    const result = await HRService.assignStoreManager(id, employeeId, updatedBy);
+
+    if (!result || !result.store) {
+      return sendNotFound(res, 'Store', id);
+    }
+
+    return sendSuccess(res, result, 'Store manager assigned successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in assignStoreManager controller', { error: error.message, userId: req.user?._id });
+    
+    if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      return sendNotFound(res, 'Store', req.params.id);
+    }
+    
+    if (error.name === 'ValidationError' || error.statusCode === 400) {
+      return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
+    next(error);
+  }
+};
+
+/**
  * Get all departments
  * GET /api/hr/departments
  */
@@ -843,5 +941,7 @@ module.exports = {
   getStoreById,
   updateStore,
   deleteStore,
+  verifyStoreGeofence,
+  assignStoreManager,
   getWorkforce
 };

@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
 const storeSchema = new mongoose.Schema({
+  tenantId: {
+    type: String,
+    required: true,
+    trim: true,
+    default: 'default',
+    index: true
+  },
   name: {
     type: String,
     required: true,
@@ -14,7 +21,7 @@ const storeSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     uppercase: true,
-    maxlength: 10,
+    maxlength: 50,
     index: true
   },
   description: {
@@ -74,6 +81,12 @@ const storeSchema = new mongoose.Schema({
     }
   },
 
+  // Google Maps Integration
+  googleMapsUrl: {
+    type: String,
+    trim: true
+  },
+
   // Geofencing
   geofenceRadius: {
     type: Number,
@@ -83,7 +96,7 @@ const storeSchema = new mongoose.Schema({
     max: 1000
   },
 
-  // Contact Information
+  // Contact Information (nested and flat for compatibility)
   contact: {
     phone: {
       type: String,
@@ -97,6 +110,16 @@ const storeSchema = new mongoose.Schema({
       lowercase: true,
       match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
     }
+  },
+  // Flat fields for direct access (frontend compatibility)
+  phone: {
+    type: String,
+    trim: true
+  },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true
   },
 
   // Store Management
@@ -165,11 +188,89 @@ const storeSchema = new mongoose.Schema({
 
 // Indexes (remove duplicates of field-level indexes)
 storeSchema.index({ coordinates: '2dsphere' });
+storeSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+
+// Virtual for storeCode (alias for code)
+storeSchema.virtual('storeCode').get(function() {
+  return this.code;
+});
+
+// Virtual for latitude (direct access)
+storeSchema.virtual('latitude').get(function() {
+  return this.coordinates?.latitude;
+});
+
+// Virtual for longitude (direct access)
+storeSchema.virtual('longitude').get(function() {
+  return this.coordinates?.longitude;
+});
+
+// Virtual for street (direct access)
+storeSchema.virtual('street').get(function() {
+  return this.address?.street;
+});
+
+// Virtual for city (direct access)
+storeSchema.virtual('city').get(function() {
+  return this.address?.city;
+});
+
+// Virtual for state (direct access)
+storeSchema.virtual('state').get(function() {
+  return this.address?.state;
+});
+
+// Virtual for pincode (direct access, handles both zipCode and zip)
+storeSchema.virtual('pincode').get(function() {
+  return this.address?.zipCode || this.address?.zip;
+});
+
+// Virtual for country (direct access)
+storeSchema.virtual('country').get(function() {
+  return this.address?.country;
+});
 
 // Virtual for full address
 storeSchema.virtual('full_address').get(function() {
   const addr = this.address;
-  return `${addr.street}, ${addr.city}, ${addr.state} ${addr.zipCode}, ${addr.country}`;
+  if (!addr) return '';
+  return `${addr.street}, ${addr.city}, ${addr.state || ''} ${addr.zipCode || addr.zip || ''}, ${addr.country}`.replace(/\s+/g, ' ').trim();
+});
+
+// Virtual for staffCount (will be populated dynamically)
+storeSchema.virtual('staffCount', {
+  ref: 'User',
+  localField: '_id',
+  foreignField: 'store',
+  count: true
+});
+
+// Virtual for activeStaffCount (will be populated dynamically)
+storeSchema.virtual('activeStaffCount', {
+  ref: 'User',
+  localField: '_id',
+  foreignField: 'store',
+  count: true,
+  match: { status: 'active', isDeleted: false }
+});
+
+// Pre-save middleware to sync flat fields with nested contact
+storeSchema.pre('save', function(next) {
+  // Sync phone and email between nested and flat fields
+  if (this.contact) {
+    if (this.contact.phone && !this.phone) {
+      this.phone = this.contact.phone;
+    } else if (this.phone && !this.contact.phone) {
+      this.contact.phone = this.phone;
+    }
+    
+    if (this.contact.email && !this.email) {
+      this.email = this.contact.email;
+    } else if (this.email && !this.contact.email) {
+      this.contact.email = this.email;
+    }
+  }
+  next();
 });
 
 module.exports = mongoose.model('Store', storeSchema);

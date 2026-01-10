@@ -918,12 +918,38 @@ const getStores = async (filters = {}, page = 1, limit = 10) => {
  */
 const createStore = async (storeData, createdBy) => {
   try {
-    const { code } = storeData;
+    const { code, googleMapsUrl } = storeData;
 
     // Check if store code already exists
     const existingStore = await Store.findOne({ code });
     if (existingStore) {
       throw new ApiError(httpStatus.CONFLICT, 'Store with this code already exists');
+    }
+
+    // Extract coordinates from Google Maps URL if provided
+    if (googleMapsUrl && (!storeData.coordinates || !storeData.coordinates.latitude)) {
+      const { extractCoordinatesFromGoogleMapsUrl } = require('../utils/googleMaps.util');
+      const extracted = extractCoordinatesFromGoogleMapsUrl(googleMapsUrl);
+      
+      if (extracted) {
+        storeData.coordinates = {
+          latitude: extracted.latitude,
+          longitude: extracted.longitude
+        };
+        logger.info('Extracted coordinates from Google Maps URL', extracted);
+      } else {
+        logger.warn('Could not extract coordinates from Google Maps URL', { googleMapsUrl });
+      }
+    }
+
+    // If coordinates are provided but no Google Maps URL, generate one
+    if (!googleMapsUrl && storeData.coordinates && storeData.coordinates.latitude) {
+      const { generateGoogleMapsUrl } = require('../utils/googleMaps.util');
+      storeData.googleMapsUrl = generateGoogleMapsUrl(
+        storeData.coordinates.latitude,
+        storeData.coordinates.longitude
+      );
+      logger.info('Generated Google Maps URL from coordinates', { googleMapsUrl: storeData.googleMapsUrl });
     }
 
     const store = new Store({
@@ -1065,6 +1091,93 @@ const deleteStore = async (storeId, deletedBy) => {
   }
 };
 
+/**
+ * Assign manager to store
+ * @param {string} storeId - Store ID
+ * @param {string} employeeId - Employee ID (employee_id field, not MongoDB _id)
+ * @param {string} updatedBy - ID of the user making the assignment
+ * @returns {Promise<Object>} Updated store with manager details
+ */
+const assignStoreManager = async (storeId, employeeId, updatedBy) => {
+  try {
+    // Find store
+    const store = await Store.findOne({ _id: storeId, isDeleted: false });
+    if (!store) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
+    }
+
+    // Find employee by employee_id (e.g., "EMP-MGR-001")
+    const employee = await User.findOne({ 
+      $or: [
+        { employee_id: employeeId },
+        { employeeId: employeeId }
+      ],
+      isDeleted: false 
+    });
+
+    if (!employee) {
+      throw new ApiError(httpStatus.NOT_FOUND, `Employee with ID '${employeeId}' not found`);
+    }
+
+    // Store previous manager info for response
+    let previousManager = null;
+    if (store.manager) {
+      previousManager = await User.findById(store.manager).select('employee_id employeeId name');
+    }
+
+    // Assign new manager
+    store.manager = employee._id;
+    store.updatedBy = updatedBy;
+    store.updatedAt = new Date();
+    await store.save();
+
+    // Record audit log
+    await recordAuditLog({
+      action: 'assign_manager',
+      resource: 'store',
+      resourceId: storeId,
+      userId: updatedBy,
+      details: { 
+        storeCode: store.code,
+        storeName: store.name,
+        newManager: employeeId,
+        previousManager: previousManager ? (previousManager.employee_id || previousManager.employeeId) : null
+      }
+    });
+
+    logger.info('Store manager assigned successfully', { 
+      storeId, 
+      employeeId, 
+      managerId: employee._id,
+      updatedBy 
+    });
+
+    return {
+      storeId: store._id,
+      storeName: store.name,
+      manager: {
+        id: employee._id,
+        employeeId: employee.employee_id || employee.employeeId,
+        name: employee.name || `${employee.firstName || ''} ${employee.lastName || ''}`.trim(),
+        assignedAt: new Date().toISOString()
+      },
+      previousManager: previousManager ? {
+        employeeId: previousManager.employee_id || previousManager.employeeId,
+        name: previousManager.name,
+        unassignedAt: new Date().toISOString()
+      } : null
+    };
+  } catch (error) {
+    logger.error('Error in assignStoreManager service', { 
+      error: error.message, 
+      storeId, 
+      employeeId, 
+      updatedBy 
+    });
+    throw error;
+  }
+};
+
 module.exports = {
   createEmployee,
   getEmployees,
@@ -1077,5 +1190,6 @@ module.exports = {
   createStore,
   getStoreById,
   updateStore,
-  deleteStore
+  deleteStore,
+  assignStoreManager
 };

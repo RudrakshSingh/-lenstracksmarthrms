@@ -114,50 +114,95 @@ const updateStatusSchema = {
 
 const createStoreSchema = {
   body: Joi.object({
+    tenantId: Joi.string().optional().default('default'),
     name: Joi.string().required(),
     code: Joi.string().required(),
+    description: Joi.string().optional(),
     address: Joi.object({
       street: Joi.string().required(),
       city: Joi.string().required(),
-      state: Joi.string().optional(), // Optional
-      country: Joi.string().optional().default('India'), // Optional with default
-      zipCode: Joi.string().optional(), // Optional
-      zip: Joi.string().optional() // Alternative field name
+      state: Joi.string().optional(),
+      country: Joi.string().optional().default('India'),
+      zipCode: Joi.string().optional(),
+      zip: Joi.string().optional()
     }).required(),
     coordinates: Joi.object({
-      latitude: Joi.number().optional(), // Optional - can be added later
-      longitude: Joi.number().optional() // Optional - can be added later
-    }).optional(), // Entire coordinates object optional
-    geofenceRadius: Joi.number().optional().default(100), // Optional with default
+      latitude: Joi.number().min(-90).max(90).optional(),
+      longitude: Joi.number().min(-180).max(180).optional()
+    }).optional(),
+    googleMapsUrl: Joi.string().uri().optional(), // New field for Google Maps URL
+    geofenceRadius: Joi.number().min(10).max(1000).optional().default(100),
     contact: Joi.object({
-      phone: Joi.string().optional(), // Optional
-      email: Joi.string().email().optional() // Optional
-    }).optional(), // Entire contact object optional
-    operatingHours: Joi.object().optional()
+      phone: Joi.string().optional(),
+      email: Joi.string().email().optional()
+    }).optional(),
+    phone: Joi.string().optional(), // Flat field for compatibility
+    email: Joi.string().email().optional(), // Flat field for compatibility
+    manager: Joi.object({
+      employeeId: Joi.string().optional()
+    }).optional(),
+    operatingHours: Joi.object().optional(),
+    store_type: Joi.string().valid('retail', 'warehouse', 'office', 'field', 'other').optional().default('retail'),
+    status: Joi.string().valid('active', 'inactive', 'maintenance', 'closed', 'ACTIVE', 'INACTIVE', 'MAINTENANCE', 'CLOSED').optional().default('active')
   })
 };
 
 const updateStoreSchema = {
   body: Joi.object({
+    id: Joi.string().optional(), // Frontend sends id, we ignore it but don't error
     name: Joi.string().optional(),
     code: Joi.string().optional(),
+    description: Joi.string().optional(),
     address: Joi.object({
       street: Joi.string().optional(),
       city: Joi.string().optional(),
       state: Joi.string().optional(),
       country: Joi.string().optional(),
-      zipCode: Joi.string().optional()
+      zipCode: Joi.string().optional(),
+      zip: Joi.string().optional()
     }).optional(),
     coordinates: Joi.object({
-      latitude: Joi.number().optional(),
-      longitude: Joi.number().optional()
+      latitude: Joi.number().min(-90).max(90).optional(),
+      longitude: Joi.number().min(-180).max(180).optional()
     }).optional(),
-    geofenceRadius: Joi.number().optional(),
+    googleMapsUrl: Joi.string().uri().optional(),
+    geofenceRadius: Joi.number().min(10).max(1000).optional(),
     contact: Joi.object({
       phone: Joi.string().optional(),
       email: Joi.string().email().optional()
     }).optional(),
-    operatingHours: Joi.object().optional()
+    phone: Joi.string().optional(),
+    email: Joi.string().email().optional(),
+    manager: Joi.object({
+      employeeId: Joi.string().optional()
+    }).optional(),
+    operatingHours: Joi.object().optional(),
+    store_type: Joi.string().valid('retail', 'warehouse', 'office', 'field', 'other').optional(),
+    status: Joi.string().valid('active', 'inactive', 'maintenance', 'closed', 'ACTIVE', 'INACTIVE', 'MAINTENANCE', 'CLOSED').optional()
+  }).min(1) // At least one field must be provided
+};
+
+const getStoresSchema = {
+  query: Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(1000).default(100), // Default to 100 per frontend spec
+    status: Joi.string().valid('ACTIVE', 'INACTIVE', 'MAINTENANCE', 'CLOSED', 'active', 'inactive', 'maintenance', 'closed').optional(),
+    city: Joi.string().optional(),
+    state: Joi.string().optional(),
+    search: Joi.string().optional()
+  })
+};
+
+const verifyGeofenceSchema = {
+  body: Joi.object({
+    latitude: Joi.number().min(-90).max(90).required(),
+    longitude: Joi.number().min(-180).max(180).required()
+  })
+};
+
+const assignManagerSchema = {
+  body: Joi.object({
+    employeeId: Joi.string().required()
   })
 };
 
@@ -248,6 +293,7 @@ router.delete('/departments/:id',
 router.get('/stores',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['store:read']),
+  validateRequest(getStoresSchema),
   asyncHandler(getStores)
 );
 
@@ -275,6 +321,28 @@ router.delete('/stores/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:delete']),
   asyncHandler(deleteStore)
+);
+
+// NEW: Verify geofence for store
+router.post('/stores/:id/verify-geofence',
+  authenticate,
+  // Allow all authenticated users (employees need this for attendance)
+  validateRequest(verifyGeofenceSchema),
+  asyncHandler(async (req, res, next) => {
+    const { verifyStoreGeofence } = require('../controllers/hrController');
+    return verifyStoreGeofence(req, res, next);
+  })
+);
+
+// NEW: Assign manager to store
+router.post('/stores/:id/manager',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:update']),
+  validateRequest(assignManagerSchema),
+  asyncHandler(async (req, res, next) => {
+    const { assignStoreManager } = require('../controllers/hrController');
+    return assignStoreManager(req, res, next);
+  })
 );
 
 // Workforce route

@@ -213,6 +213,8 @@ attendanceSchema.index({ status: 1 });
 attendanceSchema.index({ is_approved: 1 });
 attendanceSchema.index({ approved_by: 1 });
 attendanceSchema.index({ created_at: -1 });
+attendanceSchema.index({ check_in_time: -1 }); // Added for clock-in queries
+attendanceSchema.index({ employee: 1, check_in_time: -1 }); // Added for open session queries
 
 // Compound indexes for efficient queries
 attendanceSchema.index({ employee: 1, date: -1 });

@@ -78,7 +78,7 @@ router.post('/clock-out',
 
 router.get('/history',
   authenticate,
-  requireRole([], ['attendance:read']),
+  checkEmployeeStatus(['active', 'inactive', 'on-leave']), // Allow all employees to view their history
   validateRequest(attendanceHistorySchema),
   getAttendanceHistory
 );

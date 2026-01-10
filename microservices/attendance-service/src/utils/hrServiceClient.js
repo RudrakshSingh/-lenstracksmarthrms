@@ -105,18 +105,35 @@ const getEmployeeStore = async (user, token) => {
   try {
     const employee = await getEmployeeByUser(user, token);
     if (!employee) {
+      logger.warn('getEmployeeStore: Employee not found');
       return null;
     }
 
+    logger.info('getEmployeeStore: Employee retrieved', {
+      employeeId: employee.employeeId || employee.employee_id,
+      hasStore: !!employee.store,
+      storeType: typeof employee.store,
+      storeKeys: employee.store ? Object.keys(employee.store).length : 0
+    });
+
     // Check for store reference (MongoDB ObjectId)
-    if (employee.store) {
-      // If store is populated (object), return it
-      if (typeof employee.store === 'object' && employee.store._id) {
+    if (employee.store && typeof employee.store === 'object') {
+      // If store has _id, it's populated - return it
+      if (employee.store._id || employee.store.id) {
+        logger.info('Returning populated store', { storeId: employee.store._id || employee.store.id });
         return employee.store;
       }
+      
+      // If store is an empty object, log warning
+      if (Object.keys(employee.store).length === 0) {
+        logger.warn('Employee has empty store object', { employeeId: employee.employeeId });
+      }
+    }
 
-      // If store is just an ID, fetch store details
+    // If store is just a string ID, fetch store details
+    if (employee.store && typeof employee.store === 'string') {
       const storeId = employee.store;
+      logger.info('Fetching store by ID', { storeId });
       const storeResponse = await axios.get(`${HR_SERVICE_URL}/api/hr/stores/${storeId}`, {
         headers: {
           Authorization: `Bearer ${token}`,

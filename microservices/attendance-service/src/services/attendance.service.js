@@ -3,7 +3,7 @@ const User = require('../models/User.model');
 const Store = require('../models/Store.model');
 const { isWithinGeofence } = require('../utils/geoUtils');
 const logger = require('../config/logger');
-const { recordAuditLog } = require('../utils/audit');
+const { logAttendanceEvent } = require('../utils/audit'); // Changed from recordAuditLog
 const { getEmployeeByUser, getEmployeeStore } = require('../utils/hrServiceClient');
 
 /**
@@ -106,10 +106,22 @@ const clockIn = async (user, latitude, longitude, selfieUrl, notes = '', token =
     });
 
     await attendance.save();
-    await recordAuditLog(employeeId, 'CLOCK_IN', { 
-      storeId: store._id || store.id, 
-      isGeofenceValid: isWithinGeofenceArea 
-    });
+    
+    // Log audit event (non-blocking)
+    try {
+      logAttendanceEvent({
+        action: 'CLOCK_IN',
+        userId: employeeId,
+        resource: 'attendance',
+        details: {
+          attendanceId: attendance._id,
+          storeId: store._id || store.id,
+          isGeofenceValid: isWithinGeofenceArea
+        }
+      });
+    } catch (auditError) {
+      logger.warn('Failed to log audit event for clock-in', { error: auditError.message });
+    }
 
     logger.info('Employee clocked in successfully', { 
       employeeId, 
@@ -180,10 +192,22 @@ const clockOut = async (employeeId, latitude, longitude, selfieUrl, notes = '') 
     };
 
     await attendance.save();
-    await recordAuditLog(employeeId, 'CLOCK_OUT', { 
-      storeId: employee.store._id, 
-      isGeofenceValid: isWithinGeofenceArea 
-    });
+    
+    // Log audit event (non-blocking)
+    try {
+      logAttendanceEvent({
+        action: 'CLOCK_OUT',
+        userId: employeeId,
+        resource: 'attendance',
+        details: {
+          attendanceId: attendance._id,
+          storeId: employee.store._id,
+          isGeofenceValid: isWithinGeofenceArea
+        }
+      });
+    } catch (auditError) {
+      logger.warn('Failed to log audit event for clock-out', { error: auditError.message });
+    }
 
     logger.info('Employee clocked out successfully', { 
       employeeId, 

@@ -15,6 +15,13 @@ const getEmployeeByUser = async (user, token) => {
     // Try to get employee using employee_id field first (most reliable)
     const employeeId = user.employee_id || user.employeeId;
     
+    logger.info('getEmployeeByUser called', {
+      hasEmployeeId: !!employeeId,
+      employeeId,
+      userId: user._id || user.id,
+      userEmail: user.email
+    });
+    
     if (employeeId) {
       // Search by employee_id field (e.g., "EMP-TEST-001")
       const response = await axios.get(`${HR_SERVICE_URL}/api/hr/employees`, {
@@ -28,14 +35,27 @@ const getEmployeeByUser = async (user, token) => {
 
       if (response.data && response.data.success) {
         const employees = response.data.data || response.data.employees || [];
+        logger.info('HR service returned employees', {
+          count: employees.length,
+          searchedEmployeeId: employeeId
+        });
+        
         if (employees.length > 0) {
           const employee = employees[0];
+          
+          logger.info('Found employee in HR service', {
+            employeeId: employee.employeeId,
+            hrDbId: employee._id || employee.id,
+            hasStore: !!employee.store,
+            storeIsEmpty: employee.store && Object.keys(employee.store).length === 0
+          });
           
           // If store is not populated (empty object), fetch full employee details by ID
           if (!employee.store || Object.keys(employee.store).length === 0) {
             const userId = employee._id || employee.id;
             if (userId) {
               try {
+                logger.info('Fetching full employee details to get populated store', { userId });
                 const fullEmpResponse = await axios.get(`${HR_SERVICE_URL}/api/hr/employees/${userId}`, {
                   headers: {
                     Authorization: `Bearer ${token}`,
@@ -44,10 +64,14 @@ const getEmployeeByUser = async (user, token) => {
                   timeout: 5000
                 });
                 if (fullEmpResponse.data && fullEmpResponse.data.success && fullEmpResponse.data.data) {
+                  logger.info('Got full employee with store', {
+                    hasStore: !!fullEmpResponse.data.data.store,
+                    storeKeys: fullEmpResponse.data.data.store ? Object.keys(fullEmpResponse.data.data.store).length : 0
+                  });
                   return fullEmpResponse.data.data; // Return employee with populated store
                 }
               } catch (err) {
-                logger.warn('Failed to fetch full employee details, using basic data', { userId });
+                logger.warn('Failed to fetch full employee details, using basic data', { userId, error: err.message });
               }
             }
           }
@@ -60,6 +84,7 @@ const getEmployeeByUser = async (user, token) => {
     // Fallback: try by MongoDB _id
     if (user._id || user.id) {
       const userId = user._id || user.id;
+      logger.info('Fallback: Searching by MongoDB _id', { userId });
       const response = await axios.get(`${HR_SERVICE_URL}/api/hr/employees/${userId}`, {
         headers: {
           Authorization: `Bearer ${token}`,

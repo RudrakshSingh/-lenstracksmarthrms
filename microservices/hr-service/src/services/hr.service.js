@@ -388,6 +388,10 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
       const query = { isDeleted: false };
 
       // Apply filters
+      if (filters.employeeId) {
+        // Exact match for employeeId (case-insensitive)
+        query.employeeId = filters.employeeId.toUpperCase();
+      }
       if (filters.status) {
         query.status = filters.status;
       }

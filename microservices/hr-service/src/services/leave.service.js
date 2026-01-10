@@ -13,8 +13,13 @@ class LeaveService {
     try {
       const year = leaveYear || new Date().getFullYear();
 
-      // Find employee
-      const employee = await User.findOne({ employeeId, tenantId });
+      // Find employee - try with tenantId first, then without
+      let employee = await User.findOne({ employeeId, tenantId });
+      if (!employee) {
+        // Fallback: try without tenantId (for employees created without tenantId)
+        employee = await User.findOne({ employeeId });
+      }
+      
       if (!employee) {
         const error = new Error('Employee not found');
         error.statusCode = 404;
@@ -52,8 +57,12 @@ class LeaveService {
     try {
       const year = new Date().getFullYear();
 
-      // Find employee
-      const employee = await User.findOne({ employeeId, tenantId });
+      // Find employee - try with tenantId first, then without
+      let employee = await User.findOne({ employeeId, tenantId });
+      if (!employee) {
+        employee = await User.findOne({ employeeId });
+      }
+      
       if (!employee) {
         const error = new Error('Employee not found');
         error.statusCode = 404;
@@ -112,8 +121,12 @@ class LeaveService {
    */
   async deductLeave(employeeId, leaveType, days, tenantId = 'default') {
     try {
-      // Find employee
-      const employee = await User.findOne({ employeeId, tenantId });
+      // Find employee - try with tenantId first, then without
+      let employee = await User.findOne({ employeeId, tenantId });
+      if (!employee) {
+        employee = await User.findOne({ employeeId });
+      }
+      
       if (!employee) {
         const error = new Error('Employee not found');
         error.statusCode = 404;
@@ -137,8 +150,12 @@ class LeaveService {
    */
   async addCompensatoryOff(employeeId, days, tenantId = 'default') {
     try {
-      // Find employee
-      const employee = await User.findOne({ employeeId, tenantId });
+      // Find employee - try with tenantId first, then without
+      let employee = await User.findOne({ employeeId, tenantId });
+      if (!employee) {
+        employee = await User.findOne({ employeeId });
+      }
+      
       if (!employee) {
         const error = new Error('Employee not found');
         error.statusCode = 404;
@@ -162,8 +179,12 @@ class LeaveService {
    */
   async resetLeaveBalance(employeeId, newYear, tenantId = 'default') {
     try {
-      // Find employee
-      const employee = await User.findOne({ employeeId, tenantId });
+      // Find employee - try with tenantId first, then without
+      let employee = await User.findOne({ employeeId, tenantId });
+      if (!employee) {
+        employee = await User.findOne({ employeeId });
+      }
+      
       if (!employee) {
         const error = new Error('Employee not found');
         error.statusCode = 404;

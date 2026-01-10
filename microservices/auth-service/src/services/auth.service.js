@@ -174,6 +174,19 @@ class AuthService {
 
       logger.info('User registered successfully', { userId: user._id, employeeId: user.employee_id });
 
+      // Sync employee to HR service (non-blocking)
+      try {
+        const { syncEmployeeToHR } = require('../utils/hrServiceClient');
+        syncEmployeeToHR(userData, accessToken).catch(syncError => {
+          logger.warn('Employee sync to HR service failed (non-blocking)', {
+            error: syncError.message,
+            employeeId: user.employee_id
+          });
+        });
+      } catch (syncError) {
+        logger.warn('Could not initiate HR sync', { error: syncError.message });
+      }
+
       return {
         user: user.getPublicProfile(),
         accessToken,

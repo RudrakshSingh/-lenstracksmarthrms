@@ -280,15 +280,36 @@ function formatAttendance(attendance) {
 
   return {
     id: attendance._id?.toString() || attendance.id,
-    employeeId: attendance.employeeId,
+    employeeId: attendance.employee_id || attendance.employeeId,
     employeeName: attendance.employeeName,
     date: formatDate(attendance.date),
-    checkIn: attendance.checkIn,
-    checkOut: attendance.checkOut,
-    totalHours: attendance.totalHours,
+    checkIn: attendance.check_in_time ? {
+      time: attendance.check_in_time,
+      location: attendance.check_in_location ? {
+        latitude: attendance.check_in_location.latitude,
+        longitude: attendance.check_in_location.longitude,
+        address: attendance.check_in_location.address
+      } : null,
+      selfie: attendance.check_in_selfie?.secure_url || attendance.check_in_selfie?.url || null
+    } : attendance.checkIn,
+    checkOut: attendance.check_out_time ? {
+      time: attendance.check_out_time,
+      location: attendance.check_out_location ? {
+        latitude: attendance.check_out_location.latitude,
+        longitude: attendance.check_out_location.longitude,
+        address: attendance.check_out_location.address
+      } : null,
+      selfie: attendance.check_out_selfie?.secure_url || attendance.check_out_selfie?.url || null
+    } : attendance.checkOut,
+    totalHours: attendance.total_hours || attendance.totalHours,
     status: attendance.status,
-    location: attendance.location,
-    remarks: attendance.remarks
+    isGeofenceValid: attendance.is_geofence_valid,
+    location: attendance.check_in_location || attendance.location,
+    storeId: attendance.store?._id?.toString() || attendance.store || attendance.storeId,
+    storeCode: attendance.store_code || attendance.storeCode,
+    remarks: attendance.remarks || attendance.notes,
+    createdAt: attendance.createdAt,
+    updatedAt: attendance.updatedAt
   };
 }
 

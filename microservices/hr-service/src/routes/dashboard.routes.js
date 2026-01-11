@@ -6,11 +6,44 @@ const asyncHandler = require('../utils/asyncHandler');
 const {
   getDashboardStats,
   getRecentActivities,
-  getDashboardDepartments
+  getDashboardDepartments,
+  getUnifiedDashboard,
+  getStoreDashboard,
+  getHRMSDashboard
 } = require('../controllers/dashboardController');
 
 // All routes require authentication
 router.use(authenticate);
+
+// ============================================
+// NEW UNIFIED DASHBOARD APIS (Frontend aligned)
+// ============================================
+
+// Main Dashboard (Unified, role-based)
+// GET /api/hr/dashboard?role={role}&employeeId={employeeId}
+router.get(
+  '/dashboard',
+  asyncHandler(getUnifiedDashboard)
+);
+
+// Store Manager Dashboard
+// GET /api/hr/dashboard/store-manager?storeId={storeId}
+router.get(
+  '/dashboard/store-manager',
+  requireRole(['manager', 'admin', 'superadmin'], []),
+  asyncHandler(getStoreDashboard)
+);
+
+// HRMS Dashboard
+// GET /api/hrms/dashboard?role={role}&employeeId={employeeId}
+router.get(
+  '/hrms/dashboard',
+  asyncHandler(getHRMSDashboard)
+);
+
+// ============================================
+// LEGACY DASHBOARD APIS (backwards compatibility)
+// ============================================
 
 // Dashboard statistics
 router.get(

@@ -166,22 +166,104 @@ const bulkCreateRoster = async (req, res, next) => {
 };
 
 /**
- * Get roster settings for a store
+ * Get roster settings for a store (or all stores)
  * GET /api/hr/roster/settings
  */
 const getRosterSettings = async (req, res, next) => {
   try {
     const { storeId } = req.query;
+    const tenantId = req.tenantId || 'default';
+
+    const settings = await RosterService.getRosterSettings(storeId, tenantId);
+
+    return sendSuccess(res, settings, 'Roster settings retrieved successfully');
+  } catch (error) {
+    logger.error('Error in getRosterSettings controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Create or update roster settings
+ * POST /api/hr/roster/settings
+ * PUT /api/hr/roster/settings/:id
+ */
+const upsertRosterSettings = async (req, res, next) => {
+  try {
+    const { storeId } = req.body;
 
     if (!storeId) {
       return sendError(res, 'storeId is required', 'Validation failed', 400);
     }
 
-    const settings = await RosterService.getRosterSettings(storeId);
+    const userId = req.user?._id || req.user?.id;
+    const settings = await RosterService.upsertRosterSettings(storeId, req.body, userId);
 
-    return sendSuccess(res, settings, 'Roster settings retrieved successfully');
+    return sendSuccess(res, settings, 'Roster settings saved successfully', 200);
   } catch (error) {
-    logger.error('Error in getRosterSettings controller', {
+    logger.error('Error in upsertRosterSettings controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
+  }
+};
+
+/**
+ * AI-based roster generation
+ * POST /api/hr/roster/ai-generate
+ */
+const generateAIRoster = async (req, res, next) => {
+  try {
+    const { startDate, endDate, stores, constraints, employeePool } = req.body;
+
+    if (!startDate || !endDate || !stores || !Array.isArray(stores)) {
+      return sendError(res, 'startDate, endDate, and stores array are required', 'Validation failed', 400);
+    }
+
+    const tenantId = req.tenantId || 'default';
+    const params = {
+      startDate,
+      endDate,
+      stores,
+      constraints: constraints || {},
+      employeePool: employeePool || [],
+      tenantId
+    };
+
+    const result = await RosterService.generateAIRoster(params);
+
+    return sendSuccess(res, result, 'AI roster generated successfully. Review and approve to save.', 200);
+  } catch (error) {
+    logger.error('Error in generateAIRoster controller', {
+      error: error.message,
+      userId: req.user?._id
+    });
+    next(error);
+  }
+};
+
+/**
+ * Get enhanced weekly roster with staffing summary
+ * GET /api/hr/roster/weekly-enhanced
+ */
+const getEnhancedWeeklyRoster = async (req, res, next) => {
+  try {
+    const { storeId, weekStartDate } = req.query;
+
+    if (!storeId || !weekStartDate) {
+      return sendError(res, 'storeId and weekStartDate are required', 'Validation failed', 400);
+    }
+
+    const tenantId = req.tenantId || 'default';
+    const result = await RosterService.getEnhancedWeeklyRoster(storeId, weekStartDate, tenantId);
+
+    return sendSuccess(res, result, 'Enhanced weekly roster retrieved successfully');
+  } catch (error) {
+    logger.error('Error in getEnhancedWeeklyRoster controller', {
       error: error.message,
       userId: req.user?._id
     });
@@ -195,6 +277,9 @@ module.exports = {
   updateRoster,
   deleteRoster,
   getWeeklyRoster,
+  getEnhancedWeeklyRoster,
   bulkCreateRoster,
-  getRosterSettings
+  getRosterSettings,
+  upsertRosterSettings,
+  generateAIRoster
 };

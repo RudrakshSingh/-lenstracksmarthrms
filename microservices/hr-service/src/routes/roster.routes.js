@@ -77,7 +77,7 @@ router.post(
 
 /**
  * @route   GET /api/hr/roster/settings
- * @desc    Get roster settings for a store
+ * @desc    Get roster settings for a store (or all stores)
  * @access  Private (HR, Admin, Manager)
  */
 router.get(
@@ -85,6 +85,54 @@ router.get(
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
   rosterController.getRosterSettings
+);
+
+/**
+ * @route   POST /api/hr/roster/settings
+ * @desc    Create or update roster settings
+ * @access  Private (HR, Admin, SuperAdmin)
+ */
+router.post(
+  '/settings',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin']),
+  rosterController.upsertRosterSettings
+);
+
+/**
+ * @route   PUT /api/hr/roster/settings/:id
+ * @desc    Update roster settings
+ * @access  Private (HR, Admin, SuperAdmin)
+ */
+router.put(
+  '/settings/:id',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin']),
+  rosterController.upsertRosterSettings
+);
+
+/**
+ * @route   POST /api/hr/roster/ai-generate
+ * @desc    Generate AI-based optimal roster
+ * @access  Private (HR, Admin, Manager)
+ */
+router.post(
+  '/ai-generate',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.generateAIRoster
+);
+
+/**
+ * @route   GET /api/hr/roster/weekly-enhanced
+ * @desc    Get enhanced weekly roster with staffing summary
+ * @access  Private (HR, Admin, Manager)
+ */
+router.get(
+  '/weekly-enhanced',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.getEnhancedWeeklyRoster
 );
 
 module.exports = router;

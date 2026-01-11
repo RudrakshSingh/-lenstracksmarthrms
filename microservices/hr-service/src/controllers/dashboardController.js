@@ -188,9 +188,77 @@ const getDashboardDepartments = async (req, res, next) => {
   }
 };
 
+/**
+ * Get Unified Dashboard (Main Dashboard)
+ * GET /api/hr/dashboard?role={role}&employeeId={employeeId}
+ */
+const getUnifiedDashboard = async (req, res, next) => {
+  try {
+    const dashboardService = require('../services/dashboard.service');
+    const { role } = req.query;
+    const userId = req.user._id || req.user.id;
+    
+    const userRole = role || req.user.role?.name || 'employee';
+    
+    const dashboardData = await dashboardService.getUnifiedDashboard(userId, userRole);
+    
+    return sendSuccess(res, dashboardData, 'Dashboard data retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getUnifiedDashboard controller', { error: error.message, userId: req.user?._id });
+    return sendError(res, error.message || 'Failed to retrieve dashboard data', 'Internal server error', 500);
+  }
+};
+
+/**
+ * Get Store Manager Dashboard
+ * GET /api/hr/dashboard/store-manager?storeId={storeId}
+ */
+const getStoreDashboard = async (req, res, next) => {
+  try {
+    const dashboardService = require('../services/dashboard.service');
+    const { storeId } = req.query;
+    const managerId = req.user._id || req.user.id;
+    
+    if (!storeId) {
+      return sendError(res, 'Validation error', 'Store ID is required', 400);
+    }
+    
+    const dashboardData = await dashboardService.getStoreDashboard(storeId, managerId);
+    
+    return sendSuccess(res, dashboardData, 'Store dashboard data retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getStoreDashboard controller', { error: error.message, userId: req.user?._id });
+    return sendError(res, error.message || 'Failed to retrieve store dashboard data', 'Internal server error', 500);
+  }
+};
+
+/**
+ * Get HRMS Dashboard
+ * GET /api/hrms/dashboard?role={role}&employeeId={employeeId}
+ */
+const getHRMSDashboard = async (req, res, next) => {
+  try {
+    const dashboardService = require('../services/dashboard.service');
+    const { role } = req.query;
+    const userId = req.user._id || req.user.id;
+    
+    const userRole = role || req.user.role?.name || 'employee';
+    
+    const dashboardData = await dashboardService.getHRMSDashboard(userId, userRole);
+    
+    return sendSuccess(res, dashboardData, 'HRMS dashboard data retrieved successfully', null, 200);
+  } catch (error) {
+    logger.error('Error in getHRMSDashboard controller', { error: error.message, userId: req.user?._id });
+    return sendError(res, error.message || 'Failed to retrieve HRMS dashboard data', 'Internal server error', 500);
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getRecentActivities,
-  getDashboardDepartments
+  getDashboardDepartments,
+  getUnifiedDashboard,
+  getStoreDashboard,
+  getHRMSDashboard
 };
 

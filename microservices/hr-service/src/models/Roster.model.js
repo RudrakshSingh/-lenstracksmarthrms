@@ -55,31 +55,43 @@ const rosterSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  dayOfWeek: {
+    type: String,
+    enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    required: false
+  },
   shift: {
     type: String,
-    enum: ['MORNING', 'EVENING', 'NIGHT', 'FULL_DAY'],
+    enum: ['MORNING', 'EVENING', 'NIGHT', 'FULL_DAY', 'OFF'],
     required: true,
     default: 'MORNING'
   },
   shiftStart: {
     type: String, // Format: "HH:MM" (e.g., "09:00")
-    required: true,
+    required: function() { return this.shift !== 'OFF'; },
     trim: true,
     match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time in HH:MM format']
   },
   shiftEnd: {
     type: String, // Format: "HH:MM" (e.g., "18:00")
-    required: true,
+    required: function() { return this.shift !== 'OFF'; },
     trim: true,
     match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time in HH:MM format']
+  },
+  shiftDuration: {
+    type: Number, // in hours
+    required: false,
+    min: 0,
+    max: 24
   },
 
   // Status
   status: {
     type: String,
-    enum: ['SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW'],
+    enum: ['SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW', 'SWAP_REQUESTED', 'PENDING'],
     default: 'SCHEDULED',
-    required: true
+    required: true,
+    index: true
   },
 
   // Additional Information
@@ -96,6 +108,27 @@ const rosterSchema = new mongoose.Schema({
     min: 0,
     max: 120
   },
+  breakSchedule: [{
+    start: {
+      type: String,
+      required: true,
+      match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time in HH:MM format']
+    },
+    end: {
+      type: String,
+      required: true,
+      match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Please enter a valid time in HH:MM format']
+    },
+    duration: {
+      type: Number,
+      required: true
+    },
+    type: {
+      type: String,
+      enum: ['PAID', 'UNPAID'],
+      default: 'PAID'
+    }
+  }],
 
   // Creation and Update Information
   createdBy: {
@@ -160,9 +193,32 @@ rosterSchema.virtual('workingHours').get(function() {
   return this.shiftDurationHours;
 });
 
-// Pre-save middleware to update timestamps
+// Pre-save middleware to calculate dayOfWeek and shiftDuration
 rosterSchema.pre('save', function(next) {
   this.updatedAt = new Date();
+  
+  // Calculate day of week
+  if (this.date) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    this.dayOfWeek = days[new Date(this.date).getDay()];
+  }
+  
+  // Calculate shift duration
+  if (this.shiftStart && this.shiftEnd && this.shift !== 'OFF') {
+    const [startHour, startMin] = this.shiftStart.split(':').map(Number);
+    const [endHour, endMin] = this.shiftEnd.split(':').map(Number);
+    
+    let durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+    
+    // Handle overnight shifts
+    if (durationMinutes < 0) {
+      durationMinutes += 24 * 60;
+    }
+    
+    // Store duration in hours (with break already handled separately)
+    this.shiftDuration = parseFloat((durationMinutes / 60).toFixed(2));
+  }
+  
   next();
 });
 

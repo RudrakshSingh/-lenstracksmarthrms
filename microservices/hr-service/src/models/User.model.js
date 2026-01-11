@@ -82,7 +82,13 @@ const userSchema = new mongoose.Schema({
   // ============================================
   department: {
     type: String,
-    trim: true
+    trim: true,
+    index: true // Add index for faster queries
+  },
+  departmentRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
+    default: null
   },
   designation: {
     type: String,

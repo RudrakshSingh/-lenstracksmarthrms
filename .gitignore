@@ -143,3 +143,6 @@ ssl/production/private/
 # SSL Private Keys
 private-key.pem
 key.pem
+*.SELFIE*.md
+SELFIE_UPLOAD_COMPLETE.md
+ATTENDANCE_SELFIE_GUIDE.md

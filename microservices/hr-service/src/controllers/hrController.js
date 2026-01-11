@@ -30,7 +30,7 @@ const getEmployees = async (req, res, next) => {
     const { page, limit, skip } = parsePagination(req.query);
     
     // Parse filters
-    const allowedFilters = ['department', 'status', 'store', 'role', 'manager'];
+    const allowedFilters = ['employeeId', 'department', 'status', 'store', 'role', 'manager', 'search'];
     const filters = parseFilters(req.query, allowedFilters);
 
     // Get employees from service

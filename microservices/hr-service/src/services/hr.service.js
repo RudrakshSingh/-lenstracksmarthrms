@@ -2,6 +2,7 @@ const User = require('../models/User.model');
 const Employee = require('../models/Employee.model');
 const Role = require('../models/Role.model');
 const Store = require('../models/Store.model');
+const Department = require('../models/Department.model');
 const mongoose = require('mongoose');
 const { hashPassword } = require('../utils/hashUtils');
 const logger = require('../config/logger');
@@ -9,6 +10,29 @@ const auditUtils = require('../utils/audit');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
 const { createSafeRegex, sanitizeEmployeeId, sanitizeSearchQuery } = require('../../shared/utils/sanitize.util');
+
+/**
+ * Helper function to look up department by name or code
+ * @param {string} departmentNameOrCode - Department name or code
+ * @returns {Promise<Object|null>} Department object or null
+ */
+const findDepartment = async (departmentNameOrCode) => {
+  if (!departmentNameOrCode) return null;
+  
+  try {
+    const dept = await Department.findOne({
+      $or: [
+        { name: { $regex: new RegExp(`^${departmentNameOrCode}$`, 'i') } },
+        { code: departmentNameOrCode.toUpperCase() }
+      ],
+      status: 'active'
+    });
+    return dept;
+  } catch (error) {
+    logger.error('Error finding department', { error: error.message, departmentNameOrCode });
+    return null;
+  }
+};
 
 /**
  * Creates a new employee
@@ -36,7 +60,8 @@ const createEmployee = async (employeeData, createdBy) => {
       // Return existing employee instead of throwing error (for onboarding flow)
       const existing = await User.findById(existingEmployeeId._id)
         .populate('role', 'name permissions')
-        .populate('store', 'name address');
+        .populate('store', 'name address')
+        .populate('departmentRef', 'name code description');
       return existing;
     }
 
@@ -51,7 +76,8 @@ const createEmployee = async (employeeData, createdBy) => {
       // Return existing user instead of throwing error (for onboarding flow)
       const existing = await User.findById(existingUser._id)
         .populate('role', 'name permissions')
-        .populate('store', 'name address');
+        .populate('store', 'name address')
+        .populate('departmentRef', 'name code description');
       return existing;
     }
 
@@ -97,6 +123,24 @@ const createEmployee = async (employeeData, createdBy) => {
       }
     }
 
+    // Handle department lookup
+    let departmentRef = null;
+    if (employeeData.department) {
+      const dept = await findDepartment(employeeData.department);
+      if (dept) {
+        departmentRef = dept._id;
+        logger.info('Department found and linked', { 
+          department: employeeData.department, 
+          departmentId: dept._id,
+          departmentName: dept.name 
+        });
+      } else {
+        logger.warn('Department not found, will store as string only', { 
+          department: employeeData.department 
+        });
+      }
+    }
+
     // Prepare employee data
     const userData = {
       employeeId: normalizedEmployeeId, // Explicitly set employeeId
@@ -105,7 +149,8 @@ const createEmployee = async (employeeData, createdBy) => {
       role: role._id,
       store: store?._id,
       status: 'active',
-      ...rest
+      ...rest,
+      departmentRef // Add department reference
     };
     
     // Ensure firstName/lastName exist (required by User model)
@@ -444,6 +489,7 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
         User.find(query)
           .populate('role', 'name permissions')
           .populate('store', 'name address')
+          .populate('departmentRef', 'name code description')
           .select('-password -refreshToken')
           // .sort({ createdAt: -1 })  // Removed: Cosmos DB index issue
           .skip(skip)
@@ -492,6 +538,7 @@ const getEmployeeById = async (employeeId) => {
       employee = await User.findById(normalizedId)
         .populate('role', 'name permissions')
         .populate('store', 'name address')
+        .populate('departmentRef', 'name code description')
         .lean();
     } else {
       // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-153599"), search by employeeId (camelCase)
@@ -504,6 +551,7 @@ const getEmployeeById = async (employeeId) => {
       })
         .populate('role', 'name permissions')
         .populate('store', 'name address')
+        .populate('departmentRef', 'name code description')
         .lean();
     }
 
@@ -670,7 +718,7 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       query,
       { $set: rest },
       { new: true, runValidators: true }
-    ).populate('role', 'name permissions').populate('store', 'name address');
+    ).populate('role', 'name permissions').populate('store', 'name address').populate('departmentRef', 'name code description');
 
     // ============================================
     // NOTE: All statutory fields now stored directly in User model

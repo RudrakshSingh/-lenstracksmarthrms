@@ -5,50 +5,16 @@ const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 
 /**
- * @route   GET /api/hr/roster
- * @desc    Get roster entries with filters
- * @access  Private (HR, Admin, Manager, Employee)
+ * @route   GET /api/hr/roster/weekly-enhanced
+ * @desc    Get enhanced weekly roster with staffing summary
+ * @access  Private (HR, Admin, Manager)
+ * @note    MUST come before /weekly to avoid route conflict
  */
 router.get(
-  '/',
-  authenticate,
-  rosterController.getRoster
-);
-
-/**
- * @route   POST /api/hr/roster
- * @desc    Create a new roster entry
- * @access  Private (HR, Admin, Manager)
- */
-router.post(
-  '/',
+  '/weekly-enhanced',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
-  rosterController.createRoster
-);
-
-/**
- * @route   PUT /api/hr/roster
- * @desc    Update an existing roster entry
- * @access  Private (HR, Admin, Manager)
- */
-router.put(
-  '/',
-  authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
-  rosterController.updateRoster
-);
-
-/**
- * @route   DELETE /api/hr/roster
- * @desc    Delete a roster entry
- * @access  Private (HR, Admin, Manager)
- */
-router.delete(
-  '/',
-  authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
-  rosterController.deleteRoster
+  rosterController.getEnhancedWeeklyRoster
 );
 
 /**
@@ -61,18 +27,6 @@ router.get(
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
   rosterController.getWeeklyRoster
-);
-
-/**
- * @route   POST /api/hr/roster/bulk
- * @desc    Bulk create roster entries
- * @access  Private (HR, Admin, Manager)
- */
-router.post(
-  '/bulk',
-  authenticate,
-  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
-  rosterController.bulkCreateRoster
 );
 
 /**
@@ -124,15 +78,63 @@ router.post(
 );
 
 /**
- * @route   GET /api/hr/roster/weekly-enhanced
- * @desc    Get enhanced weekly roster with staffing summary
+ * @route   POST /api/hr/roster/bulk
+ * @desc    Bulk create roster entries
  * @access  Private (HR, Admin, Manager)
+ * @note    MUST come before POST / to avoid route conflict
  */
-router.get(
-  '/weekly-enhanced',
+router.post(
+  '/bulk',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
-  rosterController.getEnhancedWeeklyRoster
+  rosterController.bulkCreateRoster
+);
+
+/**
+ * @route   GET /api/hr/roster
+ * @desc    Get roster entries with filters
+ * @access  Private (HR, Admin, Manager, Employee)
+ */
+router.get(
+  '/',
+  authenticate,
+  rosterController.getRoster
+);
+
+/**
+ * @route   POST /api/hr/roster
+ * @desc    Create a new roster entry
+ * @access  Private (HR, Admin, Manager)
+ */
+router.post(
+  '/',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.createRoster
+);
+
+/**
+ * @route   PUT /api/hr/roster
+ * @desc    Update an existing roster entry
+ * @access  Private (HR, Admin, Manager)
+ */
+router.put(
+  '/',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.updateRoster
+);
+
+/**
+ * @route   DELETE /api/hr/roster
+ * @desc    Delete a roster entry
+ * @access  Private (HR, Admin, Manager)
+ */
+router.delete(
+  '/',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.deleteRoster
 );
 
 module.exports = router;

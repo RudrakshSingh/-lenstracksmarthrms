@@ -15,9 +15,22 @@ const server = createServer(app);
 
 const PORT = process.env.PORT || 3021;
 
+// Load environment variables
+require('dotenv').config();
+
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3004",
+    "http://98.70.245.87",
+    "https://98.70.245.87"
+  ],
+  credentials: true
+}));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -34,6 +47,9 @@ realtimeService.initialize(server)
 
 // Compression
 app.use(compression({ level: 6, threshold: 1024 }));
+
+// Import routes
+const eventsRoutes = require('./routes/events.routes');
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -58,6 +74,9 @@ app.get('/api/statistics', (req, res) => {
     data: stats
   });
 });
+
+// Events routes - for other services to trigger real-time events
+app.use('/api/events', eventsRoutes);
 
 // Error handling middleware
 app.use((error, req, res, next) => {

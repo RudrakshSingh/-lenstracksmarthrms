@@ -1,6 +1,7 @@
 const { Server } = require('socket.io');
 const Redis = require('redis');
 const logger = require('../utils/logger');
+const { authenticateSocket } = require('../middleware/auth.middleware');
 
 /**
  * Real-time Data Service
@@ -24,11 +25,23 @@ class RealtimeService {
       // Initialize Socket.IO
       this.io = new Server(server, {
         cors: {
-          origin: "*",
-          methods: ["GET", "POST"]
+          origin: [
+            "http://localhost:3000",
+            "http://localhost:3002",
+            "http://98.70.245.87",
+            "https://98.70.245.87"
+          ],
+          methods: ["GET", "POST"],
+          credentials: true
         },
-        transports: ['websocket', 'polling']
+        transports: ['websocket', 'polling'],
+        path: '/socket.io/',
+        pingTimeout: 60000,
+        pingInterval: 25000
       });
+
+      // Add authentication middleware
+      this.io.use(authenticateSocket);
 
       // Initialize Redis for pub/sub
       await this.initializeRedis();
@@ -39,7 +52,7 @@ class RealtimeService {
       // Set up Redis event handlers
       this.setupRedisHandlers();
 
-      logger.info('Real-time service initialized successfully');
+      logger.info('Real-time service initialized successfully with authentication');
     } catch (error) {
       logger.error('Failed to initialize real-time service:', error);
       throw error;
@@ -79,6 +92,20 @@ class RealtimeService {
     this.io.on('connection', (socket) => {
       logger.info('Client connected to real-time service', {
         socketId: socket.id,
+        userId: socket.userId,
+        tenantId: socket.tenantId,
+        timestamp: new Date().toISOString()
+      });
+
+      // Auto-join user-specific room
+      socket.join(`user:${socket.userId}`);
+      socket.join(`tenant:${socket.tenantId}`);
+
+      // Notify user of successful connection
+      socket.emit('connected', {
+        socketId: socket.id,
+        userId: socket.userId,
+        tenantId: socket.tenantId,
         timestamp: new Date().toISOString()
       });
 
@@ -102,14 +129,55 @@ class RealtimeService {
         this.handleDataRequest(socket, data);
       });
 
+      // ===== FRONTEND-SPECIFIC EVENTS =====
+
+      // Join workforce room (for workforce widgets)
+      socket.on('join:workforce', () => {
+        socket.join('workforce');
+        logger.info(`User ${socket.userId} joined workforce room`);
+        socket.emit('joined:workforce', { success: true });
+      });
+
+      // Join notifications room
+      socket.on('join:notifications', () => {
+        socket.join(`notifications:${socket.userId}`);
+        logger.info(`User ${socket.userId} joined notifications room`);
+        socket.emit('joined:notifications', { success: true });
+      });
+
+      // Join dashboard room
+      socket.on('join:dashboard', () => {
+        socket.join(`dashboard:${socket.tenantId}`);
+        logger.info(`User ${socket.userId} joined dashboard room`);
+        socket.emit('joined:dashboard', { success: true });
+      });
+
+      // Join attendance room
+      socket.on('join:attendance', () => {
+        socket.join(`attendance:${socket.tenantId}`);
+        logger.info(`User ${socket.userId} joined attendance room`);
+        socket.emit('joined:attendance', { success: true });
+      });
+
+      // Join tasks room
+      socket.on('join:tasks', () => {
+        socket.join(`tasks:${socket.userId}`);
+        logger.info(`User ${socket.userId} joined tasks room`);
+        socket.emit('joined:tasks', { success: true });
+      });
+
       // Handle disconnect
-      socket.on('disconnect', () => {
-        this.handleDisconnect(socket);
+      socket.on('disconnect', (reason) => {
+        this.handleDisconnect(socket, reason);
       });
 
       // Handle errors
       socket.on('error', (error) => {
-        logger.error('Socket error:', error);
+        logger.error('Socket error:', {
+          socketId: socket.id,
+          userId: socket.userId,
+          error: error.message
+        });
       });
     });
   }
@@ -290,7 +358,7 @@ class RealtimeService {
   /**
    * Handle client disconnect
    */
-  handleDisconnect(socket) {
+  handleDisconnect(socket, reason) {
     try {
       const clientInfo = this.connectedClients.get(socket.id);
       
@@ -310,8 +378,16 @@ class RealtimeService {
 
         logger.info('Client disconnected from real-time service', {
           socketId: socket.id,
+          userId: socket.userId,
           tenantId,
+          reason,
           connectedAt: clientInfo.connectedAt
+        });
+      } else {
+        logger.info('Client disconnected (no stored info)', {
+          socketId: socket.id,
+          userId: socket.userId,
+          reason
         });
       }
 
@@ -430,6 +506,124 @@ class RealtimeService {
         clientCount: clients.size
       }))
     };
+  }
+
+  // ===== PUBLIC METHODS FOR EMITTING EVENTS =====
+
+  /**
+   * Send notification to specific user
+   * @param {string} userId - User ID
+   * @param {object} notification - Notification data
+   */
+  sendNotificationToUser(userId, notification) {
+    this.io.to(`user:${userId}`).emit('notification:new', {
+      ...notification,
+      timestamp: notification.timestamp || new Date().toISOString()
+    });
+    logger.info(`Notification sent to user ${userId}`, { userId, notification });
+  }
+
+  /**
+   * Broadcast dashboard stats update
+   * @param {string} tenantId - Tenant ID
+   * @param {object} stats - Dashboard statistics
+   */
+  broadcastDashboardUpdate(tenantId, stats) {
+    this.io.to(`dashboard:${tenantId}`).emit('dashboard:stats_update', {
+      ...stats,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`Dashboard update broadcasted to tenant ${tenantId}`);
+  }
+
+  /**
+   * Broadcast attendance update
+   * @param {string} tenantId - Tenant ID
+   * @param {object} attendanceData - Attendance data
+   */
+  broadcastAttendanceUpdate(tenantId, attendanceData) {
+    this.io.to(`attendance:${tenantId}`).emit('attendance:update', {
+      ...attendanceData,
+      timestamp: new Date().toISOString()
+    });
+
+    // Also send check_in event for specific action
+    if (attendanceData.action === 'check_in') {
+      this.io.to(`attendance:${tenantId}`).emit('attendance:check_in', {
+        ...attendanceData,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    logger.info(`Attendance update broadcasted to tenant ${tenantId}`, { attendanceData });
+  }
+
+  /**
+   * Send task assignment to user
+   * @param {string} userId - User ID
+   * @param {object} task - Task data
+   */
+  sendTaskToUser(userId, task) {
+    this.io.to(`user:${userId}`).emit('task:assigned', {
+      ...task,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`Task assigned to user ${userId}`, { userId, task });
+  }
+
+  /**
+   * Send time tracking event to user
+   * @param {string} userId - User ID
+   * @param {object} timeTrackingData - Time tracking data
+   */
+  sendTimeTrackingToUser(userId, timeTrackingData) {
+    const event = timeTrackingData.action === 'start' ? 'time_tracking:start' : 'time_tracking:update';
+    
+    this.io.to(`user:${userId}`).emit(event, {
+      ...timeTrackingData,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`Time tracking event sent to user ${userId}`, { userId, event, timeTrackingData });
+  }
+
+  /**
+   * Broadcast to workforce room
+   * @param {string} eventName - Event name
+   * @param {object} data - Event data
+   */
+  broadcastToWorkforce(eventName, data) {
+    this.io.to('workforce').emit(eventName, {
+      ...data,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`Broadcasted ${eventName} to workforce`);
+  }
+
+  /**
+   * Send event to specific user
+   * @param {string} userId - User ID
+   * @param {string} eventName - Event name
+   * @param {object} data - Event data
+   */
+  sendToUser(userId, eventName, data) {
+    this.io.to(`user:${userId}`).emit(eventName, {
+      ...data,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`Event ${eventName} sent to user ${userId}`);
+  }
+
+  /**
+   * Broadcast to all connected clients
+   * @param {string} eventName - Event name
+   * @param {object} data - Event data
+   */
+  broadcastToAll(eventName, data) {
+    this.io.emit(eventName, {
+      ...data,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`Event ${eventName} broadcasted to all clients`);
   }
 
   /**

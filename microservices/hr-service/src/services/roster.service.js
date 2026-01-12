@@ -7,6 +7,7 @@ const logger = require('../config/logger');
 const mongoose = require('mongoose');
 const axios = require('axios');
 
+// Deployment trigger: 2026-01-12 20:51 - Force pipeline execution
 // Attendance service URL for fetching historical data
 const ATTENDANCE_SERVICE_URL = process.env.ATTENDANCE_SERVICE_URL || 'http://attendance-service:3004';
 

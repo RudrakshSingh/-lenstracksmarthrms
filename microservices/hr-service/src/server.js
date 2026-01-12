@@ -708,7 +708,7 @@ const loadRoutes = () => {
   
   try {
     const rosterRoutes = require('./routes/roster.routes.js');
-    app.use('/api/hr', apiRateLimit, rosterRoutes);
+    app.use('/api/hr/roster', apiRateLimit, rosterRoutes);
     routesLoaded.push('roster.routes.js');
     logger.info('roster.routes.js loaded successfully');
   } catch (error) {

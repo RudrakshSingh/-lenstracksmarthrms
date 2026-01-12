@@ -1,5 +1,6 @@
 const authService = require('../services/auth.service');
 const logger = require('../config/logger');
+const realtimeClient = require('../utils/realtime.client');
 
 /**
  * Register a new user
@@ -33,6 +34,16 @@ const register = async (req, res, next) => {
       // Use a system user ID for createdBy
       const result = await authService.register(userData, 'system');
 
+      // Send realtime notification
+      if (result.user && result.user._id) {
+        realtimeClient.sendNotification(result.user._id, {
+          id: `reg-${Date.now()}`,
+          title: 'Welcome to Etelios HRMS!',
+          message: 'Your admin account has been created successfully',
+          type: 'success'
+        }).catch(err => logger.warn('Failed to send realtime notification', { error: err.message }));
+      }
+
       return res.status(201).json({
         success: true,
         message: 'Admin user registered successfully',
@@ -49,6 +60,16 @@ const register = async (req, res, next) => {
     }
 
     const result = await authService.register(userData, createdBy);
+
+    // Send realtime notification
+    if (result.user && result.user._id) {
+      realtimeClient.sendNotification(result.user._id, {
+        id: `reg-${Date.now()}`,
+        title: 'Account Created',
+        message: `Welcome ${result.user.firstName || result.user.email}! Your account has been created successfully`,
+        type: 'success'
+      }).catch(err => logger.warn('Failed to send realtime notification', { error: err.message }));
+    }
 
     res.status(201).json({
       success: true,
@@ -117,6 +138,16 @@ const login = async (req, res, next) => {
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
     const result = await authService.login(emailOrEmployeeId, password, ip, userAgent);
+
+    // Send realtime notification
+    if (result.user && result.user._id) {
+      realtimeClient.sendNotification(result.user._id, {
+        id: `login-${Date.now()}`,
+        title: 'Login Successful',
+        message: `Welcome back, ${result.user.firstName || result.user.email}!`,
+        type: 'info'
+      }).catch(err => logger.warn('Failed to send realtime notification', { error: err.message }));
+    }
 
     res.status(200).json({
       success: true,

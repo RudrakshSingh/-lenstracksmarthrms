@@ -4,6 +4,7 @@ const { upload, uploadToCloudinary } = require('../middleware/upload.middleware'
 const Attendance = require('../models/Attendance.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
+const realtimeClient = require('../utils/realtime.client');
 const { 
   sendSuccess, 
   sendError, 
@@ -117,6 +118,28 @@ const clockIn = async (req, res, next) => {
         checks: securityResult.securityChecks
       }
     };
+
+    // Send realtime notifications
+    const userId = req.user._id;
+    const tenantId = req.tenantId || 'default';
+
+    // Notify user
+    realtimeClient.sendNotification(userId, {
+      id: `clock-in-${Date.now()}`,
+      title: 'Clocked In',
+      message: securityResult.action === 'FLAG' 
+        ? 'Clock-in recorded but flagged for review' 
+        : 'Clock-in recorded successfully',
+      type: securityResult.action === 'FLAG' ? 'warning' : 'success'
+    }).catch(err => logger.warn('Failed to send realtime notification', { error: err.message }));
+
+    // Broadcast attendance update
+    realtimeClient.broadcastAttendance(tenantId, {
+      employeeId: attendance.employeeId,
+      action: 'check_in',
+      timestamp: attendance.clockInTime || new Date().toISOString(),
+      location: `${latitude}, ${longitude}`
+    }).catch(err => logger.warn('Failed to broadcast attendance update', { error: err.message }));
 
     return sendSuccess(res, responseData, 
       securityResult.action === 'FLAG' 
@@ -236,6 +259,28 @@ const clockOut = async (req, res, next) => {
         checks: securityResult.securityChecks
       }
     };
+
+    // Send realtime notifications
+    const userId = req.user._id;
+    const tenantId = req.tenantId || 'default';
+
+    // Notify user
+    realtimeClient.sendNotification(userId, {
+      id: `clock-out-${Date.now()}`,
+      title: 'Clocked Out',
+      message: securityResult.action === 'FLAG' 
+        ? 'Clock-out recorded but flagged for review' 
+        : 'Clock-out recorded successfully',
+      type: securityResult.action === 'FLAG' ? 'warning' : 'success'
+    }).catch(err => logger.warn('Failed to send realtime notification', { error: err.message }));
+
+    // Broadcast attendance update
+    realtimeClient.broadcastAttendance(tenantId, {
+      employeeId: attendance.employeeId,
+      action: 'check_out',
+      timestamp: attendance.clockOutTime || new Date().toISOString(),
+      location: `${latitude}, ${longitude}`
+    }).catch(err => logger.warn('Failed to broadcast attendance update', { error: err.message }));
 
     return sendSuccess(res, responseData, 
       securityResult.action === 'FLAG' 

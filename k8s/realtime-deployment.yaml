@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-service
+  namespace: etelios-backend-prod
+  labels:
+    app: realtime-service
+    version: v1
+    tier: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: realtime-service
+  template:
+    metadata:
+      labels:
+        app: realtime-service
+        version: v1
+    spec:
+      containers:
+      - name: realtime-service
+        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/realtime-service:latest
+        ports:
+        - containerPort: 3021
+          name: http
+          protocol: TCP
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3021"
+        - name: SERVICE_NAME
+          value: "realtime-service"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: jwt-secret
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: redis-url
+              optional: true
+        - name: ALLOWED_ORIGINS
+          value: "http://localhost:3000,http://localhost:3002,http://98.70.245.87,https://98.70.245.87"
+        - name: SOCKET_PING_TIMEOUT
+          value: "60000"
+        - name: SOCKET_PING_INTERVAL
+          value: "25000"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3021
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3021
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      imagePullSecrets:
+      - name: acr-secret
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtime-service
+  namespace: etelios-backend-prod
+  labels:
+    app: realtime-service
+spec:
+  type: ClusterIP
+  selector:
+    app: realtime-service
+  ports:
+  - name: http
+    port: 3021
+    targetPort: 3021
+    protocol: TCP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+

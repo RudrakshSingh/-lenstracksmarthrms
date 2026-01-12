@@ -2,6 +2,7 @@ const HRService = require('../services/hr.service');
 const logger = require('../config/logger');
 const Department = require('../models/Department.model');
 const User = require('../models/User.model');
+const realtimeClient = require('../utils/realtime.client');
 const { 
   sendSuccess, 
   sendError, 
@@ -144,6 +145,25 @@ const createEmployee = async (req, res, next) => {
 
     // Format response
     const formattedEmployee = formatEmployee(employee);
+
+    // Send realtime notifications
+    if (employee && employee.userId) {
+      // Notify the new employee
+      realtimeClient.sendNotification(employee.userId, {
+        id: `emp-created-${Date.now()}`,
+        title: 'Employee Profile Created',
+        message: `Welcome ${employee.fullName || employee.firstName}! Your employee profile has been created`,
+        type: 'success'
+      }).catch(err => logger.warn('Failed to send realtime notification', { error: err.message }));
+
+      // Broadcast dashboard update to update employee count
+      const tenantId = req.tenantId || 'default';
+      realtimeClient.broadcastDashboard(tenantId, {
+        event: 'employee_created',
+        employeeId: employee.employeeId,
+        timestamp: new Date().toISOString()
+      }).catch(err => logger.warn('Failed to broadcast dashboard update', { error: err.message }));
+    }
 
     // Send standardized response
     return sendSuccess(res, formattedEmployee, 'Employee created successfully', null, 201);

@@ -189,6 +189,7 @@ const storeSchema = new mongoose.Schema({
 // Indexes (remove duplicates of field-level indexes)
 storeSchema.index({ coordinates: '2dsphere' });
 storeSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+storeSchema.index({ tenantId: 1, name: 1 }, { unique: true }); // Prevent duplicate store names per tenant
 
 // Virtual for storeCode (alias for code)
 storeSchema.virtual('storeCode').get(function() {

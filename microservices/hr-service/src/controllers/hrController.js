@@ -480,7 +480,18 @@ const createStore = async (req, res, next) => {
 
     return sendSuccess(res, store, 'Store created successfully', null, 201);
   } catch (error) {
-    logger.error('Error in createStore controller', { error: error.message, userId: req.user?._id || req.user?.id });
+    logger.error('Error in createStore controller', { error: error.message, code: error.code, userId: req.user?._id || req.user?.id });
+    
+    // Handle duplicate key error (store name or code already exists)
+    if (error.code === 11000) {
+      const duplicateField = error.message.includes('name') ? 'name' : 'code';
+      return sendError(
+        res, 
+        `Store ${duplicateField} already exists`, 
+        `A store with this ${duplicateField} already exists in your organization`, 
+        409
+      );
+    }
     
     if (error.message && error.message.includes('unavailable')) {
       return sendServiceUnavailable(res, 'create store');
@@ -539,7 +550,18 @@ const updateStore = async (req, res, next) => {
 
     return sendSuccess(res, store, 'Store updated successfully', null, 200);
   } catch (error) {
-    logger.error('Error in updateStore controller', { error: error.message, userId: req.user?._id });
+    logger.error('Error in updateStore controller', { error: error.message, code: error.code, userId: req.user?._id });
+    
+    // Handle duplicate key error (store name or code already exists)
+    if (error.code === 11000) {
+      const duplicateField = error.message.includes('name') ? 'name' : 'code';
+      return sendError(
+        res, 
+        `Store ${duplicateField} already exists`, 
+        `A store with this ${duplicateField} already exists in your organization`, 
+        409
+      );
+    }
     
     if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
       return sendNotFound(res, 'Store', req.params.id);

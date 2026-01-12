@@ -458,6 +458,8 @@ stages:
                 TAG="$(IMAGE_TAG)"
                 LOGIN="$(ACR_LOGIN_SERVER)"
                 echo "Injecting tag ${TAG} into manifests for login server ${LOGIN}"
+                echo "Replacing '__IMAGE_TAG__' placeholder with build tag..."
+                find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|__IMAGE_TAG__|${TAG}|g"
                 echo "Replacing 'latest' in image references with build tag..."
                 find k8s -name "*.yaml" -print0 | xargs -0 sed -i "s|${LOGIN}/\\([^:]*\\):latest|${LOGIN}/\\1:${TAG}|g"
                 echo "Replacing 'version: \"latest\"' in labels with build tag (quoted)..."

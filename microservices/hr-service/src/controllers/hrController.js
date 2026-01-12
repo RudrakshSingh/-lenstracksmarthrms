@@ -741,18 +741,32 @@ const getDepartmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const department = await Department.findById(id)
-      .populate('head', 'fullName employeeId email')
-      .lean();
+    // Try to find by MongoDB ObjectId first, then by code (dept-1, dept-2, etc.)
+    let department;
+    try {
+      department = await Department.findById(id)
+        .populate('head', 'fullName employeeId email')
+        .lean();
+    } catch (castError) {
+      // If ObjectId cast fails, try finding by code
+      logger.info('ObjectId cast failed, searching by code', { id });
+    }
+
+    // If not found by _id, try finding by code
+    if (!department) {
+      department = await Department.findOne({ code: id })
+        .populate('head', 'fullName employeeId email')
+        .lean();
+    }
 
     if (!department) {
       return sendNotFound(res, 'Department', id);
     }
 
-    // Get employee count
+    // Get employee count using department._id
     const employeeCount = await User.countDocuments({
       isDeleted: { $ne: true },
-      department: id,
+      department: department._id.toString(),
       status: { $in: ['active', 'ACTIVE'] }
     });
 
@@ -833,11 +847,27 @@ const updateDepartment = async (req, res, next) => {
       updateData.code = updateData.code.toUpperCase();
     }
 
-    const department = await Department.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('head', 'fullName employeeId email');
+    // Try to find by MongoDB ObjectId first, then by code
+    let department;
+    try {
+      department = await Department.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate('head', 'fullName employeeId email');
+    } catch (castError) {
+      // If ObjectId cast fails, try finding by code
+      logger.info('ObjectId cast failed, searching by code', { id });
+    }
+
+    // If not found by _id, try finding by code and updating
+    if (!department) {
+      department = await Department.findOneAndUpdate(
+        { code: id },
+        updateData,
+        { new: true, runValidators: true }
+      ).populate('head', 'fullName employeeId email');
+    }
 
     if (!department) {
       return sendNotFound(res, 'Department', id);
@@ -867,21 +897,36 @@ const deleteDepartment = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Check if department has employees
+    // First, try to find the department to get its _id
+    let department;
+    try {
+      department = await Department.findById(id);
+    } catch (castError) {
+      // If ObjectId cast fails, try finding by code
+      logger.info('ObjectId cast failed, searching by code', { id });
+    }
+
+    // If not found by _id, try finding by code
+    if (!department) {
+      department = await Department.findOne({ code: id });
+    }
+
+    if (!department) {
+      return sendNotFound(res, 'Department', id);
+    }
+
+    // Check if department has employees using the department's _id
     const employeeCount = await User.countDocuments({
       isDeleted: { $ne: true },
-      department: id
+      department: department._id.toString()
     });
 
     if (employeeCount > 0) {
       return sendError(res, 'Cannot delete department', `Department has ${employeeCount} employees. Please reassign them first.`, 400);
     }
 
-    const department = await Department.findByIdAndDelete(id);
-
-    if (!department) {
-      return sendNotFound(res, 'Department', id);
-    }
+    // Delete the department
+    await Department.findByIdAndDelete(department._id);
 
     return sendSuccess(res, null, 'Department deleted successfully', null, 200);
   } catch (error) {

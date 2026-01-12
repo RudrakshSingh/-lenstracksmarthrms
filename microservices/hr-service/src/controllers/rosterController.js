@@ -1,5 +1,5 @@
 const RosterService = require('../services/roster.service');
-const { sendSuccess, sendError } = require('../../../shared/utils/response.util');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
 const logger = require('../config/logger');
 
 /**

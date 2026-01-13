@@ -49,7 +49,7 @@ class RosterService {
         Roster.find(query)
           .populate('employee', 'firstName lastName email phone employeeId')
           .populate('store', 'name code address')
-          .sort({ date: 1, shiftStart: 1 })
+          .sort({ date: 1 })
           .skip(skip)
           .limit(limit)
           .lean(),

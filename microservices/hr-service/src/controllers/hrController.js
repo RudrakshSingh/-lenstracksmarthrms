@@ -716,13 +716,24 @@ const assignStoreManager = async (req, res, next) => {
  */
 const getDepartments = async (req, res, next) => {
   try {
-    // Try to get from database first
-    // Removed .sort({ name: 1 }) - Cosmos DB index issue
-    let departments = await Department.find({ is_active: true })
-      .select('name code description')
+    // Get all active departments from database
+    // Using status: 'active' to match Department model schema
+    let departments = await Department.find({ status: 'active' })
+      .select('_id name code description created_at updated_at')
       .lean();
 
-    // If no departments in DB, return default list
+    // Transform to include id field and format consistently
+    departments = departments.map(dept => ({
+      id: dept._id.toString(),
+      _id: dept._id,
+      name: dept.name,
+      code: dept.code,
+      description: dept.description || '',
+      created_at: dept.created_at,
+      updated_at: dept.updated_at
+    }));
+
+    // If no departments in DB, return default list as fallback
     if (!departments || departments.length === 0) {
       departments = [
         { id: 'dept-1', name: 'Sales', code: 'SALES', description: 'Sales Department' },
@@ -734,11 +745,12 @@ const getDepartments = async (req, res, next) => {
         { id: 'dept-7', name: 'Delivery', code: 'DELIVERY', description: 'Delivery Department' },
         { id: 'dept-8', name: 'Franchise', code: 'FRANCHISE', description: 'Franchise Department' }
       ];
+      logger.info('No departments in database, returning default list');
     }
 
     return sendSuccess(res, departments, 'Departments retrieved successfully', null, 200);
   } catch (error) {
-    logger.error('Error in getDepartments controller', { error: error.message });
+    logger.error('Error in getDepartments controller', { error: error.message, stack: error.stack });
     
     // Return default departments even on error
     const defaultDepartments = [
@@ -751,6 +763,7 @@ const getDepartments = async (req, res, next) => {
       { id: 'dept-7', name: 'Delivery', code: 'DELIVERY', description: 'Delivery Department' },
       { id: 'dept-8', name: 'Franchise', code: 'FRANCHISE', description: 'Franchise Department' }
     ];
+    logger.warn('Returning default departments due to error');
     return sendSuccess(res, defaultDepartments, 'Departments retrieved (default list)', null, 200);
   }
 };

@@ -658,10 +658,21 @@ const loadRoutes = () => {
     app.use('/api/documents', apiRateLimit, documentRoutes);
     app.use('/api/hr/documents', apiRateLimit, documentRoutes);
     routesLoaded.push('document.routes.js');
-    logger.info('document.routes.js loaded successfully at /api/documents and /api/hr/documents');
+    
+    // Log registered routes for debugging
+    const routeCount = documentRoutes.stack ? documentRoutes.stack.length : 0;
+    logger.info('document.routes.js loaded successfully', {
+      paths: ['/api/documents', '/api/hr/documents'],
+      routeCount: routeCount,
+      routes: documentRoutes.stack ? documentRoutes.stack.map(r => `${r.route?.methods || 'ALL'} ${r.route?.path || r.regexp}`) : []
+    });
   } catch (error) {
     routesFailed.push({ route: 'document.routes.js', error: error.message });
-    logger.error('document.routes.js failed to load', { error: error.message, stack: error.stack });
+    logger.error('document.routes.js failed to load', { 
+      error: error.message, 
+      stack: error.stack,
+      details: 'Check route file syntax and dependencies'
+    });
   }
   
   try {

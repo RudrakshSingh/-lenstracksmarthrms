@@ -11,10 +11,13 @@ trigger:
       - 'docs/*'
 
 variables:
+  # NOTE:
+  # ACR_NAME must be the short registry name (alphanumeric, no dots)
+  # ACR_LOGIN_SERVER is the full FQDN used for docker login/push
   - name: ACR_NAME
-    value: 'eteliosacr-hvawabdbgge7e0fu'
+    value: 'eteliosacr'  # short name (existing registry)
   - name: ACR_LOGIN_SERVER
-    value: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'
+    value: 'eteliosacr-hvawabdbgge7e0fu.azurecr.io'  # full login server
   - name: AKS_RESOURCE_GROUP
     value: 'Etelios-AKS-RG'
   - name: AKS_CLUSTER_NAME

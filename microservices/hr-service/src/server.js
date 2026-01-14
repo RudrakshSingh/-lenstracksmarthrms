@@ -653,19 +653,40 @@ const loadRoutes = () => {
   }
   
   try {
+    logger.info('Loading document.routes.js...');
     const documentRoutes = require('./routes/document.routes.js');
+    
+    if (!documentRoutes) {
+      throw new Error('document.routes.js did not export router');
+    }
+    
+    // Verify routes are registered
+    const routeCount = documentRoutes.stack ? documentRoutes.stack.length : 0;
+    if (routeCount === 0) {
+      throw new Error('document.routes.js has no routes registered');
+    }
+    
     // Mount at both /api/documents and /api/hr/documents for compatibility
     app.use('/api/documents', apiRateLimit, documentRoutes);
     app.use('/api/hr/documents', apiRateLimit, documentRoutes);
     routesLoaded.push('document.routes.js');
     
     // Log registered routes for debugging
-    const routeCount = documentRoutes.stack ? documentRoutes.stack.length : 0;
+    const routeList = documentRoutes.stack ? documentRoutes.stack.map(r => {
+      const methods = r.route ? Object.keys(r.route.methods).join(',').toUpperCase() : 'ALL';
+      const path = r.route ? r.route.path : r.regexp.toString();
+      return `${methods} ${path}`;
+    }) : [];
+    
     logger.info('document.routes.js loaded successfully', {
       paths: ['/api/documents', '/api/hr/documents'],
       routeCount: routeCount,
-      routes: documentRoutes.stack ? documentRoutes.stack.map(r => `${r.route?.methods || 'ALL'} ${r.route?.path || r.regexp}`) : []
+      routes: routeList
     });
+    
+    // Also log to console for immediate visibility
+    console.log('✅ document.routes.js loaded:', routeCount, 'routes');
+    console.log('   Routes:', routeList.join(', '));
   } catch (error) {
     routesFailed.push({ route: 'document.routes.js', error: error.message });
     logger.error('document.routes.js failed to load', { 
@@ -673,6 +694,8 @@ const loadRoutes = () => {
       stack: error.stack,
       details: 'Check route file syntax and dependencies'
     });
+    console.error('❌ document.routes.js failed to load:', error.message);
+    console.error('   Stack:', error.stack);
   }
   
   try {

@@ -3,7 +3,6 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const documentController = require('../controllers/documentController');
-const logger = require('../config/logger');
 
 // Health check route for documents (no auth required for testing)
 router.get('/health', (req, res) => {

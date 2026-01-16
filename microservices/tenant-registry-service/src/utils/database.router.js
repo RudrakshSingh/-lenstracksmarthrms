@@ -26,15 +26,20 @@ class DatabaseRouter {
         logger.warn('REGISTRY_DATABASE_URL not set. Using local MongoDB.');
       }
       
-      // Get target database name - prioritize env vars, but ensure it's MAIN database
-      let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME;
+      // Get target database name - registry DB (tenant metadata) should be separate from tenant DB.
+      // Default registry DB is `tenant_registry_db` unless explicitly set.
+      let targetDbName =
+        process.env.TENANT_REGISTRY_DB_NAME ||
+        process.env.DB_NAME ||
+        process.env.MONGO_DB_NAME;
       
-      // If no env var or env var contains "test", use main production database
+      // If no env var or env var contains "test", use main registry database
       if (!targetDbName || targetDbName.toLowerCase().includes('test')) {
-        targetDbName = 'tenant-db';
-        if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test')) {
-          logger.error('⚠️  ERROR: MONGO_DB_NAME contains "test"! Using main production database instead.', {
-            provided: process.env.MONGO_DB_NAME,
+        targetDbName = 'tenant_registry_db';
+        if ((process.env.DB_NAME && process.env.DB_NAME.toLowerCase().includes('test')) ||
+            (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.toLowerCase().includes('test'))) {
+          logger.error('⚠️  ERROR: DB_NAME/MONGO_DB_NAME contains "test"! Using main registry database instead.', {
+            provided: process.env.DB_NAME || process.env.MONGO_DB_NAME,
             using: targetDbName
           });
         }
@@ -123,9 +128,19 @@ class DatabaseRouter {
         logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
       }
       
-      this.registryConnection = await mongoose.createConnection(registryUrl, connectionOptions);
+      // IMPORTANT:
+      // The Tenant model is defined using `mongoose.model(...)` (default connection).
+      // So the registry DB MUST be connected via `mongoose.connect(...)` to avoid buffering timeouts.
+      if (mongoose.connection.readyState !== 1) {
+        await mongoose.connect(registryUrl, connectionOptions);
+      }
+      this.registryConnection = mongoose.connection;
       
-      const actualDbName = this.registryConnection.name;
+      const actualDbName =
+        this.registryConnection?.db?.databaseName ||
+        this.registryConnection?.name ||
+        targetDbName ||
+        '';
       logger.info('═══════════════════════════════════════════════════════');
       logger.info('✅ tenant-registry-service: Registry database connected successfully');
       logger.info('═══════════════════════════════════════════════════════', {
@@ -135,7 +150,7 @@ class DatabaseRouter {
         readyState: this.registryConnection.readyState
       });
       
-      if (actualDbName.toLowerCase().includes('test')) {
+      if (typeof actualDbName === 'string' && actualDbName.toLowerCase().includes('test')) {
         logger.error('❌ CRITICAL ERROR: Connected to TEST database!', {
           database: actualDbName,
           expected: targetDbName
@@ -171,17 +186,60 @@ class DatabaseRouter {
         }
       }
 
-      // Create new connection - use tenant-db for all tenants
-      const databaseName = 'tenant-db';
-      const tenantUrl = process.env.TENANT_DATABASE_URL || `mongodb://localhost:27017/${databaseName}`;
-      
-      const connection = await mongoose.createConnection(tenantUrl, {
+      // Create new connection - use ONE shared tenant database in Cosmos/Mongo.
+      // Production requirement: we may only have ONE Cosmos connection string + a DB name in env.
+      const databaseName =
+        process.env.TENANT_DB_NAME ||
+        process.env.DB_NAME ||
+        process.env.MONGO_DB_NAME ||
+        'tenant-db';
+
+      // Prefer explicit tenant DB URL, otherwise fall back to the same Mongo/Cosmos URL used for registry.
+      let tenantUrl =
+        process.env.TENANT_DATABASE_URL ||
+        process.env.REGISTRY_DATABASE_URL ||
+        process.env.MONGO_URI ||
+        process.env.MONGODB_URI ||
+        `mongodb://localhost:27017/${databaseName}`;
+
+      // Ensure URL includes the database name (Cosmos often provides a URL without /dbName)
+      try {
+        const url = new URL(tenantUrl);
+        url.pathname = `/${databaseName}`;
+        tenantUrl = url.toString();
+      } catch (e) {
+        // Fallback for non-standard parsing
+        if (tenantUrl.includes('?')) {
+          tenantUrl = tenantUrl.replace(/\?.*$/, '') + `/${databaseName}` + tenantUrl.substring(tenantUrl.indexOf('?'));
+        } else if (!tenantUrl.match(/\/[^/]+$/)) {
+          tenantUrl = tenantUrl.replace(/\/$/, '') + `/${databaseName}`;
+        } else {
+          tenantUrl = tenantUrl.replace(/\/[^/?]+(\?|$)/, `/${databaseName}$1`);
+        }
+      }
+
+      const isCosmosDB = tenantUrl.includes('cosmos.azure.com') || tenantUrl.includes('documents.azure.com');
+      const connectionOptions = {
         useNewUrlParser: true,
         useUnifiedTopology: true,
         maxPoolSize: 5,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
-      });
+        serverSelectionTimeoutMS: 30000,
+        socketTimeoutMS: 60000,
+        connectTimeoutMS: 30000,
+        retryWrites: true,
+        retryReads: true,
+        dbName: databaseName
+      };
+
+      if (isCosmosDB) {
+        connectionOptions.tls = true;
+        connectionOptions.tlsInsecure = false;
+        connectionOptions.retryWrites = true;
+      }
+
+      // mongoose.createConnection returns immediately; wait for it to actually connect so `connection.db` exists.
+      const connection = mongoose.createConnection(tenantUrl, connectionOptions);
+      await connection.asPromise();
 
       // Store connection
       this.connections.set(tenantId, connection);

@@ -13,7 +13,7 @@ const logger = require('../config/logger');
  */
 const fastMockLogin = async (req, res, next) => {
   try {
-    const { role = 'hr', email, employeeId, name } = req.body;
+    const { role = 'hr', email, employeeId, name, tenantId } = req.body;
     
     // Validate role
     const validRoles = ['admin', 'hr', 'manager', 'employee', 'superadmin'];
@@ -43,7 +43,9 @@ const fastMockLogin = async (req, res, next) => {
     // Generate tokens (synchronous - fast)
     const accessToken = generateAccessToken({ 
       userId: mockUserId, 
-      role: role 
+      role: role,
+      tenantId: tenantId || 'mock-tenant',
+      employee_id: mockEmployeeId
     });
     const refreshToken = generateRefreshToken({ 
       userId: mockUserId 

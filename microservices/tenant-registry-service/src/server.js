@@ -12,6 +12,7 @@ const logger = require('./utils/logger');
 
 // Import routes
 const tenantRoutes = require('./routes/tenant.routes');
+const adminMfeCompatRoutes = require('./routes/adminMfeCompat.routes');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -41,7 +42,14 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With']
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Request-ID',
+    'X-Requested-With',
+    'X-Tenant-Id',
+    'X-Company-Id'
+  ]
 }));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
@@ -64,6 +72,9 @@ app.use(compression({ level: 6, threshold: 1024 }));
 app.use('/api/tenants', tenantRoutes);
 // Also support /api/admin/tenants for documentation compatibility
 app.use('/api/admin/tenants', tenantRoutes);
+
+// Admin MFE compatibility routes (matches frontend docs)
+app.use('/api', adminMfeCompatRoutes);
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
@@ -164,9 +175,14 @@ process.on('SIGINT', async () => {
 });
 
 // Start server
-server.listen(PORT, () => {
+// IMPORTANT:
+// - In Kubernetes, the service must bind to 0.0.0.0 (pod IP), not 127.0.0.1.
+// - For local development you can set HOST=127.0.0.1.
+const HOST = process.env.HOST || '0.0.0.0';
+server.listen(PORT, HOST, () => {
   logger.info(`🚀 Tenant Registry Service started on port ${PORT}`, {
     port: PORT,
+    host: HOST,
     environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString()
   });

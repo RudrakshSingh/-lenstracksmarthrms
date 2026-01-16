@@ -1018,6 +1018,11 @@ const addDocuments = async (employeeId, documentsData, uploadedBy) => {
         // Add new document
         user.onboardingDocuments.push(newDoc);
       }
+
+      // If PHOTO is uploaded during onboarding, keep avatar in sync
+      if (newDoc.type === 'PHOTO' && newDoc.url) {
+        user.avatar = newDoc.url;
+      }
     });
 
     await user.save();

@@ -11,8 +11,14 @@ router.use(tenantRateLimit(1000, 60000)); // 1000 requests per minute
 // Create tenant - requires superadmin
 router.post('/', authenticate, requireRole(['superadmin', 'super-admin', 'admin']), tenantController.createTenant);
 
+// Tenant stats (Admin MFE) - MUST be before /:tenantId
+router.get('/stats', authenticate, requireRole(['superadmin', 'super-admin', 'admin']), tenantController.getTenantStats);
+
 // List tenants - requires superadmin
 router.get('/', authenticate, requireRole(['superadmin', 'super-admin', 'admin']), tenantController.listTenants);
+
+// Suspend tenant (Admin MFE) - MUST be before /:tenantId
+router.post('/:tenantId/suspend', authenticate, requireRole(['superadmin', 'super-admin', 'admin']), tenantController.suspendTenant);
 
 // Get tenant by ID - requires superadmin
 router.get('/:tenantId', authenticate, requireRole(['superadmin', 'super-admin', 'admin']), tenantController.getTenant);

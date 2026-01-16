@@ -60,6 +60,8 @@ class AuthService {
         stores,
         reporting_manager
       } = userData;
+      const mustChangePassword = userData.mustChangePassword === true;
+      const passwordTemporary = userData.passwordTemporary === true;
 
       // Check if user already exists
       const existingUser = await User.findOne({
@@ -144,6 +146,8 @@ class AuthService {
         joining_date: joining_date || new Date(), // Default to current date if not provided
         stores,
         reporting_manager,
+        mustChangePassword,
+        passwordTemporary,
         created_by: createdBy
       });
 
@@ -153,6 +157,7 @@ class AuthService {
       const accessToken = generateAccessToken({ 
         userId: user._id, 
         role: user.role,
+        tenantId: user.tenantId, // Multi-tenant scoping (safe additive claim)
         employee_id: user.employee_id // ← CRITICAL: Include for attendance/HR services
       });
       const refreshToken = generateRefreshToken({ userId: user._id });
@@ -288,7 +293,10 @@ class AuthService {
       return {
         user: user.getPublicProfile(),
         accessToken,
-        refreshToken
+        refreshToken,
+        // Tenant creation flow support: frontend can use this to show "change password" screen
+        mustChangePassword: !!user.mustChangePassword,
+        passwordTemporary: !!user.passwordTemporary
       };
 
     } catch (error) {
@@ -413,6 +421,10 @@ class AuthService {
 
       // Update password
       user.password = newPassword;
+      // Clear temporary password flags (after this, flow should behave exactly like before)
+      user.mustChangePassword = false;
+      user.passwordTemporary = false;
+      user.passwordChangedAt = new Date();
       await user.save();
 
       // Remove all refresh tokens to force re-login

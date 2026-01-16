@@ -41,3 +41,10 @@ data:
   # Enable/Disable Features
   ENABLE_ROLE_SEEDING: "false"
 
+  # =========================
+  # Database selection
+  # =========================
+  # We use ONE Cosmos/Mongo connection string (from Secret MONGO_URI) and pick DB names via env.
+  # tenant-registry-service uses these env vars in src/utils/database.router.js
+  DB_NAME: "tenant-db"
+  TENANT_DB_NAME: "tenant-db"

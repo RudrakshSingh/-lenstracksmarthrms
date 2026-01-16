@@ -5,6 +5,7 @@ const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
 const asyncHandler = require('../utils/asyncHandler');
+const { uploadSingle } = require('../middleware/upload.middleware');
 const Joi = require('joi');
 
 // Validation schemas
@@ -245,6 +246,18 @@ router.post(
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(documentsSchema),
   asyncHandler(onboardingController.addDocuments)
+);
+
+/**
+ * Upload onboarding image/document (PHOTO, SIGNATURE, etc.)
+ * @route POST /api/hr/onboarding/upload
+ */
+router.post(
+  '/onboarding/upload',
+  authenticate,
+  requireRole(['hr', 'admin', 'superadmin']),
+  uploadSingle('file'),
+  asyncHandler(onboardingController.uploadOnboardingDocument)
 );
 
 /**

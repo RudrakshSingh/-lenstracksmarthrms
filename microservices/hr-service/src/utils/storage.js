@@ -33,26 +33,86 @@ class StorageService {
     const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
     const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY;
     const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+    const sasUrl = process.env.AZURE_STORAGE_SAS_URL;
+    const sasToken = process.env.AZURE_STORAGE_SAS_TOKEN;
     
+    // Priority 1: SAS URL (full URL with container)
+    if (sasUrl) {
+      // If it's a full URL, extract account and container
+      if (sasUrl.startsWith('https://')) {
+        try {
+          const url = new URL(sasUrl);
+          const accountNameFromUrl = url.hostname.split('.')[0];
+          // Extract container from path or use env var
+          const containerFromPath = url.pathname.split('/').filter(p => p)[0];
+          this.containerName = containerFromPath || process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-images';
+          // Use SAS URL directly
+          this.blobServiceClient = new BlobServiceClient(sasUrl);
+          logger.info('Azure Blob Storage initialized with SAS URL', { 
+            container: this.containerName,
+            accountName: accountNameFromUrl
+          });
+          return;
+        } catch (error) {
+          logger.warn('Failed to parse SAS URL, falling back to other methods', { error: error.message });
+        }
+      } else {
+        // SAS URL is just the query string, need account name
+        if (accountName) {
+          const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-images';
+          const fullSasUrl = `https://${accountName}.blob.core.windows.net/${containerName}?${sasUrl}`;
+          this.containerName = containerName;
+          this.blobServiceClient = new BlobServiceClient(fullSasUrl);
+          logger.info('Azure Blob Storage initialized with SAS token + account name', { 
+            container: this.containerName,
+            accountName
+          });
+          return;
+        } else {
+          throw new Error('AZURE_STORAGE_SAS_URL provided but AZURE_STORAGE_ACCOUNT_NAME is required when SAS URL is just query string');
+        }
+      }
+    }
+    
+    // Priority 2: SAS Token + Account Name
+    if (sasToken && accountName) {
+      const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-images';
+      const fullSasUrl = `https://${accountName}.blob.core.windows.net/${containerName}?${sasToken}`;
+      this.containerName = containerName;
+      this.blobServiceClient = new BlobServiceClient(fullSasUrl);
+      logger.info('Azure Blob Storage initialized with SAS token', { 
+        container: this.containerName,
+        accountName
+      });
+      return;
+    }
+    
+    // Priority 3: Connection String
     if (connectionString) {
       this.blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
-    } else if (accountName && accountKey) {
+      this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-documents';
+      logger.info('Azure Blob Storage initialized with connection string', { 
+        container: this.containerName
+      });
+      return;
+    }
+    
+    // Priority 4: Account Name + Key
+    if (accountName && accountKey) {
       const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
       this.blobServiceClient = new BlobServiceClient(
         `https://${accountName}.blob.core.windows.net`,
         sharedKeyCredential
       );
-    } else {
-      throw new Error('Azure Storage credentials not provided. Set AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_NAME and AZURE_STORAGE_ACCOUNT_KEY');
+      this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-documents';
+      logger.info('Azure Blob Storage initialized with account key', { 
+        container: this.containerName,
+        accountName
+      });
+      return;
     }
-
-    this.containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-documents';
-    this.encryptionKey = process.env.AZURE_STORAGE_ENCRYPTION_KEY;
     
-    logger.info('Azure Blob Storage initialized', { 
-      container: this.containerName,
-      accountName: accountName || 'from-connection-string'
-    });
+    throw new Error('Azure Storage credentials not provided. Set one of: AZURE_STORAGE_SAS_URL, AZURE_STORAGE_SAS_TOKEN+AZURE_STORAGE_ACCOUNT_NAME, AZURE_STORAGE_CONNECTION_STRING, or AZURE_STORAGE_ACCOUNT_NAME+AZURE_STORAGE_ACCOUNT_KEY');
   }
 
   initializeCloudinary() {

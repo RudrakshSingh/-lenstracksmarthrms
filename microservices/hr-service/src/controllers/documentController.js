@@ -123,7 +123,9 @@ const uploadDocument = async (req, res, next) => {
       upload_date: documentData.upload_date,
       employee_id: documentData.employee_id,
       status: documentData.status,
-      category: documentData.category
+      category: documentData.category,
+      file_url: documentData.file_url, // Azure Blob Storage URL
+      storage_provider: documentData.storage_provider // 'azure' or 'local'
     }, 'Document uploaded successfully', null, 201);
 
   } catch (error) {

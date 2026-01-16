@@ -29,7 +29,8 @@ const userSchema = new mongoose.Schema({
     required: true,
     lowercase: true,
     trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    // Allow modern valid emails including '+' tags (e.g. admin+foo@domain.com)
+    match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email']
   },
   phone: {
     type: String,
@@ -275,6 +276,21 @@ const userSchema = new mongoose.Schema({
   is_active: {
     type: Boolean,
     default: true
+  },
+  
+  // Temporary password flow (tenant creation / first login)
+  // If true, frontend should force user to change password after first login.
+  mustChangePassword: {
+    type: Boolean,
+    default: false
+  },
+  // If true, indicates password was system-generated / temporary.
+  passwordTemporary: {
+    type: Boolean,
+    default: false
+  },
+  passwordChangedAt: {
+    type: Date
   },
   last_login: {
     type: Date

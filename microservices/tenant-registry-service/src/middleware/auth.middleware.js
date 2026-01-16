@@ -41,7 +41,9 @@ const authenticate = async (req, res, next) => {
     // Verify token
     let decoded;
     try {
-      const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'fallback-secret';
+      // Keep fallback consistent with auth-service default to make local dev work even without .env
+      // auth-service default: 'etelios-dev-secret-key-2024'
+      const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'etelios-dev-secret-key-2024';
       decoded = jwt.verify(token, JWT_SECRET);
     } catch (error) {
       if (error.name === 'JsonWebTokenError') {

@@ -41,7 +41,7 @@ spec:
           value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
         envFrom:
         - configMapRef:
-            name: etelios-config
+            name: etelios-config-prod
         - secretRef:
             name: etelios-secrets
         resources:

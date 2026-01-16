@@ -2,6 +2,8 @@ const onboardingService = require('../services/onboarding.service');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const httpStatus = require('http-status');
+const path = require('path');
+const { BlobServiceClient, StorageSharedKeyCredential } = require('@azure/storage-blob');
 
 /**
  * Step 1: Register basic information
@@ -251,11 +253,157 @@ const addDocuments = async (req, res, next) => {
   }
 };
 
+/**
+ * Upload onboarding image/document (PHOTO, SIGNATURE, etc.) and save to onboardingDocuments
+ * @route POST /api/hr/onboarding/upload
+ * @access Private (HR, Admin, SuperAdmin)
+ */
+const uploadOnboardingDocument = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'NO_FILE', 'No file uploaded');
+    }
+
+    const employee_id = req.body.employee_id || req.body.employeeId;
+    const document_type = (req.body.document_type || req.body.type || 'PHOTO').toUpperCase();
+
+    if (!employee_id) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'EMPLOYEE_ID_REQUIRED', 'employee_id is required');
+    }
+
+    const allowedTypes = [
+      'AADHAR',
+      'PAN',
+      'PASSPORT',
+      'DRIVING_LICENSE',
+      'EDUCATION_CERTIFICATE',
+      'EXPERIENCE_CERTIFICATE',
+      'BANK_STATEMENT',
+      'PHOTO',
+      'SIGNATURE',
+      'OTHER'
+    ];
+    if (!allowedTypes.includes(document_type)) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_DOCUMENT_TYPE', `Invalid document_type. Valid types: ${allowedTypes.join(', ')}`);
+    }
+
+    // Upload to Azure Blob Storage.
+    // Primary: shared SAS-based uploader (used by document upload).
+    // Fallback: connection string / account+key credentials if provided.
+    let blobUrl = null;
+    try {
+      const azureBlobStorage = require('../../../shared/utils/azureBlobStorage');
+      if (azureBlobStorage.isConfigured()) {
+        // (SAS URL/token mode)
+        // We'll upload later once filename is built.
+      }
+    } catch (e) {
+      // Ignore: fallback handled below
+    }
+
+    const safeExt = path.extname(req.file.originalname || '').toLowerCase() || '';
+    const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}${safeExt}`;
+    const filename = `${employee_id.toUpperCase()}-${document_type}-${safeName}`;
+
+    // 1) Try shared SAS uploader
+    try {
+      const azureBlobStorage = require('../../../shared/utils/azureBlobStorage');
+      if (azureBlobStorage.isConfigured()) {
+        const uploadResult = await azureBlobStorage.uploadFile(req.file.buffer, filename, {
+          mimeType: req.file.mimetype,
+          folder: 'onboarding',
+          originalName: req.file.originalname,
+          metadata: {
+            'employee-id': employee_id.toUpperCase(),
+            'document-type': document_type
+          }
+        });
+        blobUrl = uploadResult.url;
+      }
+    } catch (e) {
+      logger.warn('SAS-based Azure upload failed, will try connection-string credentials', { error: e.message });
+    }
+
+    // 2) Fallback: connection string / account key credentials
+    if (!blobUrl) {
+      const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+      const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+      const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY;
+      const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-images';
+
+      if (!connectionString && !(accountName && accountKey)) {
+        throw new ApiError(
+          httpStatus.SERVICE_UNAVAILABLE,
+          'AZURE_BLOB_NOT_CONFIGURED',
+          'Azure Blob Storage is not configured. Set AZURE_STORAGE_SAS_URL/SAS_TOKEN or AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_NAME+AZURE_STORAGE_ACCOUNT_KEY'
+        );
+      }
+
+      const blobServiceClient = connectionString
+        ? BlobServiceClient.fromConnectionString(connectionString)
+        : new BlobServiceClient(
+            `https://${accountName}.blob.core.windows.net`,
+            new StorageSharedKeyCredential(accountName, accountKey)
+          );
+
+      const containerClient = blobServiceClient.getContainerClient(containerName);
+      await containerClient.createIfNotExists();
+      const blobName = `onboarding/${filename}`;
+      const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+      await blockBlobClient.upload(req.file.buffer, req.file.buffer.length, {
+        blobHTTPHeaders: {
+          blobContentType: req.file.mimetype
+        },
+        metadata: {
+          'employee-id': employee_id.toUpperCase(),
+          'document-type': document_type,
+          'original-name': req.file.originalname
+        }
+      });
+      blobUrl = blockBlobClient.url;
+    }
+
+    const uploadedBy = req.user?.id || req.user?._id;
+    const saveResult = await onboardingService.addDocuments(
+      employee_id,
+      {
+        documents: [
+          {
+            type: document_type,
+            file_name: req.file.originalname,
+            url: blobUrl
+          }
+        ]
+      },
+      uploadedBy
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Onboarding document uploaded successfully',
+      data: {
+        employee_id: employee_id.toUpperCase(),
+        document_type,
+        file_name: req.file.originalname,
+        mime_type: req.file.mimetype,
+        file_size: req.file.size,
+        url: blobUrl,
+        storage_provider: 'azure',
+        onboarding: saveResult
+      }
+    });
+  } catch (error) {
+    logger.error('Upload onboarding document error', { error: error.message, stack: error.stack });
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   addPersonalDetails,
   addWorkDetails,
   addStatutoryInfo,
+  uploadOnboardingDocument,
   addDocuments,
   completeOnboarding,
   saveDraft,

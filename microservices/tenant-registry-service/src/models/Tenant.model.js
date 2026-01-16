@@ -83,7 +83,15 @@ const tenantSchema = new mongoose.Schema({
   adminUser: {
     userId: { type: String },
     email: { type: String, lowercase: true, trim: true },
-    name: { type: String, trim: true }
+    name: { type: String, trim: true },
+    role: { type: String, default: 'admin' }
+  },
+  // Tenant-level Super Admin (Azure-like)
+  superAdminUser: {
+    userId: { type: String },
+    email: { type: String, lowercase: true, trim: true },
+    name: { type: String, trim: true },
+    role: { type: String, default: 'superadmin' }
   },
   database: { 
     type: String, 

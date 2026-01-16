@@ -438,8 +438,8 @@ stages:
                   ls -la k8s/*.yaml 2>/dev/null || echo "No .yaml files found"
                   exit 1
                 fi
-                if [ ! -f "k8s/configmap.yaml" ]; then
-                  echo "❌ Error: k8s/configmap.yaml not found"
+                if [ ! -f "k8s/prod/configmap.yaml" ]; then
+                  echo "❌ Error: k8s/prod/configmap.yaml not found"
                   exit 1
                 fi
                 if [ ! -f "k8s/api-gateway.yaml" ]; then
@@ -498,7 +498,8 @@ stages:
               script: |
                 set -e
                 echo "Applying ConfigMap..."
-                kubectl apply --validate=false -f k8s/configmap.yaml -n $(NAMESPACE)
+                # Apply production ConfigMap
+                kubectl apply --validate=false -f k8s/prod/configmap.yaml -n $(NAMESPACE)
                 echo "✅ ConfigMap applied"
           
           - task: Bash@3

@@ -165,6 +165,12 @@ class TenantController {
         technicalEmail: value.primaryEmail || value.email
       };
 
+      // Persist plan in a format that matches the Tenant model enum (lowercase keys)
+      // Controller accepts "Basic/Professional/Enterprise/Trial/Enterprise Plus" for UX, but DB stores normalized keys.
+      let planKey = (planName || 'Basic').toLowerCase();
+      if (planKey === 'trial') planKey = 'basic';
+      if (planKey === 'enterprise plus' || planKey === 'enterprise-plus') planKey = 'enterprise';
+
       // Create tenant data
       const tenantData = {
         tenantId,
@@ -177,7 +183,7 @@ class TenantController {
         database,
         address: addressObj,
         contact,
-        plan: planName,
+        plan: planKey,
         modules: value.modules || [],
         planDetails: {
           name: planDetails.name,
@@ -231,26 +237,51 @@ class TenantController {
       // Create tenant database
       await databaseRouter.createTenantDatabase(tenantId);
 
-      // Create admin user if email provided
-      let adminUser = null;
+      // Create admin and super admin users if email provided
+      // Similar to Microsoft Azure tenant creation - creates default admin users with temporary passwords
+      let adminUsers = null;
       if (value.email) {
         try {
-          adminUser = await adminUserService.createAdminUser({
+          adminUsers = await adminUserService.createAdminUsers({
             name: contact.primaryContact,
             email: contact.primaryEmail,
             phone: contact.primaryPhone
-          }, tenantId, value.name);
+          }, tenantId, value.name, {
+            // Forward platform token (required by auth-service /register unless it's the first user)
+            authorization: req.headers.authorization || req.headers.Authorization
+          });
           
-          if (adminUser) {
-            tenant.adminUser = {
-              userId: adminUser.userId,
-              email: adminUser.email,
-              name: adminUser.name
-            };
+          if (adminUsers) {
+            // Store admin user info (use admin as primary, super admin as secondary)
+            if (adminUsers.admin) {
+              tenant.adminUser = {
+                userId: adminUsers.admin.userId,
+                email: adminUsers.admin.email,
+                name: adminUsers.admin.name,
+                role: 'admin'
+              };
+            }
+            
+            // Store super admin user info
+            if (adminUsers.superAdmin) {
+              tenant.superAdminUser = {
+                userId: adminUsers.superAdmin.userId,
+                email: adminUsers.superAdmin.email,
+                name: adminUsers.superAdmin.name,
+                role: 'superadmin'
+              };
+            }
+            
             await tenant.save();
+            
+            logger.info('Admin users created for tenant', {
+              tenantId,
+              adminEmail: adminUsers.admin?.email,
+              superAdminEmail: adminUsers.superAdmin?.email
+            });
           }
         } catch (error) {
-          logger.warn('Admin user creation failed, continuing without admin user', {
+          logger.warn('Admin users creation failed, continuing without admin users', {
             error: error.message,
             tenantId
           });
@@ -310,15 +341,38 @@ class TenantController {
         message: 'Tenant created successfully'
       };
 
-      // Add admin user info if created
-      if (adminUser) {
-        response.data.adminUser = {
-          id: adminUser.userId,
-          email: adminUser.email,
-          name: adminUser.name,
-          employeeId: adminUser.employeeId,
-          temporaryPassword: adminUser.temporaryPassword
-        };
+      // Add admin and super admin users info if created
+      // Similar to Microsoft Azure tenant creation response
+      if (adminUsers) {
+        // Admin user (primary contact)
+        if (adminUsers.admin) {
+          response.data.adminUser = {
+            id: adminUsers.admin.userId,
+            email: adminUsers.admin.email,
+            name: adminUsers.admin.name,
+            employeeId: adminUsers.admin.employeeId,
+            role: 'admin',
+            temporaryPassword: adminUsers.admin.temporaryPassword,
+            mustChangePassword: true
+          };
+        }
+        
+        // Super Admin user (highest privilege)
+        if (adminUsers.superAdmin) {
+          response.data.superAdminUser = {
+            id: adminUsers.superAdmin.userId,
+            email: adminUsers.superAdmin.email,
+            name: adminUsers.superAdmin.name,
+            employeeId: adminUsers.superAdmin.employeeId,
+            role: 'superadmin',
+            temporaryPassword: adminUsers.superAdmin.temporaryPassword,
+            mustChangePassword: true
+          };
+        }
+        
+        // Important: Temporary passwords must be changed on first login
+        response.data.passwordChangeRequired = true;
+        response.data.passwordChangeMessage = 'Please change your temporary password on first login. Admin and Super Admin can change passwords from their profile settings.';
       }
 
       res.status(201).json(response);
@@ -350,9 +404,32 @@ class TenantController {
         });
       }
 
+      // Admin MFE documented shape (read-only company overview)
+      const adminMfeData = {
+        id: tenant._id?.toString(),
+        name: tenant.name,
+        domain: tenant.domain,
+        email: tenant.email,
+        phone: tenant.phone || tenant.contact?.primaryPhone || null,
+        status: tenant.status,
+        plan: tenant.plan,
+        users: tenant.usage?.currentUsers || 0,
+        createdAt: tenant.createdAt?.toISOString?.() || tenant.createdAt,
+        lastActive: tenant.analytics?.lastLogin || null,
+        revenue: tenant.analytics?.totalRevenue || 0,
+        address: tenant.address?.street || null,
+        city: tenant.address?.city || null,
+        country: tenant.address?.country || null
+      };
+
+      // Backward compatible payload includes both:
+      // - `data` in Admin MFE shape
+      // - `legacy` for older consumers
       res.json({
         success: true,
-        data: {
+        data: adminMfeData,
+        message: 'Company retrieved successfully',
+        legacy: {
           tenantId: tenant.tenantId,
           tenantName: tenant.tenantName,
           domain: tenant.domain,
@@ -387,6 +464,16 @@ class TenantController {
    */
   async updateTenant(req, res) {
     try {
+      // Admin MFE contract: Platform Admin cannot update company details
+      // Allow override for internal tooling if explicitly enabled.
+      if (process.env.ALLOW_PLATFORM_TENANT_UPDATE !== 'true') {
+        return res.status(403).json({
+          success: false,
+          error: 'FORBIDDEN',
+          message: 'Platform Admin cannot update company details. This endpoint is disabled by policy.'
+        });
+      }
+
       const { tenantId } = req.params;
 
       // Validate input
@@ -519,28 +606,153 @@ class TenantController {
   }
 
   /**
+   * Suspend tenant (Admin MFE)
+   * POST /api/tenants/:tenantId/suspend
+   */
+  async suspendTenant(req, res) {
+    try {
+      const { tenantId } = req.params;
+      const { reason } = req.body || {};
+
+      const tenant = await Tenant.findOne({ tenantId });
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          message: `Company with ID ${tenantId} not found`,
+          error: 'TENANT_NOT_FOUND'
+        });
+      }
+
+      tenant.status = 'suspended';
+      // Best-effort: store reason in analytics/details (schema tolerates mixed objects)
+      tenant.analytics = tenant.analytics || {};
+      tenant.analytics.lastSuspendedAt = new Date();
+      tenant.analytics.lastSuspensionReason = reason || null;
+      await tenant.save();
+
+      logger.info('Tenant suspended', { tenantId, reason: reason || null });
+
+      return res.json({
+        success: true,
+        message: 'Company suspended successfully',
+        data: {
+          id: tenant._id?.toString(),
+          tenantId: tenant.tenantId,
+          status: tenant.status,
+          suspendedAt: tenant.analytics.lastSuspendedAt
+        }
+      });
+    } catch (error) {
+      logger.error('Suspend tenant failed:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'SUSPEND_TENANT_ERROR',
+        message: 'Failed to suspend company'
+      });
+    }
+  }
+
+  /**
+   * Tenant statistics (Admin MFE)
+   * GET /api/tenants/stats
+   */
+  async getTenantStats(req, res) {
+    try {
+      const [total, active, inactive, suspended] = await Promise.all([
+        Tenant.countDocuments({}),
+        Tenant.countDocuments({ status: 'active' }),
+        Tenant.countDocuments({ status: 'inactive' }),
+        Tenant.countDocuments({ status: 'suspended' })
+      ]);
+
+      const byPlanAgg = await Tenant.aggregate([
+        { $group: { _id: '$plan', count: { $sum: 1 } } }
+      ]);
+      const byPlan = {};
+      byPlanAgg.forEach((p) => {
+        byPlan[p._id || 'unknown'] = p.count;
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          total,
+          active,
+          inactive,
+          suspended,
+          byPlan
+        }
+      });
+    } catch (error) {
+      logger.error('Tenant stats failed:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'TENANT_STATS_ERROR',
+        message: 'Failed to get tenant statistics'
+      });
+    }
+  }
+
+  /**
    * List all tenants
    */
   async listTenants(req, res) {
     try {
-      const { page = 1, limit = 10, status, plan } = req.query;
+      const page = parseInt(req.query.page || '1', 10) || 1;
+      const limit = Math.min(parseInt(req.query.limit || '10', 10) || 10, 100);
       const skip = (page - 1) * limit;
 
+      const status = req.query.status;
+      const plan = req.query.plan;
+      const search = (req.query.search || '').toString().trim();
+
       const filter = {};
-      if (status) filter.status = status;
+      if (status && status !== 'all') filter.status = status;
       if (plan) filter.plan = plan;
+      if (search) {
+        filter.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { tenantName: { $regex: search, $options: 'i' } },
+          { domain: { $regex: search, $options: 'i' } },
+          { subdomain: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ];
+      }
 
       const tenants = await Tenant.find(filter)
         .select('-__v')
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limit)
         .sort({ createdAt: -1 });
 
       const total = await Tenant.countDocuments(filter);
+      const totalPages = Math.ceil(total / limit);
 
+      // Admin MFE documented response shape (top-level array + pagination fields)
+      const mfeTenants = tenants.map((t) => ({
+        id: t._id?.toString(),
+        name: t.name,
+        domain: t.domain,
+        status: t.status,
+        plan: t.plan,
+        users: t.usage?.currentUsers || 0,
+        createdAt: t.createdAt?.toISOString?.() || t.createdAt,
+        lastActive: t.analytics?.lastLogin || null,
+        revenue: t.analytics?.totalRevenue || 0
+      }));
+
+      // Backward compatible payload includes BOTH formats:
+      // - `data` as array (Admin MFE doc)
+      // - `legacy` for older consumers expecting {tenants,pagination}
       res.json({
         success: true,
-        data: {
+        data: mfeTenants,
+        total,
+        page,
+        limit,
+        totalPages,
+        message: 'Companies retrieved successfully',
+        legacy: {
           tenants: tenants.map(tenant => ({
             tenantId: tenant.tenantId,
             tenantName: tenant.tenantName,
@@ -554,10 +766,10 @@ class TenantController {
             createdAt: tenant.createdAt
           })),
           pagination: {
-            page: parseInt(page),
-            limit: parseInt(limit),
+            page,
+            limit,
             total,
-            pages: Math.ceil(total / limit)
+            pages: totalPages
           }
         }
       });

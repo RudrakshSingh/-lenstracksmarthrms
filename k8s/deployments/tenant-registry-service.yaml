@@ -39,9 +39,26 @@ spec:
           value: "true"
         - name: API_GATEWAY_HOST
           value: "etelios-aks-dns-6vulk62q.hcp.centralindia.azmk8s.io"
+        # DB connection (match auth/hr pattern):
+        # - Registry DB (tenant registry metadata): dedicated Cosmos DB via TENANT_REGISTRY_SERVICE_DB_URI
+        # - Tenant DB (tenant data): shared Cosmos DB name via TENANT_DB_NAME
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: etelios-secrets
+              key: TENANT_REGISTRY_SERVICE_DB_URI
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: etelios-secrets
+              key: TENANT_REGISTRY_SERVICE_DB_URI
+        - name: DB_NAME
+          value: "tenant_registry_db"
+        - name: TENANT_DB_NAME
+          value: "tenant-db"
         envFrom:
         - configMapRef:
-            name: etelios-config
+            name: etelios-config-prod
         - secretRef:
             name: etelios-secrets
         resources:

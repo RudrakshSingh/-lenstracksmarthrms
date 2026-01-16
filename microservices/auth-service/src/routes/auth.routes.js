@@ -43,6 +43,12 @@ const loginSchema = {
 
 const registerSchema = {
   body: Joi.object({
+    // Multi-tenant support (required by User model)
+    // Optional for backward compatibility; auth.service will default to 'default'
+    tenantId: Joi.string().optional().trim().min(1).max(100).default('default')
+      .messages({
+        'string.min': 'tenantId cannot be empty'
+      }),
     employee_id: Joi.string().required().trim().min(3).max(50)
       .pattern(/^[A-Z0-9_-]+$/i, 'alphanumeric with hyphens/underscores')
       .messages({
@@ -80,7 +86,26 @@ const registerSchema = {
     department: Joi.string().optional().trim().max(100),
     designation: Joi.string().optional().trim().max(100),
     joining_date: Joi.date().optional(),
-    status: Joi.string().valid('active', 'inactive', 'pending').default('active')
+    status: Joi.string().valid('active', 'inactive', 'pending').default('active'),
+
+    // Tenant creation / first-login flow (Azure-like)
+    mustChangePassword: Joi.boolean().optional().default(false),
+    passwordTemporary: Joi.boolean().optional().default(false)
+  })
+};
+
+const changePasswordSchema = {
+  body: Joi.object({
+    currentPassword: Joi.string().required().min(6).max(128),
+    newPassword: Joi.string()
+      .required()
+      .min(8)
+      .max(128)
+      .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, 'password strength')
+      .messages({
+        'string.pattern.name': 'New password must contain at least one uppercase letter, one lowercase letter, and one number',
+        'string.min': 'New password must be at least 8 characters long'
+      })
   })
 };
 
@@ -125,6 +150,13 @@ router.get("/profile",
 router.get("/me",
   authenticate,
   authController.getProfile
+);
+
+// Change password (used by tenant temporary password first-login flow)
+router.post("/change-password",
+  authenticate,
+  validateRequest(changePasswordSchema),
+  authController.changePassword
 );
 
 module.exports = router;

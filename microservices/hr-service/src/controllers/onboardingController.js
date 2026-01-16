@@ -261,14 +261,15 @@ const addDocuments = async (req, res, next) => {
 const uploadOnboardingDocument = async (req, res, next) => {
   try {
     if (!req.file) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'NO_FILE', 'No file uploaded');
+      // ApiError signature: (statusCode, message, isOperational, stack, errorCode)
+      throw new ApiError(httpStatus.BAD_REQUEST, 'No file uploaded', true, '', 'NO_FILE');
     }
 
     const employee_id = req.body.employee_id || req.body.employeeId;
     const document_type = (req.body.document_type || req.body.type || 'PHOTO').toUpperCase();
 
     if (!employee_id) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'EMPLOYEE_ID_REQUIRED', 'employee_id is required');
+      throw new ApiError(httpStatus.BAD_REQUEST, 'employee_id is required', true, '', 'EMPLOYEE_ID_REQUIRED');
     }
 
     const allowedTypes = [
@@ -284,7 +285,13 @@ const uploadOnboardingDocument = async (req, res, next) => {
       'OTHER'
     ];
     if (!allowedTypes.includes(document_type)) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_DOCUMENT_TYPE', `Invalid document_type. Valid types: ${allowedTypes.join(', ')}`);
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Invalid document_type. Valid types: ${allowedTypes.join(', ')}`,
+        true,
+        '',
+        'INVALID_DOCUMENT_TYPE'
+      );
     }
 
     // Upload to Azure Blob Storage.

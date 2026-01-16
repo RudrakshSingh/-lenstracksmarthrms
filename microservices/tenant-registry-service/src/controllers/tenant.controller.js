@@ -723,7 +723,9 @@ class TenantController {
         .select('-__v')
         .skip(skip)
         .limit(limit)
-        .sort({ createdAt: -1 });
+        // Cosmos DB can throw "index path ... excluded" on ORDER BY for non-indexed fields.
+        // Avoid ORDER BY here to keep the endpoint working without index changes.
+        // .sort({ createdAt: -1 });
 
       const total = await Tenant.countDocuments(filter);
       const totalPages = Math.ceil(total / limit);

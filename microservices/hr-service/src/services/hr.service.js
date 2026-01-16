@@ -8,7 +8,8 @@ const { hashPassword } = require('../utils/hashUtils');
 const logger = require('../config/logger');
 const auditUtils = require('../utils/audit');
 const ApiError = require('../utils/ApiError');
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 const { createSafeRegex, sanitizeEmployeeId, sanitizeSearchQuery } = require('../../shared/utils/sanitize.util');
 
 /**

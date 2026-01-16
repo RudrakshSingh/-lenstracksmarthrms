@@ -125,6 +125,63 @@ spec:
             name: tenant-registry-service
             port:
               number: 3020
+      # Admin MFE compatibility endpoints (served by tenant-registry-service)
+      - path: /api/platform
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/system
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/admin
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/activities
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/users
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/roles
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/branches
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/organizations
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
       - path: /tenant-registry/health
         pathType: Exact
         backend:
@@ -337,6 +394,63 @@ spec:
             name: attendance-service
             port:
               number: 3003
+      # Admin MFE compatibility endpoints (served by tenant-registry-service)
+      - path: /api/platform
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/system
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/admin
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/activities
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/users
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/roles
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/branches
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/organizations
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
       - path: /api/geofencing
         pathType: Prefix
         backend:

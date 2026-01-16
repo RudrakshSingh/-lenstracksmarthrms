@@ -2,7 +2,8 @@ const Tenant = require('../models/Tenant.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 const crypto = require('crypto');
 
 /**

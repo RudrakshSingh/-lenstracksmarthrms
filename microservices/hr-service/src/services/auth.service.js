@@ -5,7 +5,8 @@ const { generateAccessToken, generateRefreshToken } = require('../config/jwt');
 const auditUtils = require('../utils/audit');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 const crypto = require('crypto');
 
 // Use logAuthEvent for audit logging

@@ -5,7 +5,8 @@ const User = require('../models/User.model');
 const mongoose = require('mongoose');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 
 class LeaveManagementService {
   

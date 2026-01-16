@@ -48,7 +48,8 @@ const validateRequest = (schema) => {
 
       if (Object.keys(errors).length > 0) {
         const ApiError = require('../utils/ApiError');
-        const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 
         const errorMessages = Object.values(errors).flat().join(', ');
         const validationError = new ApiError(httpStatus.BAD_REQUEST, `Validation failed: ${errorMessages}`);

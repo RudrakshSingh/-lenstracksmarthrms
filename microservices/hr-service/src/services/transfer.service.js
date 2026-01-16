@@ -7,7 +7,8 @@ const { sendTransferNotificationEmail } = require('../jobs/emailJobs');
 const TransferWorkflows = require('../jobs/transferWorkflows');
 const { addJob } = require('../utils/queueUtils');
 const ApiError = require('../utils/ApiError');
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 
 /**
  * Creates a transfer request

@@ -1,7 +1,8 @@
 const onboardingService = require('../services/onboarding.service');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 const path = require('path');
 const { BlobServiceClient, StorageSharedKeyCredential } = require('@azure/storage-blob');
 

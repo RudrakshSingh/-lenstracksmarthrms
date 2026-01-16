@@ -1,4 +1,5 @@
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 
 class ApiError extends Error {
   constructor(statusCode, message, isOperational = true, stack = '', errorCode = null) {

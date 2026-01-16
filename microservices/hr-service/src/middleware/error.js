@@ -1,4 +1,5 @@
-const httpStatus = require('http-status');
+const httpStatusPkg = require('http-status');
+const httpStatus = httpStatusPkg.default || httpStatusPkg;
 const ApiError = require('../utils/ApiError');
 const logger = require('../config/logger');
 

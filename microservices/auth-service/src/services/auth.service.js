@@ -638,38 +638,6 @@ class AuthService {
   async updateUser(userId, updateData) {
     return this.updateUserProfile(userId, updateData);
   }
-
-  /**
-   * Change user password
-   * @param {string} userId - User ID
-   * @param {string} currentPassword - Current password
-   * @param {string} newPassword - New password
-   * @returns {Promise<void>}
-   */
-  async changePassword(userId, currentPassword, newPassword) {
-    try {
-      const user = await User.findById(userId);
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      // Verify current password
-      const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-      if (!isCurrentPasswordValid) {
-        throw new Error('Current password is incorrect');
-      }
-
-      // Update password
-      user.password = newPassword;
-      await user.save();
-
-      logger.info('Password changed successfully', { userId });
-
-    } catch (error) {
-      logger.error('Failed to change password', { error: error.message, userId });
-      throw error;
-    }
-  }
 }
 
 module.exports = new AuthService();

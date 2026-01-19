@@ -18,6 +18,7 @@ const registerSchema = {
     password: Joi.string().min(8).required(),
     role: Joi.string().valid('employee', 'hr', 'manager', 'admin', 'superadmin').default('employee'),
     date_of_birth: Joi.date().optional(),
+    gender: Joi.string().valid('Male', 'Female', 'Other').optional(),
     address: Joi.object({
       address_line_1: Joi.string().optional(),
       street: Joi.string().optional(),
@@ -45,6 +46,15 @@ const workDetailsSchema = {
     reporting_manager_id: Joi.string().allow(null, '').optional(), // Make reporting_manager_id optional
     employee_status: Joi.string().valid('ACTIVE', 'PENDING', 'INACTIVE').default('ACTIVE'),
     base_salary: Joi.number().min(0).optional(),
+    annual_ctc: Joi.number().min(0).optional(),
+    salary_breakdown: Joi.object({
+      basic: Joi.number().min(0).optional(),
+      hra: Joi.number().min(0).optional(),
+      special_allowance: Joi.number().min(0).optional(),
+      pf_employer: Joi.number().min(0).optional(),
+      gratuity: Joi.number().min(0).optional(),
+      other_allowances: Joi.number().min(0).optional()
+    }).optional(),
     target_sales: Joi.number().min(0).optional(),
     pf_applicable: Joi.boolean().optional(),
     esic_applicable: Joi.boolean().optional(),
@@ -122,6 +132,7 @@ const personalDetailsSchema = {
     password: Joi.string().min(8).optional(), // Optional since employee may already exist
     role: Joi.string().valid('employee', 'hr', 'manager', 'admin', 'superadmin').default('employee'),
     date_of_birth: Joi.date().optional(),
+    gender: Joi.string().valid('Male', 'Female', 'Other').optional(),
     address: Joi.object({
       address_line_1: Joi.string().optional(),
       street: Joi.string().optional(),

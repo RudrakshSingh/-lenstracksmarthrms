@@ -195,6 +195,7 @@ function formatEmployee(employee) {
     email: emp.email,
     phone: emp.phone,
     avatar: emp.avatar || `/avatars/${emp.employeeId || emp._id}.jpg`,
+    gender: emp.gender,
     
     // Work Details
     department: emp.department,
@@ -205,6 +206,8 @@ function formatEmployee(employee) {
     gradeBand: emp.gradeBand || emp.grade_band,
     status: emp.status ? emp.status.toLowerCase() : 'active',
     salary: emp.salary,
+    annual_ctc: emp.annual_ctc,
+    salary_breakdown: emp.salary_breakdown,
     
     // Dates
     doj: emp.doj,

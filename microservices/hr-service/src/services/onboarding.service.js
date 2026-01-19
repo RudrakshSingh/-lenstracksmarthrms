@@ -22,6 +22,7 @@ const registerBasicInfo = async (registerData) => {
       password,
       role = 'employee',
       date_of_birth,
+      gender,
       address
     } = registerData;
 
@@ -174,6 +175,8 @@ const registerBasicInfo = async (registerData) => {
       password,
       role: roleDoc._id,
       dateOfBirth: date_of_birth ? new Date(date_of_birth) : undefined,
+      dob: date_of_birth ? new Date(date_of_birth) : undefined,
+      gender: gender,
       address: address ? {
         street: address.address_line_1 || address.street,
         city: address.city,
@@ -224,6 +227,8 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
       reporting_manager_id,
       employee_status = 'ACTIVE',
       base_salary,
+      annual_ctc,
+      salary_breakdown,
       target_sales,
       pf_applicable,
       esic_applicable,
@@ -289,6 +294,17 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
     user.jobTitle = jobTitle || user.jobTitle;
     user.department = department || user.department;
     user.status = employee_status.toLowerCase() || user.status;
+    
+    // Update salary fields
+    if (annual_ctc !== undefined) {
+      user.annual_ctc = annual_ctc;
+    }
+    if (salary_breakdown !== undefined) {
+      user.salary_breakdown = salary_breakdown;
+    }
+    if (base_salary !== undefined) {
+      user.salary = String(base_salary); // Keep legacy field for backward compatibility
+    }
 
     // Save additional work details in a separate field or create compensation profile
     if (base_salary || target_sales || pf_applicable !== undefined || esic_applicable !== undefined || joining_date) {

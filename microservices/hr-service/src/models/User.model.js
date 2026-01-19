@@ -34,6 +34,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other'],
+    trim: true
+  },
   
   // ============================================
   // Contact Information
@@ -113,6 +118,36 @@ const userSchema = new mongoose.Schema({
   salary: {
     type: String,
     trim: true
+  },
+  annual_ctc: {
+    type: Number,
+    min: 0
+  },
+  salary_breakdown: {
+    basic: {
+      type: Number,
+      min: 0
+    },
+    hra: {
+      type: Number,
+      min: 0
+    },
+    special_allowance: {
+      type: Number,
+      min: 0
+    },
+    pf_employer: {
+      type: Number,
+      min: 0
+    },
+    gratuity: {
+      type: Number,
+      min: 0
+    },
+    other_allowances: {
+      type: Number,
+      min: 0
+    }
   },
   store: {
     type: mongoose.Schema.Types.ObjectId,

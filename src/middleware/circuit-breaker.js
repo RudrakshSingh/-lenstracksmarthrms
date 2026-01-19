@@ -67,16 +67,12 @@ function createCircuitBreaker(serviceName, serviceUrl) {
     // We'll use axios or node-fetch for HTTP calls
     const axios = require('axios');
 
-    try {
-      const response = await axios({
-        url,
-        ...options,
-        timeout: config.timeout
-      });
-      return response;
-    } catch (error) {
-      throw error;
-    }
+    const response = await axios({
+      url,
+      ...options,
+      timeout: config.timeout
+    });
+    return response;
   }, config);
 
   // Event listeners for circuit breaker state changes

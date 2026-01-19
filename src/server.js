@@ -19,16 +19,6 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const servicesConfig = require('./config/services.config');
 const axios = require('axios');
 
-// Load SSL utility for HTTPS support
-let createServer;
-try {
-  const sslUtils = require('./microservices/shared/utils/ssl');
-  createServer = sslUtils.createServer;
-} catch (error) {
-  logger.warn('SSL utility not available, using HTTP only', { error: error.message });
-  createServer = null;
-}
-
 // Initialize logger early so it can be used in middleware loading
 const isProduction = process.env.NODE_ENV === 'production';
 const logLevel = process.env.LOG_LEVEL || (isProduction ? 'info' : 'info');
@@ -49,6 +39,16 @@ const logger = winston.createLogger({
     })
   ]
 });
+
+// Load SSL utility for HTTPS support
+let createServer;
+try {
+  const sslUtils = require('./microservices/shared/utils/ssl');
+  createServer = sslUtils.createServer;
+} catch (error) {
+  logger.warn('SSL utility not available, using HTTP only', { error: error.message });
+  createServer = null;
+}
 
 // Circuit breaker for service resilience
 let circuitBreaker;

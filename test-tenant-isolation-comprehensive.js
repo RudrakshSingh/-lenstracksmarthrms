@@ -278,7 +278,13 @@ async function runTests() {
   const storeDataA = {
     name: `Store A ${timestamp}`,
     code: `STORE-A-${timestamp}`,
-    address: { city: 'CityA', state: 'StateA', pincode: '123456' }
+    address: {
+      street: '123 Test Street',
+      city: 'CityA',
+      state: 'StateA',
+      zip: '123456',
+      country: 'India'
+    }
   };
   
   try {
@@ -301,6 +307,7 @@ async function runTests() {
       passedTests++;
     } else {
       log.error(`Failed to create store: ${storeRes.status}`);
+      log.error(`Error: ${JSON.stringify(storeRes.data, null, 2)}`);
       failedTests++;
     }
   } catch (e) {

@@ -1119,14 +1119,21 @@ const getStores = async (filters = {}, page = 1, limit = 10, tenantId = null) =>
  * Create a new store
  * @param {Object} storeData - Store data
  * @param {string} createdBy - ID of the user creating the store
+ * @param {string} tenantId - Tenant ID for tenant isolation
  * @returns {Promise<Object>} Created store
  */
-const createStore = async (storeData, createdBy) => {
+const createStore = async (storeData, createdBy, tenantId = null) => {
   try {
+    // CRITICAL: Ensure tenantId is set (required for tenant isolation)
+    const storeTenantId = (tenantId || storeData.tenantId || 'default').toString().toLowerCase().trim();
+    
     const { code, googleMapsUrl } = storeData;
 
-    // Check if store code already exists
-    const existingStore = await Store.findOne({ code });
+    // Check if store code already exists FOR THIS TENANT (tenant isolation)
+    const existingStore = await Store.findOne({ 
+      tenantId: { $exists: true, $eq: storeTenantId },
+      code 
+    });
     if (existingStore) {
       throw new ApiError(httpStatus.CONFLICT, 'Store with this code already exists');
     }

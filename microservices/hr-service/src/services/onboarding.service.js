@@ -295,15 +295,66 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
     user.department = department || user.department;
     user.status = employee_status.toLowerCase() || user.status;
     
-    // Update salary fields
-    if (annual_ctc !== undefined) {
-      user.annual_ctc = annual_ctc;
+    // Validate and reject old salary fields
+    if (base_salary !== undefined || workData.salary !== undefined) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'DEPRECATED_FIELD', 'salary/base_salary field is deprecated, use annual_ctc instead');
     }
+    
+    // Update new salary structure (required)
+    if (annual_ctc === undefined || annual_ctc === null) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'ANNUAL_CTC_REQUIRED', 'annual_ctc is required');
+    }
+    if (annual_ctc <= 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_ANNUAL_CTC', 'annual_ctc must be greater than 0');
+    }
+    if (annual_ctc > 99999999.99) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_ANNUAL_CTC', 'annual_ctc cannot exceed 99,999,999.99');
+    }
+    
+    user.annual_ctc = annual_ctc;
     if (salary_breakdown !== undefined) {
       user.salary_breakdown = salary_breakdown;
     }
-    if (base_salary !== undefined) {
-      user.salary = String(base_salary); // Keep legacy field for backward compatibility
+    
+    // Validate sales-specific fields only for Sales department
+    const isSales = department === 'Sales';
+    const salesFields = ['target_sales', 'incentive_slabs', 'pan_number', 'tax_state', 'leave_entitlements'];
+    const hasSalesFields = salesFields.some(field => workData[field] !== undefined && workData[field] !== null);
+    
+    if (!isSales && hasSalesFields) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'SALES_FIELDS_ONLY', 'Incentive slabs and sales-specific fields are only applicable for Sales department employees');
+    }
+    
+    // Update sales-specific fields (only for Sales department)
+    if (isSales) {
+      if (target_sales !== undefined) {
+        user.target_sales = target_sales;
+      }
+      if (incentive_slabs !== undefined && Array.isArray(incentive_slabs)) {
+        // Validate incentive slabs
+        for (const slab of incentive_slabs) {
+          if (slab.max_sales < slab.min_sales) {
+            throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_INCENTIVE_SLAB', `Incentive slab "${slab.name}": max_sales must be >= min_sales`);
+          }
+          if (slab.incentive_percentage < 0 || slab.incentive_percentage > 100) {
+            throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_INCENTIVE_PERCENTAGE', `Incentive slab "${slab.name}": incentive_percentage must be between 0 and 100`);
+          }
+        }
+        user.incentive_slabs = incentive_slabs;
+      }
+      if (pan_number !== undefined) {
+        // Validate PAN format
+        if (pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan_number.toUpperCase())) {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'INVALID_PAN', 'PAN must be in format ABCDE1234F');
+        }
+        user.pan_number = pan_number ? pan_number.toUpperCase() : pan_number;
+      }
+      if (tax_state !== undefined) {
+        user.tax_state = tax_state;
+      }
+      if (leave_entitlements !== undefined) {
+        user.leave_entitlements = leave_entitlements;
+      }
     }
 
     // Save additional work details in a separate field or create compensation profile

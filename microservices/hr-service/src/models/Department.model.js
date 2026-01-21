@@ -1,18 +1,29 @@
 const mongoose = require('mongoose');
 
 const departmentSchema = new mongoose.Schema({
-  name: {
+  // ============================================
+  // Tenant Isolation (CRITICAL)
+  // ============================================
+  tenantId: {
     type: String,
     required: true,
     trim: true,
-    unique: true
+    lowercase: true,
+    index: true // Critical for tenant isolation queries
+  },
+  
+  name: {
+    type: String,
+    required: true,
+    trim: true
+    // Removed unique: true - now unique per tenant
   },
   code: {
     type: String,
     required: true,
-    unique: true,
     uppercase: true,
     trim: true
+    // Removed unique: true - now unique per tenant
   },
   description: {
     type: String,
@@ -48,6 +59,13 @@ departmentSchema.pre('save', function(next) {
   this.updated_at = Date.now();
   next();
 });
+
+// CRITICAL: Indexes for tenant isolation
+// Compound index ensures name and code are unique per tenant
+departmentSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+departmentSchema.index({ tenantId: 1, code: 1 }, { unique: true });
+// Index for tenant-based queries
+departmentSchema.index({ tenantId: 1, status: 1 });
 
 module.exports = mongoose.model('Department', departmentSchema);
 

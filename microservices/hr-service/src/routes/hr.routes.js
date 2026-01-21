@@ -3,6 +3,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
+const { extractTenantId } = require('../middleware/tenant.middleware'); // CRITICAL: Tenant isolation middleware
 const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
@@ -243,6 +244,7 @@ router.get('/employees',
 );
 
 router.post('/employees',
+  extractTenantId, // CRITICAL: Extract tenantId from header for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:create']),
   validateRequest(createEmployeeSchema),
@@ -250,6 +252,7 @@ router.post('/employees',
 );
 
 router.get('/employees/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   // Allow all roles to view employee details (for attendance, profile, etc)
   // Authorization check inside controller to ensure employees can only view their own data
@@ -257,6 +260,7 @@ router.get('/employees/:id',
 );
 
 router.put('/employees/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateEmployeeSchema),
@@ -264,12 +268,14 @@ router.put('/employees/:id',
 );
 
 router.delete('/employees/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:delete']),
   asyncHandler(deleteEmployee)
 );
 
 router.post('/employees/:id/assign-role',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['role:assign']),
   validateRequest(assignRoleSchema),
@@ -277,6 +283,7 @@ router.post('/employees/:id/assign-role',
 );
 
 router.patch('/employees/:id/status',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateStatusSchema),
@@ -285,30 +292,35 @@ router.patch('/employees/:id/status',
 
 // Department routes
 router.get('/departments',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['department:read']),
   asyncHandler(getDepartments)
 );
 
 router.get('/departments/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['department:read']),
   asyncHandler(getDepartmentById)
 );
 
 router.post('/departments',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['Admin', 'SuperAdmin'], ['department:create']),
   asyncHandler(createDepartment)
 );
 
 router.put('/departments/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['Admin', 'SuperAdmin'], ['department:update']),
   asyncHandler(updateDepartment)
 );
 
 router.delete('/departments/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['Admin', 'SuperAdmin'], ['department:delete']),
   asyncHandler(deleteDepartment)
@@ -316,6 +328,7 @@ router.delete('/departments/:id',
 
 // Store routes
 router.get('/stores',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['store:read']),
   validateRequest(getStoresSchema),
@@ -323,6 +336,7 @@ router.get('/stores',
 );
 
 router.post('/stores',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:create']),
   validateRequest(createStoreSchema),
@@ -330,12 +344,14 @@ router.post('/stores',
 );
 
 router.get('/stores/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   // Allow all authenticated users to view store details (needed for attendance geofencing)
   asyncHandler(getStoreById)
 );
 
 router.put('/stores/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:update']),
   validateRequest(updateStoreSchema),
@@ -343,6 +359,7 @@ router.put('/stores/:id',
 );
 
 router.delete('/stores/:id',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:delete']),
   asyncHandler(deleteStore)
@@ -350,6 +367,7 @@ router.delete('/stores/:id',
 
 // NEW: Verify geofence for store
 router.post('/stores/:id/verify-geofence',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   // Allow all authenticated users (employees need this for attendance)
   validateRequest(verifyGeofenceSchema),
@@ -361,6 +379,7 @@ router.post('/stores/:id/verify-geofence',
 
 // NEW: Assign manager to store
 router.post('/stores/:id/manager',
+  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:update']),
   validateRequest(assignManagerSchema),

@@ -189,6 +189,7 @@ function formatEmployee(employee) {
     id: emp._id?.toString() || emp.id,
     employeeId: emp.employeeId || emp.employeeCode || emp.code,
     code: emp.code || emp.employeeId,
+    tenantId: emp.tenantId, // CRITICAL: Include tenantId for tenant isolation verification
     firstName: emp.firstName,
     lastName: emp.lastName,
     fullName: emp.fullName || `${emp.firstName || ''} ${emp.lastName || ''}`.trim(),
@@ -205,9 +206,17 @@ function formatEmployee(employee) {
     grade_band: emp.grade_band || emp.gradeBand,
     gradeBand: emp.gradeBand || emp.grade_band,
     status: emp.status ? emp.status.toLowerCase() : 'active',
-    salary: emp.salary,
-    annual_ctc: emp.annual_ctc,
-    salary_breakdown: emp.salary_breakdown,
+    // DEPRECATED: salary field - DO NOT return in API responses
+    // salary: emp.salary,  // Removed - use annual_ctc instead
+    annual_ctc: emp.annual_ctc || 0,
+    salary_breakdown: emp.salary_breakdown || {
+      basic: 0,
+      hra: 0,
+      special_allowance: 0,
+      pf_employer: 0,
+      gratuity: 0,
+      other_allowances: 0
+    },
     
     // Dates
     doj: emp.doj,
@@ -236,6 +245,20 @@ function formatEmployee(employee) {
     aadharMasked: emp.aadharMasked,
     panNumber: emp.panNumber,
     bankAccount: emp.bankAccount,
+    
+    // Sales-Specific Fields (Only for Sales department)
+    // These fields are conditionally included based on department
+    ...(emp.department === 'Sales' && {
+      target_sales: emp.target_sales || 0,
+      incentive_slabs: emp.incentive_slabs || [],
+      pan_number: emp.pan_number || emp.panNumber,
+      tax_state: emp.tax_state,
+      leave_entitlements: emp.leave_entitlements || {
+        casual_leave: 12,
+        sick_leave: 12,
+        privilege_leave: 21
+      }
+    }),
     
     // Previous Employment
     previousEmployment: emp.previousEmployment,

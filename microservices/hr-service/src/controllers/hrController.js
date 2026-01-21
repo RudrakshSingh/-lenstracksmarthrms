@@ -34,8 +34,9 @@ const getEmployees = async (req, res, next) => {
     const allowedFilters = ['employeeId', 'department', 'status', 'store', 'role', 'manager', 'search'];
     const filters = parseFilters(req.query, allowedFilters);
 
-    // Get employees from service
-    const result = await HRService.getEmployees(filters, page, limit);
+    // Get employees from service - CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const result = await HRService.getEmployees(filters, page, limit, tenantId);
 
     // Format employees
     const employees = Array.isArray(result.data) 
@@ -141,7 +142,9 @@ const createEmployee = async (req, res, next) => {
     }
 
     // Create employee
-    const employee = await HRService.createEmployee(employeeData, createdBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const employee = await HRService.createEmployee(employeeData, createdBy, tenantId);
 
     // Format response
     const formattedEmployee = formatEmployee(employee);
@@ -191,8 +194,10 @@ const createEmployee = async (req, res, next) => {
 const getEmployeeById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
 
-    const employee = await HRService.getEmployeeById(id);
+    const employee = await HRService.getEmployeeById(id, tenantId);
 
     if (!employee) {
       return sendNotFound(res, 'Employee', id);
@@ -270,7 +275,9 @@ const updateEmployee = async (req, res, next) => {
       logger.info('Transformed designation to jobTitle');
     }
 
-    const employee = await HRService.updateEmployee(id, updateData, updatedBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const employee = await HRService.updateEmployee(id, updateData, updatedBy, tenantId);
 
     if (!employee) {
       return sendNotFound(res, 'Employee', id);
@@ -308,7 +315,9 @@ const deleteEmployee = async (req, res, next) => {
     const { id } = req.params;
     const deletedBy = req.user._id;
 
-    const result = await HRService.deleteEmployee(id, deletedBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const result = await HRService.deleteEmployee(id, deletedBy, tenantId);
 
     if (!result || (result.deletedCount !== undefined && result.deletedCount === 0)) {
       return sendNotFound(res, 'Employee', id);
@@ -346,7 +355,9 @@ const assignRole = async (req, res, next) => {
       return sendError(res, validationError.error, validationError.message, 400);
     }
 
-    const employee = await HRService.assignRole(id, roleName, assignedBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const employee = await HRService.assignRole(id, roleName, assignedBy, tenantId);
 
     if (!employee) {
       return sendNotFound(res, 'Employee', id);
@@ -393,7 +404,9 @@ const updateEmployeeStatus = async (req, res, next) => {
       return sendError(res, validationError.error, validationError.message, 400);
     }
 
-    const employee = await HRService.updateEmployeeStatus(id, status, updatedBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const employee = await HRService.updateEmployeeStatus(id, status, updatedBy, tenantId);
 
     if (!employee) {
       return sendNotFound(res, 'Employee', id);
@@ -432,7 +445,9 @@ const getStores = async (req, res, next) => {
     const allowedFilters = ['status', 'nature'];
     const filters = parseFilters(req.query, allowedFilters);
 
-    const result = await HRService.getStores(filters, page, limit);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const result = await HRService.getStores(filters, page, limit, tenantId);
 
     // Ensure result has stores array
     const stores = Array.isArray(result.data) 
@@ -476,7 +491,9 @@ const createStore = async (req, res, next) => {
       return sendError(res, validationError.error, validationError.message, 400);
     }
 
-    const store = await HRService.createStore(storeData, createdBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const store = await HRService.createStore(storeData, createdBy, tenantId);
 
     return sendSuccess(res, store, 'Store created successfully', null, 201);
   } catch (error) {
@@ -542,7 +559,9 @@ const updateStore = async (req, res, next) => {
     const updateData = req.body;
     const updatedBy = req.user._id;
 
-    const store = await HRService.updateStore(id, updateData, updatedBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const store = await HRService.updateStore(id, updateData, updatedBy, tenantId);
 
     if (!store) {
       return sendNotFound(res, 'Store', id);
@@ -583,8 +602,10 @@ const deleteStore = async (req, res, next) => {
   try {
     const { id } = req.params;
     const deletedBy = req.user._id;
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
 
-    const result = await HRService.deleteStore(id, deletedBy);
+    const result = await HRService.deleteStore(id, deletedBy, tenantId);
 
     if (!result || (result.deletedCount !== undefined && result.deletedCount === 0)) {
       return sendNotFound(res, 'Store', id);
@@ -612,8 +633,9 @@ const verifyStoreGeofence = async (req, res, next) => {
     const { id } = req.params;
     const { latitude, longitude } = req.body;
 
-    // Get store details
-    const store = await HRService.getStoreById(id);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const store = await HRService.getStoreById(id, tenantId);
     if (!store) {
       return sendNotFound(res, 'Store', id);
     }
@@ -688,7 +710,9 @@ const assignStoreManager = async (req, res, next) => {
     const { employeeId } = req.body;
     const updatedBy = req.user._id;
 
-    const result = await HRService.assignStoreManager(id, employeeId, updatedBy);
+    // CRITICAL: Pass tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    const result = await HRService.assignStoreManager(id, employeeId, updatedBy, tenantId);
 
     if (!result || !result.store) {
       return sendNotFound(res, 'Store', id);
@@ -716,10 +740,16 @@ const assignStoreManager = async (req, res, next) => {
  */
 const getDepartments = async (req, res, next) => {
   try {
-    // Get all active departments from database
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+    
+    // Get all active departments from database FOR THIS TENANT
     // Using status: 'active' to match Department model schema
-    let departments = await Department.find({ status: 'active' })
-      .select('_id name code description created_at updated_at')
+    let departments = await Department.find({ 
+      tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist and match
+      status: 'active' 
+    })
+      .select('_id name code description created_at updated_at tenantId')
       .lean();
 
     // Transform to include id field and format consistently
@@ -830,14 +860,30 @@ const getDepartmentById = async (req, res, next) => {
 const createDepartment = async (req, res, next) => {
   try {
     const { name, code, description, manager, location, phone, email, budget, status } = req.body;
+    // CRITICAL: Get tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
 
     // Validate required fields
     if (!name || !code) {
       return sendError(res, 'Validation failed', 'Name and code are required', 400);
     }
 
+    // Check if department with same name or code already exists FOR THIS TENANT
+    const existingDept = await Department.findOne({
+      tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist
+      $or: [
+        { name: { $regex: new RegExp(`^${name}$`, 'i') } },
+        { code: code.toUpperCase() }
+      ]
+    });
+    
+    if (existingDept) {
+      return sendError(res, 'Duplicate department', 'Department with this name or code already exists for this tenant', 409);
+    }
+
     // Create department
     const department = new Department({
+      tenantId: tenantId, // CRITICAL: Set tenantId for tenant isolation
       name,
       code: code.toUpperCase(),
       description,
@@ -876,36 +922,48 @@ const updateDepartment = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
 
     // If code is provided, uppercase it
     if (updateData.code) {
       updateData.code = updateData.code.toUpperCase();
     }
 
-    // Try to find by MongoDB ObjectId first, then by code
+    // Try to find by MongoDB ObjectId first, then by code (both with tenantId filter)
     let department;
-    try {
-      department = await Department.findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true, runValidators: true }
-      ).populate('head', 'fullName employeeId email');
-    } catch (castError) {
-      // If ObjectId cast fails, try finding by code
-      logger.info('ObjectId cast failed, searching by code', { id });
-    }
-
-    // If not found by _id, try finding by code and updating
-    if (!department) {
+    const mongoose = require('mongoose');
+    if (mongoose.Types.ObjectId.isValid(id)) {
       department = await Department.findOneAndUpdate(
-        { code: id },
+        { _id: id, tenantId: { $exists: true, $eq: tenantId } }, // CRITICAL: Require tenantId to exist
+        updateData,
+        { new: true, runValidators: true }
+      ).populate('head', 'fullName employeeId email');
+    } else {
+      // If not a valid ObjectId, try finding by code AND tenantId
+      logger.info('Not a valid ObjectId, searching by code', { id, tenantId });
+      department = await Department.findOneAndUpdate(
+        { tenantId: { $exists: true, $eq: tenantId }, code: id }, // CRITICAL: Require tenantId to exist
         updateData,
         { new: true, runValidators: true }
       ).populate('head', 'fullName employeeId email');
     }
 
     if (!department) {
+      logger.warn('Department not found for update', { id, tenantId });
       return sendNotFound(res, 'Department', id);
+    }
+    
+    // Check if code is being updated and if it already exists FOR THIS TENANT
+    if (updateData.code && updateData.code !== department.code) {
+      const existingDept = await Department.findOne({ 
+        tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist
+        code: updateData.code, 
+        _id: { $ne: department._id } 
+      });
+      if (existingDept) {
+        return sendError(res, 'Duplicate department', 'Department with this code already exists for this tenant', 409);
+      }
     }
 
     return sendSuccess(res, department, 'Department updated successfully', null, 200);
@@ -931,27 +989,36 @@ const updateDepartment = async (req, res, next) => {
 const deleteDepartment = async (req, res, next) => {
   try {
     const { id } = req.params;
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
 
-    // First, try to find the department to get its _id
+    // First, try to find the department to get its _id (with tenantId filter)
     let department;
     try {
-      department = await Department.findById(id);
+      department = await Department.findOne({ 
+        _id: id, 
+        tenantId: { $exists: true, $eq: tenantId } // CRITICAL: Require tenantId to exist and match
+      });
     } catch (castError) {
-      // If ObjectId cast fails, try finding by code
-      logger.info('ObjectId cast failed, searching by code', { id });
+      // If ObjectId cast fails, try finding by code AND tenantId
+      logger.info('ObjectId cast failed, searching by code', { id, tenantId });
     }
 
-    // If not found by _id, try finding by code
+    // If not found by _id, try finding by code AND tenantId
     if (!department) {
-      department = await Department.findOne({ code: id });
+      department = await Department.findOne({ 
+        tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist and match
+        code: id 
+      });
     }
 
     if (!department) {
       return sendNotFound(res, 'Department', id);
     }
 
-    // Check if department has employees using the department's _id
+    // Check if department has employees FOR THIS TENANT using the department's _id
     const employeeCount = await User.countDocuments({
+      tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist
       isDeleted: { $ne: true },
       department: department._id.toString()
     });
@@ -960,8 +1027,11 @@ const deleteDepartment = async (req, res, next) => {
       return sendError(res, 'Cannot delete department', `Department has ${employeeCount} employees. Please reassign them first.`, 400);
     }
 
-    // Delete the department
-    await Department.findByIdAndDelete(department._id);
+    // CRITICAL: Delete with tenantId filter to ensure we're deleting the right department
+    await Department.findOneAndDelete({ 
+      _id: department._id, 
+      tenantId: { $exists: true, $eq: tenantId } // CRITICAL: Require tenantId to exist
+    });
 
     return sendSuccess(res, null, 'Department deleted successfully', null, 200);
   } catch (error) {

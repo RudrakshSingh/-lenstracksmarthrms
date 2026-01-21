@@ -1,139 +1,242 @@
-# Frontend Developer - Quick Reference Card
+# Frontend Developer Quick Reference
 
-## 🚀 5-Minute Setup
+## Base Configuration
 
-### 1. Base Configuration
 ```javascript
-const API_BASE = 'https://98.70.245.87';
+const BASE_URL = 'https://98.70.245.87';
 const API_HOST = 'api.etelios.com';
+
+const defaultHeaders = {
+  'Content-Type': 'application/json',
+  'Host': API_HOST
+};
 ```
 
-### 2. Login (Choose One)
-
-**Option A: Mock Login (Fast - Recommended for Testing)**
-```javascript
-const response = await fetch(`${API_BASE}/api/auth/mock-login-fast`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Host': API_HOST
-  },
-  body: JSON.stringify({ role: 'admin' })
-});
-const { data } = await response.json();
-localStorage.setItem('accessToken', data.accessToken);
-localStorage.setItem('refreshToken', data.refreshToken);
-```
-
-**Option B: Real Login**
-```javascript
-const response = await fetch(`${API_BASE}/api/auth/login`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Host': API_HOST
-  },
-  body: JSON.stringify({
-    emailOrEmployeeId: 'user@example.com',
-    password: 'password'
-  })
-});
-```
-
-### 3. Make Authenticated Request
-```javascript
-const token = localStorage.getItem('accessToken');
-const response = await fetch(`${API_BASE}/api/hr/employees?status=active&limit=100`, {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Host': API_HOST
-  }
-});
-const data = await response.json();
-```
-
----
-
-## 🔑 Bearer Token Pattern
+## Common Headers
 
 ```javascript
-// Every authenticated request needs:
-headers: {
-  'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-  'Host': 'api.etelios.com',
-  'Content-Type': 'application/json'
+// Authenticated request
+{
+  ...defaultHeaders,
+  'Authorization': `Bearer ${token}`,
+  'X-Tenant-Id': tenantId
 }
 ```
 
----
+## Quick API Calls
 
-## 📋 Common API Calls
-
-### Get Employees
+### 1. Super Admin Login
 ```javascript
-GET /api/hr/employees?status=active&limit=100
-Headers: { 'Authorization': 'Bearer <token>', 'Host': 'api.etelios.com' }
+POST /api/auth/login
+Body: { emailOrEmployeeId, password }
+Response: { success, data: { accessToken, refreshToken, user } }
 ```
 
-### Create Employee
+### 2. Create Tenant
+```javascript
+POST /api/tenants
+Headers: { Authorization: `Bearer ${superAdminToken}` }
+Body: {
+  name: "Company Name",
+  email: "admin@company.com",
+  domain: "company",
+  subdomain: "company",
+  plan: "enterprise",
+  modules: ["hr", "analytics", "reports"]
+}
+Response: { success, data: { tenantId, adminUser: { email, temporaryPassword } } }
+```
+
+### 3. Admin Login (First Time)
+```javascript
+POST /api/auth/login
+Headers: { 'X-Tenant-Id': tenantId }
+Body: { emailOrEmployeeId, password }
+Response: { success, mustChangePassword: true, data: { accessToken, user } }
+```
+
+### 4. Change Password
+```javascript
+POST /api/auth/change-password
+Headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Id': tenantId }
+Body: { currentPassword, newPassword }
+Response: { success, message: "Password changed successfully" }
+```
+
+### 5. Create Employee
 ```javascript
 POST /api/hr/employees
-Headers: { 'Authorization': 'Bearer <token>', 'Host': 'api.etelios.com' }
-Body: { employeeId, firstName, lastName, email, password, roleName, ... }
+Headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Id': tenantId }
+Body: {
+  employeeId: "EMP-001",
+  firstName: "John",
+  lastName: "Doe",
+  email: "john@company.com",
+  gender: "Male",  // NEW: Required
+  roleName: "employee",
+  department: "Sales"
+}
+Response: { success, data: { employeeId, fullName, gender, ... } }
 ```
 
-### Get Departments
+### 6. Add Work Details (with Salary)
 ```javascript
-GET /api/hr/departments
-Headers: { 'Authorization': 'Bearer <token>', 'Host': 'api.etelios.com' }
+POST /api/hr/onboarding/work-details
+Headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Id': tenantId }
+Body: {
+  employeeId: "EMP-001",
+  jobTitle: "Sales Manager",
+  department: "Sales",
+  joining_date: "2026-01-20",
+  annual_ctc: 720000,  // NEW: Optional
+  salary_breakdown: {  // NEW: Optional
+    basic: 360000,
+    hra: 144000,
+    special_allowance: 120000,
+    pf_employer: 43200,
+    gratuity: 28800,
+    other_allowances: 24000
+  }
+}
+Response: { success, data: { employeeId, annual_ctc, salary_breakdown } }
 ```
 
-### Clock In
+### 7. Get Employee
 ```javascript
-POST /api/attendance/clock-in
-Headers: { 'Authorization': 'Bearer <token>', 'Host': 'api.etelios.com' }
-Body: { latitude, longitude, notes }
+GET /api/hr/employees/:employeeId
+Headers: { Authorization: `Bearer ${token}`, 'X-Tenant-Id': tenantId }
+Response: { success, data: { employeeId, gender, annual_ctc, salary_breakdown, ... } }
 ```
 
----
+## New Fields Reference
 
-## ⚠️ Critical Notes
+### Gender Field
+- **Location**: Employee creation, personal details
+- **Type**: String (enum)
+- **Values**: `"Male"`, `"Female"`, `"Other"`
+- **Required**: Yes (in employee creation)
+- **Example**: `gender: "Male"`
 
-1. **ALWAYS include `Host: api.etelios.com` header**
-2. **Token format:** `Bearer <token>` (with space)
-3. **Status values:** Accepts both `active` and `ACTIVE` (uppercase)
-4. **Limit max:** Up to 1000 (not just 100)
-5. **Use HTTPS:** Always use `https://` not `http://`
+### Annual CTC Field
+- **Location**: Work details
+- **Type**: Number
+- **Min**: 0
+- **Required**: No
+- **Example**: `annual_ctc: 720000`
 
----
-
-## 🧪 Test Credentials
-
-**Mock Login (No Password Needed):**
+### Salary Breakdown Field
+- **Location**: Work details
+- **Type**: Object
+- **Required**: No
+- **Structure**:
 ```javascript
-{ role: 'admin' }  // or 'hr', 'manager', 'employee', 'superadmin'
+{
+  basic: 360000,           // Number, min: 0
+  hra: 144000,              // Number, min: 0
+  special_allowance: 120000, // Number, min: 0
+  pf_employer: 43200,      // Number, min: 0
+  gratuity: 28800,          // Number, min: 0
+  other_allowances: 24000   // Number, min: 0
+}
 ```
 
-**Real Login:**
-- Email: `superadmin@etelios.com`
-- Password: (check with backend team)
+## Complete Flow Checklist
+
+- [ ] Super Admin login
+- [ ] Create tenant
+- [ ] Store admin credentials (email, temporary password)
+- [ ] Admin first login (with temporary password)
+- [ ] Check `mustChangePassword` flag
+- [ ] Change password (if required)
+- [ ] Login again (with new password)
+- [ ] Create employee (with `gender` field)
+- [ ] Add work details (with `annual_ctc` and `salary_breakdown`)
+- [ ] Verify employee (GET request to check all fields)
+
+## Error Codes
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| 400 | Validation Error | Check `errors` array |
+| 401 | Unauthorized | Redirect to login |
+| 403 | Forbidden | Check user role |
+| 404 | Not Found | Verify resource exists |
+| 409 | Conflict | Resource already exists |
+| 500 | Server Error | Retry or contact support |
+
+## Common Patterns
+
+### Fetch with Auth
+```javascript
+async function apiCall(endpoint, method = 'GET', body = null, token, tenantId) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Host': 'api.etelios.com'
+  };
+  
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (tenantId) headers['X-Tenant-Id'] = tenantId;
+  
+  const options = {
+    method,
+    headers,
+    ...(body && { body: JSON.stringify(body) })
+  };
+  
+  const response = await fetch(`${BASE_URL}${endpoint}`, options);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || 'Request failed');
+  }
+  
+  return data;
+}
+```
+
+### Handle Password Change Flow
+```javascript
+async function handlePasswordChange(email, tempPassword, newPassword, tenantId) {
+  // 1. Login with temp password
+  const login1 = await apiCall('/api/auth/login', 'POST', {
+    emailOrEmployeeId: email,
+    password: tempPassword
+  }, null, tenantId);
+  
+  if (!login1.mustChangePassword) {
+    return login1.data.accessToken;
+  }
+  
+  // 2. Change password
+  await apiCall('/api/auth/change-password', 'POST', {
+    currentPassword: tempPassword,
+    newPassword: newPassword
+  }, login1.data.accessToken, tenantId);
+  
+  // 3. Login with new password
+  const login2 = await apiCall('/api/auth/login', 'POST', {
+    emailOrEmployeeId: email,
+    password: newPassword
+  }, null, tenantId);
+  
+  return login2.data.accessToken;
+}
+```
+
+## Test Scripts Location
+
+- `create-lenstrack-tenant.js` - Create tenant script
+- `test-complete-lenstrack-flow.js` - Complete flow test
+
+## Important Notes
+
+1. **Always include `X-Tenant-Id` header** for tenant-specific requests
+2. **Temporary passwords** must be changed on first login
+3. **Gender field is required** when creating employees
+4. **Salary fields are optional** but recommended for complete employee data
+5. **Token expiration**: Implement refresh logic
+6. **Error handling**: Always check `success` field in response
 
 ---
 
-## 📚 Full Documentation
-
-See `FRONTEND_COMPLETE_TESTING_GUIDE.md` for:
-- Complete API reference
-- React/Axios examples
-- Error handling
-- Token refresh
-- Troubleshooting
-
----
-
-**Quick Help:**
-- Base URL: `https://98.70.245.87`
-- Host Header: `api.etelios.com` (REQUIRED)
-- Mock Login: `/api/auth/mock-login-fast`
-- Health Check: `/api/auth/health`
-
+**For detailed documentation, see**: `FRONTEND_TENANT_CREATION_AND_FLOW_GUIDE.md`

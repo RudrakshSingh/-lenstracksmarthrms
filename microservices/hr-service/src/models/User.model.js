@@ -3,6 +3,17 @@ const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
   // ============================================
+  // Tenant Isolation (CRITICAL)
+  // ============================================
+  tenantId: {
+    type: String,
+    required: true,
+    trim: true,
+    lowercase: true,
+    index: true // Critical for tenant isolation queries
+  },
+  
+  // ============================================
   // Basic Information
   // ============================================
   employeeId: {
@@ -32,7 +43,9 @@ const userSchema = new mongoose.Schema({
   },
   avatar: {
     type: String,
-    trim: true
+    trim: true,
+    maxlength: 500 // Support URLs up to 500 characters
+    // Can be: empty string, emoji (1-2 chars), or URL (http:// or https://)
   },
   gender: {
     type: String,
@@ -115,37 +128,114 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // ============================================
+  // Salary Structure (DEPRECATED: salary field)
+  // ============================================
+  // DEPRECATED: Use annual_ctc instead. Kept for data migration purposes.
   salary: {
     type: String,
-    trim: true
+    trim: true,
+    select: false // Don't return in queries by default
   },
+  // New salary structure
   annual_ctc: {
     type: Number,
-    min: 0
+    min: 0,
+    max: 99999999.99, // 10 crore max
+    default: 0
   },
   salary_breakdown: {
     basic: {
       type: Number,
-      min: 0
+      min: 0,
+      default: 0
     },
     hra: {
       type: Number,
-      min: 0
+      min: 0,
+      default: 0
     },
     special_allowance: {
       type: Number,
-      min: 0
+      min: 0,
+      default: 0
     },
     pf_employer: {
       type: Number,
-      min: 0
+      min: 0,
+      default: 0
     },
     gratuity: {
       type: Number,
-      min: 0
+      min: 0,
+      default: 0
     },
     other_allowances: {
       type: Number,
+      min: 0,
+      default: 0
+    }
+  },
+  
+  // ============================================
+  // Sales-Specific Fields (Only for Sales department)
+  // ============================================
+  target_sales: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  incentive_slabs: [{
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    min_sales: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    max_sales: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    incentive_percentage: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100
+    },
+    active: {
+      type: Boolean,
+      default: true
+    }
+  }],
+  pan_number: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    match: [/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format (ABCDE1234F)']
+  },
+  tax_state: {
+    type: String,
+    trim: true
+  },
+  leave_entitlements: {
+    casual_leave: {
+      type: Number,
+      default: 12,
+      min: 0
+    },
+    sick_leave: {
+      type: Number,
+      default: 12,
+      min: 0
+    },
+    privilege_leave: {
+      type: Number,
+      default: 21,
       min: 0
     }
   },
@@ -424,6 +514,11 @@ const userSchema = new mongoose.Schema({
 // Indexes (field-level indexes already declared; keep only necessary refs)
 userSchema.index({ store: 1 });
 userSchema.index({ role: 1 });
+// CRITICAL: Compound index for tenant isolation - ensures employeeId is unique per tenant
+userSchema.index({ tenantId: 1, employeeId: 1 }, { unique: true });
+// Index for tenant-based queries (most common query pattern)
+userSchema.index({ tenantId: 1, status: 1 });
+userSchema.index({ tenantId: 1, department: 1 });
 
 // Virtual for full name
 userSchema.virtual('fullName').get(function() {

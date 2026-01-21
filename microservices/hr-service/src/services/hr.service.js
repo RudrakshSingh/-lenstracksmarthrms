@@ -17,11 +17,15 @@ const { createSafeRegex, sanitizeEmployeeId, sanitizeSearchQuery } = require('..
  * @param {string} departmentNameOrCode - Department name or code
  * @returns {Promise<Object|null>} Department object or null
  */
-const findDepartment = async (departmentNameOrCode) => {
+const findDepartment = async (departmentNameOrCode, tenantId = null) => {
   if (!departmentNameOrCode) return null;
   
   try {
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const deptTenantId = tenantId || 'default';
+    
     const dept = await Department.findOne({
+      tenantId: { $exists: true, $eq: deptTenantId }, // CRITICAL: Require tenantId to exist and match
       $or: [
         { name: { $regex: new RegExp(`^${departmentNameOrCode}$`, 'i') } },
         { code: departmentNameOrCode.toUpperCase() }
@@ -30,7 +34,7 @@ const findDepartment = async (departmentNameOrCode) => {
     });
     return dept;
   } catch (error) {
-    logger.error('Error finding department', { error: error.message, departmentNameOrCode });
+    logger.error('Error finding department', { error: error.message, departmentNameOrCode, tenantId });
     return null;
   }
 };
@@ -41,7 +45,7 @@ const findDepartment = async (departmentNameOrCode) => {
  * @param {string} createdBy - ID of the user creating the employee
  * @returns {Promise<Object>} Created employee
  */
-const createEmployee = async (employeeData, createdBy) => {
+const createEmployee = async (employeeData, createdBy, tenantId = null) => {
   try {
     const { email, password, roleName, storeId, employeeId, ...rest } = employeeData;
 
@@ -50,9 +54,23 @@ const createEmployee = async (employeeData, createdBy) => {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Employee ID is required');
     }
     const normalizedEmployeeId = employeeId.toUpperCase().trim();
+    
+    // CRITICAL: Ensure tenantId is set (required for tenant isolation)
+    // Normalize tenantId to lowercase (required by User model)
+    const employeeTenantId = (tenantId || employeeData.tenantId || 'default').toString().toLowerCase().trim();
+    
+    if (!tenantId && !employeeData.tenantId) {
+      logger.warn('createEmployee called without tenantId - using default', {
+        employeeId: normalizedEmployeeId,
+        email
+      });
+    }
 
-    // Check if employeeId already exists
-    const existingEmployeeId = await User.findOne({ employeeId: normalizedEmployeeId });
+    // Check if employeeId already exists FOR THIS TENANT (tenant isolation)
+    const existingEmployeeId = await User.findOne({ 
+      tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
+      employeeId: normalizedEmployeeId 
+    });
     if (existingEmployeeId) {
       logger.warn('Employee ID already exists, skipping creation', { 
         employeeId: normalizedEmployeeId, 
@@ -66,8 +84,11 @@ const createEmployee = async (employeeData, createdBy) => {
       return existing;
     }
 
-    // Check if email already exists
-    const existingUser = await User.findOne({ email });
+    // Check if email already exists FOR THIS TENANT (tenant isolation)
+    const existingUser = await User.findOne({ 
+      tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
+      email: email.toLowerCase() 
+    });
     if (existingUser) {
       logger.warn('User with email already exists, returning existing user', { 
         employeeId: normalizedEmployeeId, 
@@ -127,7 +148,7 @@ const createEmployee = async (employeeData, createdBy) => {
     // Handle department lookup
     let departmentRef = null;
     if (employeeData.department) {
-      const dept = await findDepartment(employeeData.department);
+      const dept = await findDepartment(employeeData.department, employeeTenantId); // CRITICAL: Pass tenantId
       if (dept) {
         departmentRef = dept._id;
         logger.info('Department found and linked', { 
@@ -144,6 +165,7 @@ const createEmployee = async (employeeData, createdBy) => {
 
     // Prepare employee data
     const userData = {
+      tenantId: employeeTenantId, // CRITICAL: Use employeeTenantId (already calculated above)
       employeeId: normalizedEmployeeId, // Explicitly set employeeId
       code: normalizedEmployeeId, // Also set code
       email,
@@ -153,6 +175,13 @@ const createEmployee = async (employeeData, createdBy) => {
       ...rest,
       departmentRef // Add department reference
     };
+    
+    // Log tenantId for debugging
+    logger.info('Creating employee with tenantId', {
+      employeeId: normalizedEmployeeId,
+      tenantId: employeeTenantId,
+      email
+    });
     
     // Ensure firstName/lastName exist (required by User model)
     if (!userData.firstName && userData.fullName) {
@@ -210,10 +239,21 @@ const createEmployee = async (employeeData, createdBy) => {
         throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Employee ID was not set correctly during creation');
       }
       
+      // Verify tenantId was saved correctly
+      if (!savedEmployee.tenantId || savedEmployee.tenantId !== employeeTenantId) {
+        logger.error('Employee created but tenantId mismatch!', { 
+          expected: employeeTenantId, 
+          actual: savedEmployee.tenantId, 
+          email 
+        });
+        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Tenant ID was not set correctly during creation');
+      }
+      
       logger.info('User saved and verified in database', {
         employeeId: savedEmployee.employeeId,
         mongoId: savedEmployee._id,
         email: savedEmployee.email,
+        tenantId: savedEmployee.tenantId, // Log tenantId for verification
         database: mongoose.connection.name
       });
       
@@ -425,14 +465,28 @@ const createEmployee = async (employeeData, createdBy) => {
  * @param {number} limit - Records per page
  * @returns {Promise<Object>} Paginated employees
  */
-const getEmployees = async (filters = {}, page = 1, limit = 10) => {
+const getEmployees = async (filters = {}, page = 1, limit = 10, tenantId = null) => {
   try {
     // Skip caching for now - direct database query
     // const cacheKey = `employees:${JSON.stringify(filters)}:${page}:${limit}`;
     
     // Direct database query without caching
     const getData = async () => {
-      const query = { isDeleted: false };
+      // CRITICAL: Always filter by tenantId for tenant isolation
+      const queryTenantId = tenantId || filters.tenantId || 'default';
+      const query = { 
+        isDeleted: false,
+        tenantId: { $exists: true, $eq: queryTenantId } // CRITICAL: Require tenantId to exist and match
+      };
+      
+      // Log if tenantId is missing (for debugging)
+      if (!tenantId && !filters.tenantId) {
+        logger.warn('getEmployees called without tenantId - using default', {
+          filters,
+          page,
+          limit
+        });
+      }
 
       // Apply filters with sanitization
       if (filters.employeeId) {
@@ -526,30 +580,44 @@ const getEmployees = async (filters = {}, page = 1, limit = 10) => {
  * @param {string} employeeId - Employee ID (can be MongoDB ObjectId or employee_id string)
  * @returns {Promise<Object>} Employee object
  */
-const getEmployeeById = async (employeeId) => {
+const getEmployeeById = async (employeeId, tenantId = null) => {
   try {
     const mongoose = require('mongoose');
     let employee;
     
+    // CRITICAL: Ensure tenantId is provided for tenant isolation
+    const employeeTenantId = tenantId || 'default';
+    
+    if (!tenantId) {
+      logger.warn('getEmployeeById called without tenantId - using default', { employeeId });
+    }
+    
     // Normalize the employeeId input
     const normalizedId = employeeId ? employeeId.toString().trim() : '';
     
+    // Build query with tenantId filter
+    let query;
     if (mongoose.Types.ObjectId.isValid(normalizedId)) {
-      // If it's a valid ObjectId, search by _id
-      employee = await User.findById(normalizedId)
+      // If it's a valid ObjectId, search by _id AND tenantId (require tenantId to exist)
+      query = { 
+        _id: normalizedId, 
+        tenantId: { $exists: true, $eq: employeeTenantId } // CRITICAL: Require tenantId to exist
+      };
+      employee = await User.findOne(query)
         .populate('role', 'name permissions')
         .populate('store', 'name address')
         .populate('departmentRef', 'name code description')
         .lean();
     } else {
-      // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-153599"), search by employeeId (camelCase)
-      // Try both uppercase and original case
-      employee = await User.findOne({ 
+      // If it's not a valid ObjectId, search by employeeId AND tenantId (require tenantId to exist)
+      query = { 
+        tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
         $or: [
           { employeeId: normalizedId.toUpperCase() },
           { employeeId: normalizedId }
         ]
-      })
+      };
+      employee = await User.findOne(query)
         .populate('role', 'name permissions')
         .populate('store', 'name address')
         .populate('departmentRef', 'name code description')
@@ -560,6 +628,7 @@ const getEmployeeById = async (employeeId) => {
       // Log for debugging
       logger.warn('Employee not found', { 
         searchedId: normalizedId,
+        tenantId: employeeTenantId, // Logging only - query already uses $exists check
         isObjectId: mongoose.Types.ObjectId.isValid(normalizedId)
       });
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
@@ -571,7 +640,7 @@ const getEmployeeById = async (employeeId) => {
 
     return employee;
   } catch (error) {
-    logger.error('Error in getEmployeeById service', { error: error.message, employeeId });
+    logger.error('Error in getEmployeeById service', { error: error.message, employeeId, tenantId });
     throw error;
   }
 };
@@ -583,7 +652,7 @@ const getEmployeeById = async (employeeId) => {
  * @param {string} updatedBy - ID of the user updating
  * @returns {Promise<Object>} Updated employee
  */
-const updateEmployee = async (employeeId, updateData, updatedBy) => {
+const updateEmployee = async (employeeId, updateData, updatedBy, tenantId = null) => {
   try {
     // Extract all fields that need special handling
     const { 
@@ -593,22 +662,36 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
       ...rest 
     } = updateData;
 
+    // CRITICAL: Ensure tenantId is provided for tenant isolation
+    const employeeTenantId = tenantId || updateData.tenantId || 'default';
+    
+    if (!tenantId && !updateData.tenantId) {
+      logger.warn('updateEmployee called without tenantId - using default', { employeeId });
+    }
+
     // Check if employeeId is a valid MongoDB ObjectId
     const mongoose = require('mongoose');
     let employee;
     let query;
     
     if (mongoose.Types.ObjectId.isValid(employeeId)) {
-      // If it's a valid ObjectId, search by _id
-      query = { _id: employeeId };
-      employee = await User.findById(employeeId);
+      // If it's a valid ObjectId, search by _id AND tenantId (require tenantId to exist)
+      query = { 
+        _id: employeeId, 
+        tenantId: { $exists: true, $eq: employeeTenantId } // CRITICAL: Require tenantId to exist
+      };
+      employee = await User.findOne(query);
     } else {
-      // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-153599"), search by employeeId (camelCase)
-      query = { employeeId: employeeId.toUpperCase() };
-      employee = await User.findOne({ employeeId: employeeId.toUpperCase() });
+      // If it's not a valid ObjectId, search by employeeId AND tenantId (require tenantId to exist)
+      query = { 
+        tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
+        employeeId: employeeId.toUpperCase() 
+      };
+      employee = await User.findOne(query);
     }
     
     if (!employee) {
+      logger.warn('Employee not found for update', { employeeId, tenantId: employeeTenantId });
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
@@ -761,10 +844,34 @@ const updateEmployee = async (employeeId, updateData, updatedBy) => {
  * @param {string} deletedBy - ID of the user deleting
  * @returns {Promise<Object>} Deletion result
  */
-const deleteEmployee = async (employeeId, deletedBy) => {
+const deleteEmployee = async (employeeId, deletedBy, tenantId = null) => {
   try {
-    const employee = await User.findById(employeeId);
+    // CRITICAL: Ensure tenantId is provided for tenant isolation
+    const employeeTenantId = tenantId || 'default';
+    
+    if (!tenantId) {
+      logger.warn('deleteEmployee called without tenantId - using default', { employeeId });
+    }
+    
+    const mongoose = require('mongoose');
+    let employee;
+    
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      // Search by _id AND tenantId
+      employee = await User.findOne({ 
+        _id: employeeId, 
+        tenantId: { $exists: true, $eq: employeeTenantId } // CRITICAL: Require tenantId to exist
+      });
+    } else {
+      // Search by employeeId AND tenantId
+      employee = await User.findOne({ 
+        tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
+        employeeId: employeeId.toUpperCase() 
+      });
+    }
+    
     if (!employee) {
+      logger.warn('Employee not found for delete', { employeeId, tenantId: employeeTenantId });
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
@@ -874,21 +981,35 @@ const assignRole = async (employeeId, roleName, assignedBy) => {
  * @param {string} updatedBy - ID of the user updating
  * @returns {Promise<Object>} Updated employee
  */
-const updateEmployeeStatus = async (employeeId, status, updatedBy) => {
+const updateEmployeeStatus = async (employeeId, status, updatedBy, tenantId = null) => {
   try {
+    // CRITICAL: Ensure tenantId is provided for tenant isolation
+    const employeeTenantId = tenantId || 'default';
+    
+    if (!tenantId) {
+      logger.warn('updateEmployeeStatus called without tenantId - using default', { employeeId });
+    }
+    
     // Check if employeeId is a valid MongoDB ObjectId
     const mongoose = require('mongoose');
     let employee;
     
     if (mongoose.Types.ObjectId.isValid(employeeId)) {
-      // If it's a valid ObjectId, search by _id
-      employee = await User.findById(employeeId);
+      // Search by _id AND tenantId
+      employee = await User.findOne({ 
+        _id: employeeId, 
+        tenantId: { $exists: true, $eq: employeeTenantId } // CRITICAL: Require tenantId to exist
+      });
     } else {
-      // If it's not a valid ObjectId (e.g., employeeId like "EMP-2025-172751"), search by employeeId (camelCase)
-      employee = await User.findOne({ employeeId: employeeId.toUpperCase() });
+      // Search by employeeId AND tenantId
+      employee = await User.findOne({ 
+        tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
+        employeeId: employeeId.toUpperCase() 
+      });
     }
     
     if (!employee) {
+      logger.warn('Employee not found for status update', { employeeId, tenantId: employeeTenantId });
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
@@ -943,9 +1064,19 @@ const updateEmployeeStatus = async (employeeId, status, updatedBy) => {
  * @param {number} limit - Number of items per page
  * @returns {Promise<Object>} Paginated stores
  */
-const getStores = async (filters = {}, page = 1, limit = 10) => {
+const getStores = async (filters = {}, page = 1, limit = 10, tenantId = null) => {
   try {
-    const query = { isDeleted: false };
+    // CRITICAL: Always filter by tenantId for tenant isolation
+    const storeTenantId = tenantId || filters.tenantId || 'default';
+    
+    if (!tenantId && !filters.tenantId) {
+      logger.warn('getStores called without tenantId - using default', { filters });
+    }
+    
+    const query = { 
+      isDeleted: false,
+      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
+    };
 
     if (filters.status) {
       query.status = filters.status;
@@ -1028,6 +1159,7 @@ const createStore = async (storeData, createdBy) => {
 
     const store = new Store({
       ...storeData,
+      tenantId: storeTenantId, // CRITICAL: Set tenantId for tenant isolation
       createdBy,
       updatedBy: createdBy
     });
@@ -1060,18 +1192,30 @@ const createStore = async (storeData, createdBy) => {
  * @param {string} storeId - Store ID
  * @returns {Promise<Object>} Store data
  */
-const getStoreById = async (storeId) => {
+const getStoreById = async (storeId, tenantId = null) => {
   try {
-    const store = await Store.findOne({ _id: storeId, isDeleted: false })
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const storeTenantId = tenantId || 'default';
+    
+    if (!tenantId) {
+      logger.warn('getStoreById called without tenantId - using default', { storeId });
+    }
+    
+    const store = await Store.findOne({ 
+      _id: storeId, 
+      isDeleted: false,
+      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
+    })
       .populate('manager', 'name email employee_id');
 
     if (!store) {
+      logger.warn('Store not found', { storeId, tenantId: storeTenantId });
       throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
     return store;
   } catch (error) {
-    logger.error('Error in getStoreById service', { error: error.message, storeId });
+    logger.error('Error in getStoreById service', { error: error.message, storeId, tenantId });
     throw error;
   }
 };
@@ -1083,19 +1227,35 @@ const getStoreById = async (storeId) => {
  * @param {string} updatedBy - ID of the user updating the store
  * @returns {Promise<Object>} Updated store
  */
-const updateStore = async (storeId, updateData, updatedBy) => {
+const updateStore = async (storeId, updateData, updatedBy, tenantId = null) => {
   try {
-    const store = await Store.findOne({ _id: storeId, isDeleted: false });
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const storeTenantId = tenantId || updateData.tenantId || store?.tenantId || 'default';
+    
+    if (!tenantId && !updateData.tenantId) {
+      logger.warn('updateStore called without tenantId - using default', { storeId });
+    }
+    
+    const store = await Store.findOne({ 
+      _id: storeId, 
+      isDeleted: false,
+      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
+    });
 
     if (!store) {
+      logger.warn('Store not found for update', { storeId, tenantId: storeTenantId });
       throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
-    // Check if code is being updated and if it already exists
+    // Check if code is being updated and if it already exists FOR THIS TENANT
     if (updateData.code && updateData.code !== store.code) {
-      const existingStore = await Store.findOne({ code: updateData.code, _id: { $ne: storeId } });
+      const existingStore = await Store.findOne({ 
+      tenantId: { $exists: true, $eq: storeTenantId }, // CRITICAL: Require tenantId to exist
+      code: updateData.code,
+        _id: { $ne: storeId } 
+      });
       if (existingStore) {
-        throw new ApiError(httpStatus.CONFLICT, 'Store with this code already exists');
+        throw new ApiError(httpStatus.CONFLICT, 'Store with this code already exists for this tenant');
       }
     }
 
@@ -1137,16 +1297,32 @@ const updateStore = async (storeId, updateData, updatedBy) => {
  * @param {string} deletedBy - ID of the user deleting the store
  * @returns {Promise<void>}
  */
-const deleteStore = async (storeId, deletedBy) => {
+const deleteStore = async (storeId, deletedBy, tenantId = null) => {
   try {
-    const store = await Store.findOne({ _id: storeId, isDeleted: false });
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const storeTenantId = tenantId || 'default';
+    
+    if (!tenantId) {
+      logger.warn('deleteStore called without tenantId - using default', { storeId });
+    }
+    
+    const store = await Store.findOne({ 
+      _id: storeId, 
+      isDeleted: false,
+      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
+    });
 
     if (!store) {
+      logger.warn('Store not found for delete', { storeId, tenantId: storeTenantId });
       throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
-    // Check if store has employees
-    const employeeCount = await User.countDocuments({ store: storeId, isDeleted: false });
+    // Check if store has employees FOR THIS TENANT
+    const employeeCount = await User.countDocuments({ 
+      tenantId: { $exists: true, $eq: storeTenantId }, // CRITICAL: Require tenantId to exist
+      store: storeId, 
+      isDeleted: false 
+    });
     if (employeeCount > 0) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot delete store with assigned employees');
     }
@@ -1179,16 +1355,29 @@ const deleteStore = async (storeId, deletedBy) => {
  * @param {string} updatedBy - ID of the user making the assignment
  * @returns {Promise<Object>} Updated store with manager details
  */
-const assignStoreManager = async (storeId, employeeId, updatedBy) => {
+const assignStoreManager = async (storeId, employeeId, updatedBy, tenantId = null) => {
   try {
-    // Find store
-    const store = await Store.findOne({ _id: storeId, isDeleted: false });
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const storeTenantId = tenantId || 'default';
+    
+    if (!tenantId) {
+      logger.warn('assignStoreManager called without tenantId - using default', { storeId });
+    }
+    
+    // Find store FOR THIS TENANT
+    const store = await Store.findOne({ 
+      _id: storeId, 
+      isDeleted: false,
+      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
+    });
     if (!store) {
+      logger.warn('Store not found for manager assignment', { storeId, tenantId: storeTenantId });
       throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
-    // Find employee by employee_id (e.g., "EMP-MGR-001")
-    const employee = await User.findOne({ 
+    // Find employee by employee_id FOR THIS TENANT
+    const employee = await User.findOne({
+      tenantId: { $exists: true, $eq: storeTenantId }, // CRITICAL: Require tenantId to exist
       $or: [
         { employee_id: employeeId },
         { employeeId: employeeId }

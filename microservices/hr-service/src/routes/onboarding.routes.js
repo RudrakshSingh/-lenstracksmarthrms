@@ -45,8 +45,22 @@ const workDetailsSchema = {
     joining_date: Joi.date().required(),
     reporting_manager_id: Joi.string().allow(null, '').optional(), // Make reporting_manager_id optional
     employee_status: Joi.string().valid('ACTIVE', 'PENDING', 'INACTIVE').default('ACTIVE'),
-    base_salary: Joi.number().min(0).optional(),
-    annual_ctc: Joi.number().min(0).optional(),
+    
+    // DEPRECATED: base_salary and salary fields - reject if provided
+    base_salary: Joi.any().forbidden().messages({
+      'any.unknown': 'base_salary field is deprecated, use annual_ctc instead'
+    }),
+    salary: Joi.any().forbidden().messages({
+      'any.unknown': 'salary field is deprecated, use annual_ctc instead'
+    }),
+    
+    // New salary structure (required)
+    annual_ctc: Joi.number().min(0).max(99999999.99).required().messages({
+      'number.base': 'annual_ctc must be a number',
+      'number.min': 'annual_ctc must be greater than 0',
+      'number.max': 'annual_ctc cannot exceed 99,999,999.99',
+      'any.required': 'annual_ctc is required'
+    }),
     salary_breakdown: Joi.object({
       basic: Joi.number().min(0).optional(),
       hra: Joi.number().min(0).optional(),
@@ -55,15 +69,52 @@ const workDetailsSchema = {
       gratuity: Joi.number().min(0).optional(),
       other_allowances: Joi.number().min(0).optional()
     }).optional(),
+    
+    // Sales-specific fields (only valid if department = "Sales")
     target_sales: Joi.number().min(0).optional(),
+    incentive_slabs: Joi.array().items(
+      Joi.object({
+        name: Joi.string().required(),
+        min_sales: Joi.number().min(0).required(),
+        max_sales: Joi.number().min(0).required(),
+        incentive_percentage: Joi.number().min(0).max(100).required(),
+        active: Joi.boolean().default(true)
+      }).custom((value, helpers) => {
+        // Validate max_sales >= min_sales
+        if (value.max_sales < value.min_sales) {
+          return helpers.error('any.invalid', { message: 'max_sales must be >= min_sales' });
+        }
+        return value;
+      })
+    ).optional(),
+    pan_number: Joi.string().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).optional().messages({
+      'string.pattern.base': 'PAN must be in format ABCDE1234F'
+    }),
+    tax_state: Joi.string().optional(),
+    leave_entitlements: Joi.object({
+      casual_leave: Joi.number().min(0).optional(),
+      sick_leave: Joi.number().min(0).optional(),
+      privilege_leave: Joi.number().min(0).optional()
+    }).optional(),
+    
+    // Other fields
     pf_applicable: Joi.boolean().optional(),
     esic_applicable: Joi.boolean().optional(),
     pt_applicable: Joi.boolean().optional(),
-    tds_applicable: Joi.boolean().optional(),
-    pan_number: Joi.string().optional(),
-    tax_state: Joi.string().optional(),
-    leave_entitlements: Joi.object().optional(),
-    incentive_slabs: Joi.object().optional()
+    tds_applicable: Joi.boolean().optional()
+  }).custom((value, helpers) => {
+    // Validate sales-specific fields only for Sales department
+    const isSales = value.department === 'Sales';
+    const salesFields = ['target_sales', 'incentive_slabs', 'pan_number', 'tax_state', 'leave_entitlements'];
+    const hasSalesFields = salesFields.some(field => value[field] !== undefined && value[field] !== null);
+    
+    if (!isSales && hasSalesFields) {
+      return helpers.error('any.invalid', {
+        message: 'Incentive slabs and sales-specific fields are only applicable for Sales department employees'
+      });
+    }
+    
+    return value;
   })
 };
 

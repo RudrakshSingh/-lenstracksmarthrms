@@ -183,6 +183,23 @@ const authenticate = async (req, res, next) => {
         }
       }
 
+      // CRITICAL: Extract tenantId from JWT token (preferred) or user document (fallback)
+      // JWT token is source of truth for tenant context
+      const tenantIdFromToken = decoded.tenantId;
+      const tenantIdFromUser = user.tenantId;
+
+      // Prefer token's tenantId (it's validated during login)
+      // Fallback to user's tenantId if token doesn't have it (for backward compatibility)
+      const tenantId = tenantIdFromToken || tenantIdFromUser;
+
+      if (!tenantId && roleName !== 'superadmin' && roleName !== 'super-admin') {
+        logger.warn('User missing tenantId in both token and database', {
+          userId: user._id,
+          email: user.email,
+          role: roleName
+        });
+      }
+
       req.user = {
         id: user._id,
         _id: user._id,
@@ -196,7 +213,8 @@ const authenticate = async (req, res, next) => {
         role: roleName,
         roleId: typeof user.role === 'object' ? user.role._id : user.role,
         permissions: permissions,
-        status: user.status
+        status: user.status,
+        tenantId: tenantId // ✅ CRITICAL: Include tenantId from token
       };
     } catch (dbError) {
       // If User model doesn't exist or DB lookup fails, use token data
@@ -211,7 +229,8 @@ const authenticate = async (req, res, next) => {
         userId: decoded.userId || decoded.id,
         role: decoded.role || 'user',
         email: decoded.email || 'unknown@example.com',
-        permissions: decoded.permissions || []
+        permissions: decoded.permissions || [],
+        tenantId: decoded.tenantId // ✅ CRITICAL: Extract from token
       };
     }
 

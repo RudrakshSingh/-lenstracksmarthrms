@@ -4,6 +4,7 @@ const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
 const { extractTenantId } = require('../middleware/tenant.middleware'); // CRITICAL: Tenant isolation middleware
+const { validateTenantMiddleware } = require('../middleware/validateTenant.middleware'); // CRITICAL: Tenant validation middleware
 const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
@@ -237,54 +238,62 @@ const { cacheMiddleware } = require('../middleware/cache.middleware');
 
 // Routes
 router.get('/employees',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   // Removed requireRole to allow all authenticated users to query employees
   validateRequest(getEmployeesSchema),
   asyncHandler(getEmployees)
 );
 
 router.post('/employees',
-  extractTenantId, // CRITICAL: Extract tenantId from header for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:create']),
   validateRequest(createEmployeeSchema),
   asyncHandler(createEmployee)
 );
 
 router.get('/employees/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   // Allow all roles to view employee details (for attendance, profile, etc)
   // Authorization check inside controller to ensure employees can only view their own data
   asyncHandler(getEmployeeById)
 );
 
 router.put('/employees/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateEmployeeSchema),
   asyncHandler(updateEmployee)
 );
 
 router.delete('/employees/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:delete']),
   asyncHandler(deleteEmployee)
 );
 
 router.post('/employees/:id/assign-role',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['role:assign']),
   validateRequest(assignRoleSchema),
   asyncHandler(assignRole)
 );
 
 router.patch('/employees/:id/status',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateStatusSchema),
   asyncHandler(updateEmployeeStatus)
@@ -292,83 +301,94 @@ router.patch('/employees/:id/status',
 
 // Department routes
 router.get('/departments',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['department:read']),
   asyncHandler(getDepartments)
 );
 
 router.get('/departments/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['department:read']),
   asyncHandler(getDepartmentById)
 );
 
 router.post('/departments',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['Admin', 'SuperAdmin'], ['department:create']),
   asyncHandler(createDepartment)
 );
 
 router.put('/departments/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['Admin', 'SuperAdmin'], ['department:update']),
   asyncHandler(updateDepartment)
 );
 
 router.delete('/departments/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['Admin', 'SuperAdmin'], ['department:delete']),
   asyncHandler(deleteDepartment)
 );
 
 // Store routes
 router.get('/stores',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['store:read']),
   validateRequest(getStoresSchema),
   asyncHandler(getStores)
 );
 
 router.post('/stores',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:create']),
   validateRequest(createStoreSchema),
   asyncHandler(createStore)
 );
 
 router.get('/stores/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   // Allow all authenticated users to view store details (needed for attendance geofencing)
   asyncHandler(getStoreById)
 );
 
 router.put('/stores/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:update']),
   validateRequest(updateStoreSchema),
   asyncHandler(updateStore)
 );
 
 router.delete('/stores/:id',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:delete']),
   asyncHandler(deleteStore)
 );
 
 // NEW: Verify geofence for store
 router.post('/stores/:id/verify-geofence',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   // Allow all authenticated users (employees need this for attendance)
   validateRequest(verifyGeofenceSchema),
   asyncHandler(async (req, res, next) => {
@@ -379,8 +399,9 @@ router.post('/stores/:id/verify-geofence',
 
 // NEW: Assign manager to store
 router.post('/stores/:id/manager',
-  extractTenantId, // CRITICAL: Extract tenantId for tenant isolation
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['store:update']),
   validateRequest(assignManagerSchema),
   asyncHandler(async (req, res, next) => {

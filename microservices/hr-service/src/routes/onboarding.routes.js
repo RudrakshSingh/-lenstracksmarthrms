@@ -4,6 +4,8 @@ const onboardingController = require('../controllers/onboardingController');
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
 const { validateRequest } = require('../middleware/validateRequest.wrapper');
+const { extractTenantId } = require('../middleware/tenant.middleware');
+const { validateTenantMiddleware } = require('../middleware/validateTenant.middleware');
 const asyncHandler = require('../utils/asyncHandler');
 const { uploadSingle } = require('../middleware/upload.middleware');
 const Joi = require('joi');
@@ -237,7 +239,9 @@ const documentsSchema = {
  */
 router.post(
   '/onboarding/personal-details',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(personalDetailsSchema),
   asyncHandler(onboardingController.addPersonalDetails)
@@ -250,7 +254,9 @@ router.post(
  */
 router.post(
   '/onboarding/work-details',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(workDetailsSchema),
   asyncHandler(onboardingController.addWorkDetails)
@@ -261,7 +267,9 @@ router.post(
  */
 router.post(
   '/work-details',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(workDetailsSchema),
   asyncHandler(onboardingController.addWorkDetails)
@@ -274,7 +282,9 @@ router.post(
  */
 router.post(
   '/onboarding/statutory-info',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(statutoryInfoSchema),
   asyncHandler((req, res, next) => {
@@ -291,7 +301,9 @@ router.post(
  */
 router.patch(
   '/employees/:employeeId/statutory',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(statutoryInfoSchema),
   asyncHandler(onboardingController.addStatutoryInfo)
@@ -304,7 +316,9 @@ router.patch(
  */
 router.post(
   '/onboarding/documents',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(documentsSchema),
   asyncHandler(onboardingController.addDocuments)
@@ -316,7 +330,9 @@ router.post(
  */
 router.post(
   '/onboarding/upload',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   uploadSingle('file'),
   asyncHandler(onboardingController.uploadOnboardingDocument)
@@ -329,7 +345,9 @@ router.post(
  */
 router.post(
   '/onboarding/complete/:id',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(completeOnboardingSchema),
   asyncHandler((req, res, next) => {
@@ -346,7 +364,9 @@ router.post(
  */
 router.post(
   '/employees/:employeeId/complete-onboarding',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(completeOnboardingSchema),
   asyncHandler(onboardingController.completeOnboarding)
@@ -359,7 +379,9 @@ router.post(
  */
 router.post(
   '/onboarding/draft',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(saveDraftSchema),
   asyncHandler(onboardingController.saveDraft)
@@ -372,7 +394,9 @@ router.post(
  */
 router.get(
   '/onboarding/draft',
-  authenticate,
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   validateRequest(getDraftSchema),
   asyncHandler(onboardingController.getDraft)

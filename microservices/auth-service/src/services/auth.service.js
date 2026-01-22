@@ -274,10 +274,23 @@ class AuthService {
       user.last_activity = new Date();
       await user.save();
 
-      // Generate tokens (include employee_id for microservice communication)
+      // CRITICAL: Validate tenantId for non-super-admin users
+      if (user.role !== 'superadmin' && user.role !== 'super-admin') {
+        if (!user.tenantId) {
+          logger.error('User missing tenantId during login', {
+            userId: user._id,
+            email: user.email,
+            role: user.role
+          });
+          throw new Error('User account is not associated with a tenant. Contact administrator.');
+        }
+      }
+
+      // Generate tokens (include tenantId for multi-tenant security)
       const accessToken = generateAccessToken({ 
         userId: user._id, 
         role: user.role,
+        tenantId: user.tenantId, // ✅ CRITICAL: Include tenantId for multi-tenant security
         employee_id: user.employee_id // ← CRITICAL: Include for attendance/HR services
       });
       const refreshToken = generateRefreshToken({ userId: user._id });
@@ -363,8 +376,13 @@ class AuthService {
         throw new Error('User not found or inactive');
       }
 
-      // Generate new access token
-      const accessToken = generateAccessToken({ userId: user._id, role: user.role });
+      // Generate new access token (include tenantId for multi-tenant security)
+      const accessToken = generateAccessToken({ 
+        userId: user._id, 
+        role: user.role,
+        tenantId: user.tenantId, // ✅ CRITICAL: Include tenantId
+        employee_id: user.employee_id // ✅ Include employee_id if available
+      });
 
       logger.info('Access token refreshed', { userId: user._id });
 

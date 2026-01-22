@@ -1,57 +1,86 @@
-# Quick Local Test with Main Database
+# Quick Local Testing Guide
 
-## Steps to Test Locally
+## ⚠️ Important Prerequisites
 
-### 1. Set Environment Variables
+Before testing locally, ensure:
+1. **Database is accessible** - MongoDB/Cosmos DB connection configured
+2. **Environment variables set** - `.env` files in both services
+3. **Dependencies installed** - Run `npm install` in both services
+
+## 🚀 Quick Start (3 Options)
+
+### Option 1: Manual Start (Recommended for first time)
+
+**Terminal 1:**
 ```bash
-cd microservices/hr-service
-
-# Your connection string (from .env) doesn't have database name
-# The code will automatically add 'etelios_hr_service' (MAIN DB)
-export MONGO_URI="mongodb+srv://rudrakshsin3006:rudi%403006@hrms.zbz0wva.mongodb.net/?appName=hrms"
-export DB_NAME=etelios_hr_service
-export PORT=3002
+cd microservices/auth-service
+npm start
 ```
 
-### 2. Start HR Service
+**Terminal 2:**
 ```bash
 cd microservices/hr-service
 npm start
 ```
 
-**Watch the logs** - you should see:
-```
-hr-service: MongoDB connected successfully
-database: etelios_hr_service  ← MAIN database
-```
-
-If you see any database name with "test" in it, the code will automatically replace it.
-
-### 3. Run Test (in another terminal)
+**Terminal 3:**
 ```bash
-# Simple test
-node scripts/test-local-simple.js
-
-# Full workflow test
-node scripts/test-full-hr-workflow.js --local
+BASE_URL=http://localhost:3002 \
+AUTH_URL=http://localhost:3001 \
+node test-multi-tenant-implementation.js
 ```
 
-## What Gets Tested
+### Option 2: Background Start Script
 
-1. ✅ Employee Creation - Creates in MAIN database
-2. ✅ Onboarding Steps 1-7 - All onboarding APIs
-3. ✅ HR APIs - Employees, Departments, Dashboard, Payroll, etc.
+```bash
+./start-services-for-testing.sh
+```
 
-## Verification
+Then run test:
+```bash
+BASE_URL=http://localhost:3002 \
+AUTH_URL=http://localhost:3001 \
+node test-multi-tenant-implementation.js
+```
 
-After test completes:
-- Check server logs: `database: etelios_hr_service`
-- Employee should appear in `/api/hr/employees` list
-- All data goes to MAIN database, not test
+### Option 3: Test Against Production (After Deployment)
 
-## Code Changes Made
+```bash
+BASE_URL=https://98.70.245.87 \
+AUTH_URL=https://98.70.245.87 \
+node test-multi-tenant-implementation.js
+```
 
-1. **Database Name**: Always uses `etelios_hr_service` (main DB)
-2. **Employee Creation**: Fixed fullName validation
-3. **Validation**: Doesn't strip unknown fields anymore
+## 🔍 Troubleshooting
 
+### Services won't start
+- Check if ports 3001 and 3002 are already in use
+- Verify `.env` files exist and have correct values
+- Check database connection
+
+### Database connection errors
+- Verify `MONGODB_URI` in `.env` files
+- Check if database is accessible from your network
+- For Cosmos DB, ensure `retryWrites=false` in connection string
+
+### Test fails with "Token missing tenantId"
+- Verify code changes are saved
+- Check if services restarted after code changes
+- Verify user in database has `tenantId` field
+
+## ✅ Expected Test Results
+
+When all tests pass:
+```
+━━━ Test Summary ━━━
+ℹ Total Tests: 5
+✓ Passed: 5
+✓ All tests passed! 🎉
+```
+
+## 📝 Next Steps After Local Testing
+
+1. ✅ Verify all tests pass locally
+2. ✅ Push changes to Azure DevOps
+3. ✅ Deploy via pipeline
+4. ✅ Test in production

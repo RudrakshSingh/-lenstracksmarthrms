@@ -264,6 +264,16 @@ router.get('/employees/:id',
   asyncHandler(getEmployeeById)
 );
 
+// Alias route for /api/hr/employee/:id (singular) - frontend compatibility
+router.get('/employee/:id',
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
+  // Allow all roles to view employee details (for attendance, profile, etc)
+  // Authorization check inside controller to ensure employees can only view their own data
+  asyncHandler(getEmployeeById)
+);
+
 router.put('/employees/:id',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
   validateTenantMiddleware(), // 2. Validate tenant (compares header with token)

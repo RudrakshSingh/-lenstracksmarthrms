@@ -4,14 +4,15 @@ FROM node:22-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files from service directory
+COPY microservices/jts-service/package*.json ./
 
 # Install dependencies
 RUN if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi && npm cache clean --force
 
-# Copy source code
-COPY . .
+# Copy service source and shared utilities
+COPY microservices/jts-service/ ./
+COPY microservices/shared ./shared
 
 # Production stage
 FROM node:22-alpine AS production
@@ -26,15 +27,14 @@ RUN apk add --no-cache \
     && addgroup -g 1001 -S nodejs \
     && adduser -S nodejs -u 1001
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files from service directory
+COPY microservices/jts-service/package*.json ./
 
 # Install only production dependencies
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Copy application code from builder stage
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/ ./
 
 # Create necessary directories
 RUN mkdir -p logs storage \

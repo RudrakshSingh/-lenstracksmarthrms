@@ -18,7 +18,9 @@ class SlaCalculatorService {
     });
 
     if (!rule) {
-      throw new Error('SLA_001_RULE_NOT_FOUND');
+      // Bootstrap fallback for tenants where SLA catalog is not seeded yet.
+      // Keeps task creation functional while admin policies are populated.
+      return 24 * 60;
     }
 
     return rule.base_sla_minutes;

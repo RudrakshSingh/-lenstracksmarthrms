@@ -1,5 +1,10 @@
 const selfTaskService = require('../services/selfTask.service');
+const taskService = require('../services/task.service');
 const logger = require('../config/logger');
+const { toErrorPayload } = require('../utils/errorResponse');
+const { resolveEmployeeId } = require('../utils/actor.util');
+const { normalizeSelfTaskBody } = require('../utils/taskRequest.normalize');
+const { serializeTask } = require('../utils/taskFrontend.mapper');
 
 class SelfTaskController {
   /**
@@ -8,22 +13,32 @@ class SelfTaskController {
    */
   async createSelfTask(req, res) {
     try {
-      const { tenant_id, id: employeeId } = req.user;
+      const { tenant_id } = req.user;
 
-      const task = await selfTaskService.createSelfTask(tenant_id, employeeId, req.body);
+      const employeeId = await resolveEmployeeId(tenant_id, req.user);
+      if (!employeeId) {
+        return res.status(403).json({
+          success: false,
+          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
+          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
+        });
+      }
+
+      const body = normalizeSelfTaskBody(req.body);
+      const task = await selfTaskService.createSelfTask(tenant_id, employeeId, body);
+      const full = await taskService.getTaskById(tenant_id, task._id);
 
       res.status(201).json({
         success: true,
-        data: task,
-        message: 'Self-task created successfully'
+        data: serializeTask(full),
+        message: full?.requires_approval
+          ? 'Self task created successfully, pending approval'
+          : 'Self-task created successfully'
       });
     } catch (error) {
       logger.error('Create self-task error', { error: error.message });
-      res.status(400).json({
-        success: false,
-        error: error.message,
-        code: error.message
-      });
+      const mapped = toErrorPayload(error, 'SELF_TASK_CREATE_ERROR');
+      res.status(mapped.status).json(mapped.body);
     }
   }
 }

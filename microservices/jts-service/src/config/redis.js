@@ -1,6 +1,7 @@
 const Redis = require('ioredis');
 const logger = require('./logger');
 
+// Connected at server boot; JTS notification queues use Mongo + cron (not Bull on Redis today).
 let redisClient = null;
 let redisConnection = null;
 

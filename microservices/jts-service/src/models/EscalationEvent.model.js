@@ -8,9 +8,14 @@ const EscalationEventSchema = new Schema(
     rule_id: { type: Schema.Types.ObjectId, ref: 'EscalationRule', required: true, index: true },
     level: {
       type: String,
-      enum: ['PRE_SLA', 'SLA_BREACH', 'EXTRA_DELAY'],
+      enum: ['PRE_SLA', 'SLA_BREACH', 'EXTRA_DELAY', 'L0', 'L1', 'L2', 'L3'],
       required: true,
       index: true
+    },
+    trigger_type: {
+      type: String,
+      enum: ['SLA_BREACH', 'NO_ACCEPTANCE', 'NO_ACTIVITY', 'REPEATED_REJECTIONS'],
+      default: 'SLA_BREACH'
     },
     notified_roles: { type: [String], default: [] },
     notified_employee_ids: { type: [Schema.Types.ObjectId], ref: 'Employee', default: [] },

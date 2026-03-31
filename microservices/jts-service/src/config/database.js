@@ -18,8 +18,9 @@ const connectDB = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      retryWrites: true,
+      retryWrites: false,
       retryReads: true,
+      readPreference: 'primary',
     };
 
     await mongoose.connect(mongoUri, options);

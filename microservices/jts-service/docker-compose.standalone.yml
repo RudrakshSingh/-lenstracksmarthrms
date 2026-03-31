@@ -1,0 +1,47 @@
+# Seedha Docker — GitHub / K8s ki zaroorat nahi.
+# Usage: docker compose -f docker-compose.standalone.yml up -d --build
+#
+# Pehle .env banao (copy .env.docker.example → .env) ya neeche wale env set karo.
+
+services:
+  jts-service:
+    build: .
+    image: jts-service:local
+    ports:
+      - "${JTS_PORT:-3018}:3018"
+    environment:
+      NODE_ENV: production
+      PORT: "3018"
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/etelios_jts}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      # Bahar se sirf /jts pe reverse-proxy ho to:
+      JTS_PUBLIC_PATH_PREFIX: ${JTS_PUBLIC_PATH_PREFIX:-/api/jts}
+      JTS_TIMER_ATTENDANCE_MODE: ${JTS_TIMER_ATTENDANCE_MODE:-strict}
+      ATTENDANCE_SERVICE_URL: ${ATTENDANCE_SERVICE_URL:-}
+      REALTIME_SERVICE_URL: ${REALTIME_SERVICE_URL:-}
+    depends_on:
+      - mongo
+      - redis
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7.0
+    # No host port binding by default (avoids 27017 conflicts on dev machines).
+    # JTS accesses Mongo over Docker network: mongodb://mongo:27017/...
+    volumes:
+      - jts_mongo_data:/data/db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    # No host port binding by default (avoids 6379 conflicts).
+    # JTS accesses Redis over Docker network: redis://redis:6379
+    volumes:
+      - jts_redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  jts_mongo_data:
+  jts_redis_data:

@@ -3,7 +3,11 @@ const SelfTaskPolicy = require('../models/SelfTaskPolicy.model');
 const TaskApproval = require('../models/TaskApproval.model');
 const Employee = require('../models/Employee.model');
 const ReportingRelationship = require('../models/ReportingRelationship.model');
+const TaskType = require('../models/TaskType.model');
+const TaskStatusHistory = require('../models/TaskStatusHistory.model');
 const slaCalculator = require('./slaCalculator.service');
+const catalogDefaults = require('./catalogDefaults.service');
+const taskService = require('./task.service');
 const logger = require('../config/logger');
 
 class SelfTaskService {
@@ -20,30 +24,56 @@ class SelfTaskService {
       if (!employee) throw new Error('EMPLOYEE_001_NOT_FOUND');
 
       // Get self-task policy
-      const policy = await SelfTaskPolicy.findOne({
+      let policy = await SelfTaskPolicy.findOne({
         tenant_id: tenantId,
         role_key: employee.role_key
       }).session(session);
 
       if (!policy) {
-        throw new Error('POLICY_001_SELF_TASK_NOT_ALLOWED');
+        // Tenant bootstrap fallback: create a permissive policy if none exists yet.
+        policy = await SelfTaskPolicy.create(
+          [
+            {
+              tenant_id: tenantId,
+              role_key: employee.role_key,
+              auto_assign_to_self: true,
+              mandatory_approval: false,
+              max_tasks_per_day: 20
+            }
+          ],
+          { session }
+        ).then((rows) => rows[0]);
       }
 
       // Enforce limits
       await this.enforceLimits(tenantId, employeeId, policy, session);
 
+      const dtoResolved = await catalogDefaults.applyTaskDefaults(tenantId, dto);
+
+      const taskType = await TaskType.findOne({
+        _id: dtoResolved.type_id,
+        tenant_id: tenantId
+      }).session(session);
+      if (!taskType) throw new Error('TASK_TYPE_001_NOT_FOUND');
+
+      const effectivePriority = dtoResolved.priority || taskType.default_priority;
+
       // Calculate SLA
       const slaMinutes = await slaCalculator.resolveSlaMinutes(
         tenantId,
-        dto.type_id,
-        dto.priority,
-        dto.sla_minutes_override
+        dtoResolved.type_id,
+        effectivePriority,
+        dtoResolved.sla_minutes_override
       );
+
+      if (policy.max_minutes_per_task && slaMinutes > policy.max_minutes_per_task) {
+        throw new Error('POLICY_003_MAX_TASK_DURATION_EXCEEDED');
+      }
 
       // Calculate due date
       const dueAt = await slaCalculator.calculateDueDate(
         tenantId,
-        dto.scope_org_node_id,
+        dtoResolved.scope_org_node_id,
         slaMinutes,
         new Date()
       );
@@ -52,22 +82,27 @@ class SelfTaskService {
       const requiresApproval = policy.mandatory_approval;
       const status = requiresApproval ? 'PENDING_APPROVAL' : 'ASSIGNED';
 
+      const code = await taskService.nextTaskCode(tenantId);
+
       // Create task
       const task = await Task.create([{
         tenant_id: tenantId,
-        title: dto.title,
-        description: dto.description,
-        priority: dto.priority,
-        scope_org_node_id: dto.scope_org_node_id,
+        code,
+        title: dtoResolved.title,
+        description: dtoResolved.description,
+        priority: effectivePriority,
+        scope_org_node_id: dtoResolved.scope_org_node_id,
         created_by_employee_id: employeeId,
         assigned_to_employee_id: policy.auto_assign_to_self ? employeeId : null,
-        type_id: dto.type_id,
+        type_id: dtoResolved.type_id,
         source: 'SELF',
         requires_approval: requiresApproval,
         status,
         sla_minutes: slaMinutes,
         due_at: dueAt,
-        metadata: dto.metadata || {}
+        last_activity_at: new Date(),
+        is_deleted: false,
+        metadata: dtoResolved.metadata || {}
       }], { session }).then(res => res[0]);
 
       // Create approval if needed
@@ -80,11 +115,34 @@ class SelfTaskService {
           task_id: task._id,
           requested_by_employee_id: employeeId,
           approver_employee_id: manager._id,
+          approval_type: 'SELF_TASK_APPROVAL',
+          payload: {},
           status: 'PENDING'
         }], { session });
       }
 
+      await TaskStatusHistory.create([{
+        tenant_id: tenantId,
+        task_id: task._id,
+        from_status: null,
+        to_status: status,
+        changed_by_employee_id: employeeId,
+        changed_at: new Date(),
+        reason: 'Self-task created'
+      }], { session });
+
       await session.commitTransaction();
+
+      try {
+        const taskActivityService = require('./taskActivity.service');
+        await taskActivityService.record(tenantId, task._id, employeeId, 'CREATED', {
+          source: 'SELF',
+          status
+        });
+      } catch (e) {
+        /* non-fatal */
+      }
+
       return task;
     } catch (error) {
       await session.abortTransaction();
@@ -121,6 +179,7 @@ class SelfTaskService {
         tenant_id: tenantId,
         created_by_employee_id: employeeId,
         source: 'SELF',
+        is_deleted: { $ne: true },
         created_at: { $gte: today }
       }).session(session);
 

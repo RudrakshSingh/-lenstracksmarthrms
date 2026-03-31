@@ -4,7 +4,7 @@ const Task = require('../models/Task.model');
 const TaskTimer = require('../models/TaskTimer.model');
 const SlaBreachLog = require('../models/SlaBreachLog.model');
 const TaskQualityRating = require('../models/TaskQualityRating.model');
-const logger = require('../config/logger');
+const EscalationEvent = require('../models/EscalationEvent.model');
 
 class PerformanceCalculatorService {
   /**
@@ -124,15 +124,42 @@ class PerformanceCalculatorService {
     const totalHoursLogged = timers.reduce((sum, t) => sum + (t.duration_seconds || 0), 0) / 3600;
     const timerUsageRate = totalAssigned > 0 ? timers.length / totalAssigned : 0;
 
+    const reworkRate = totalAssigned > 0 ? totalRejected / totalAssigned : 0;
+
+    const taskIds = tasks.map((t) => t._id);
+    const escalationCount = taskIds.length
+      ? await EscalationEvent.countDocuments({
+          tenant_id: tenantId,
+          task_id: { $in: taskIds }
+        })
+      : 0;
+    const escalationRate = totalAssigned > 0 ? escalationCount / totalAssigned : 0;
+
+    let sumTimeRatio = 0;
+    let timeRatioN = 0;
+    for (const t of tasks) {
+      if (t.status === 'COMPLETED' && t.completed_at && t.created_at && t.sla_minutes > 0) {
+        const actualMin = (t.completed_at.getTime() - t.created_at.getTime()) / 60000;
+        sumTimeRatio += Math.min(actualMin / t.sla_minutes, 2.5);
+        timeRatioN += 1;
+      }
+    }
+    const avgCompletionTimeVsBenchmark = timeRatioN > 0 ? sumTimeRatio / timeRatioN : 1;
+
+    const consistencyScore = Math.max(
+      0,
+      Math.min(1, 1 - escalationRate * 1.5 - reworkRate * 1.2)
+    );
+
     return {
       completionRate,
       slaComplianceRate,
       avgQualityRating,
-      reworkRate: 0.05, // Placeholder
+      reworkRate,
       timerUtilizationRate: timerUsageRate,
-      avgCompletionTimeVsBenchmark: 0.9, // Placeholder
-      escalationRate: 0.02, // Placeholder
-      consistencyScore: 0.95, // Placeholder
+      avgCompletionTimeVsBenchmark,
+      escalationRate,
+      consistencyScore,
       total_tasks_assigned: totalAssigned,
       total_tasks_completed: totalCompleted,
       total_tasks_rejected: totalRejected,

@@ -3,9 +3,9 @@ const { Schema } = mongoose;
 
 const TenantSchema = new Schema(
   {
-    code: { type: String, required: true, unique: true, index: true },
+    code: { type: String, required: true, unique: true },
     name: { type: String, required: true },
-    subdomain: { type: String, required: true, unique: true, index: true },
+    subdomain: { type: String, required: true, unique: true },
     is_active: { type: Boolean, required: true, default: true, index: true },
     settings: {
       timezone: { type: String, required: true, default: 'Asia/Kolkata' },
@@ -23,9 +23,6 @@ const TenantSchema = new Schema(
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );
-
-TenantSchema.index({ code: 1 }, { unique: true });
-TenantSchema.index({ subdomain: 1 }, { unique: true });
 
 module.exports = mongoose.model('Tenant', TenantSchema);
 

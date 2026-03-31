@@ -7,9 +7,17 @@ const EscalationRuleSchema = new Schema(
     task_type_id: { type: Schema.Types.ObjectId, ref: 'TaskType', default: null, index: true },
     threshold: {
       type: String,
-      enum: ['PRE_SLA', 'SLA_BREACH', 'EXTRA_DELAY'],
+      enum: ['PRE_SLA', 'SLA_BREACH', 'EXTRA_DELAY', 'L0', 'L1', 'L2', 'L3'],
       required: true
     },
+    trigger_type: {
+      type: String,
+      enum: ['SLA_BREACH', 'NO_ACCEPTANCE', 'NO_ACTIVITY', 'REPEATED_REJECTIONS'],
+      default: 'SLA_BREACH',
+      index: true
+    },
+    trigger_minutes: Number,
+    trigger_rejection_count: Number,
     pre_sla_threshold_minutes: Number,
     extra_delay_factor: Number,
     notify_roles: { type: [String], default: [] },

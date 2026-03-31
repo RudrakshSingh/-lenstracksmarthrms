@@ -1,4 +1,5 @@
 const logger = require('../config/logger');
+const { buildErrorBody } = require('../utils/apiError.util');
 
 /**
  * RBAC Middleware - Role-Based Access Control
@@ -18,10 +19,7 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
       const user = req.user;
 
       if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Authentication required'
-        });
+        return res.status(401).json(buildErrorBody({ code: 'AUTH_REQUIRED', message: 'Authentication required' }));
       }
 
       const userRole = (user.role || '').toUpperCase();
@@ -39,13 +37,13 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
         const hasRole = normalizedAllowedRoles.includes(userRole);
 
         if (!hasRole) {
-          return res.status(403).json({
-            success: false,
-            message: 'Access denied. Insufficient role privileges.',
-            required: allowedRoles,
-            current: user.role,
-            code: 'INSUFFICIENT_ROLE'
-          });
+          return res.status(403).json(
+            buildErrorBody({
+              code: 'INSUFFICIENT_ROLE',
+              message: 'Access denied. Insufficient role privileges.',
+              extra: { required: allowedRoles, current: user.role }
+            })
+          );
         }
       }
 
@@ -57,23 +55,20 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
         );
 
         if (!hasPermission) {
-          return res.status(403).json({
-            success: false,
-            message: 'Access denied. Insufficient permissions.',
-            required: allowedPermissions,
-            current: userPermissions,
-            code: 'INSUFFICIENT_PERMISSION'
-          });
+          return res.status(403).json(
+            buildErrorBody({
+              code: 'INSUFFICIENT_PERMISSION',
+              message: 'Access denied. Insufficient permissions.',
+              extra: { required: allowedPermissions, current: userPermissions }
+            })
+          );
         }
       }
 
       next();
     } catch (error) {
       logger.error('RBAC middleware error:', error);
-      return res.status(500).json({
-        success: false,
-        message: 'Internal server error'
-      });
+      return res.status(500).json(buildErrorBody({ code: 'INTERNAL_ERROR' }));
     }
   };
 };

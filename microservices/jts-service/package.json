@@ -7,9 +7,18 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
-    "lint": "eslint src --ext .js"
+    "lint": "eslint src --ext .js",
+    "smoke": "NODE_ENV=test node scripts/jts-smoke-api.js",
+    "contract-verify": "NODE_ENV=test node scripts/jts-contract-verify.js",
+    "contract-verify-remote": "node scripts/jts-contract-verify-remote.js",
+    "contract-verify-authed": "node scripts/jts-contract-verify-authed.js",
+    "contract-export": "NODE_ENV=test node scripts/jts-contract-verify.js --export > scripts/generated/jts-endpoint-contracts.export.json"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.890.0",
+    "@aws-sdk/client-sesv2": "^3.890.0",
+    "@aws-sdk/client-sns": "^3.890.0",
+    "@aws-sdk/s3-request-presigner": "^3.890.0",
     "axios": "^1.12.2",
     "bullmq": "^4.15.4",
     "compression": "^1.7.4",

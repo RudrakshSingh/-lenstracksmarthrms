@@ -6,6 +6,8 @@
  * Required env (one of):
  *   - HR_ACCESS_TOKEN + HR_TENANT_ID + ROSTER_API_BASE
  *   - ROSTER_LOGIN_EMAIL + ROSTER_LOGIN_PASSWORD + ROSTER_API_BASE
+ *     Password with ! → use single quotes in zsh/bash: ROSTER_LOGIN_PASSWORD='AdminPass123!'
+ *     Or ROSTER_LOGIN_PASSWORD_FILE=/path/to/file (one line, no newline). Do not use … as password.
  *
  * Optional:
  *   ROSTER_DATE=2026-04-01   (default: today UTC)
@@ -71,10 +73,16 @@ try {
   process.exit(1);
 }
 
+const DEFAULT_FETCH_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent': 'apply-jts-daily-roster/1 (+https://github.com/lenstrack)'
+};
+
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, {
     ...options,
     headers: {
+      ...DEFAULT_FETCH_HEADERS,
       'Content-Type': 'application/json',
       ...(options.headers || {})
     }
@@ -111,6 +119,12 @@ function norm(s) {
     .toLowerCase();
 }
 
+function titleCaseToken(s) {
+  const t = String(s || '').trim();
+  if (!t) return t;
+  return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+}
+
 function pickEmployeeForName(nameToken, candidates) {
   const key = norm(nameToken);
   if (employeeIdOverrides[nameToken] || employeeIdOverrides[key]) {
@@ -131,7 +145,7 @@ function pickEmployeeForName(nameToken, candidates) {
     return fn === key || ln === key || full === key;
   });
   if (exact.length === 1) return exact[0];
-  // Single search hit: only accept if first or last name equals token (avoid wrong person)
+  // Single search hit: first or last name must equal token (no substring — avoids wrong person / duplicates)
   if (exact.length === 0 && candidates.length === 1 && key.length >= 2) {
     const e = candidates[0];
     const fn = norm(e.firstName);
@@ -194,15 +208,63 @@ function employeeRosterId(emp) {
   return emp.employeeId || emp.employee_id || emp._id || emp.id;
 }
 
+function readPasswordFromEnv() {
+  const file = process.env.ROSTER_LOGIN_PASSWORD_FILE;
+  if (file) {
+    const fs = require('fs');
+    return fs.readFileSync(file, 'utf8').trim();
+  }
+  return process.env.ROSTER_LOGIN_PASSWORD || '';
+}
+
+function loginErrorHint(status, data) {
+  const raw = typeof data?.raw === 'string' ? data.raw : '';
+  const isHtml = /<!DOCTYPE|<html/i.test(raw);
+  const lines = [
+    isHtml || status === 400
+      ? 'Server returned non-JSON (often invalid request body). Check:'
+      : null,
+    isHtml
+      ? '  • Password: use your REAL password, not the … ellipsis from examples.'
+      : null,
+    '  • Shell: if password contains ! use SINGLE quotes: ROSTER_LOGIN_PASSWORD=\'YourPass!\'',
+    '  • Or avoid password in shell: ROSTER_LOGIN_PASSWORD_FILE=/path/to/secret.txt',
+    '  • Or login via browser/curl and pass HR_ACCESS_TOKEN + HR_TENANT_ID instead.'
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
 async function login(base, email, password) {
-  const payload = { email, password };
+  const pwd = password;
+  if (!pwd || pwd === '\u2026' || pwd === '…' || /^\.{3}$/.test(pwd)) {
+    throw new Error(
+      'ROSTER_LOGIN_PASSWORD is missing or still the placeholder (…). Set a real password or use HR_ACCESS_TOKEN.'
+    );
+  }
+  const payload = { email, password: pwd };
   if (HR_TENANT_ID) payload.tenantId = HR_TENANT_ID;
-  const { status, data } = await fetchJson(`${base}/api/auth/login`, {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  let body;
+  try {
+    body = JSON.stringify(payload);
+  } catch (e) {
+    throw new Error(`Could not build login JSON: ${e.message}`);
+  }
+  const authPath = process.env.ROSTER_AUTH_PATH || '/api/auth/login';
+  const url = `${base.replace(/\/$/, '')}${authPath.startsWith('/') ? '' : '/'}${authPath}`;
+  const headers = { ...DEFAULT_FETCH_HEADERS, 'Content-Type': 'application/json' };
+  if (HR_TENANT_ID) headers['X-Tenant-Id'] = HR_TENANT_ID;
+  const res = await fetch(url, { method: 'POST', headers, body });
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+  const status = res.status;
   if (status !== 200 || !data.success) {
-    throw new Error(`Login failed (${status}): ${JSON.stringify(data)}`);
+    const hint = loginErrorHint(status, data);
+    throw new Error(`Login failed (${status}): ${JSON.stringify(data).slice(0, 500)}${hint ? `\n${hint}` : ''}`);
   }
   const inner = data.data && typeof data.data === 'object' ? data.data : data;
   const token =
@@ -228,9 +290,11 @@ async function main() {
 
   if (!token) {
     const email = process.env.ROSTER_LOGIN_EMAIL;
-    const password = process.env.ROSTER_LOGIN_PASSWORD;
+    const password = readPasswordFromEnv();
     if (!email || !password) {
-      console.error('Provide HR_ACCESS_TOKEN + HR_TENANT_ID, or ROSTER_LOGIN_EMAIL + ROSTER_LOGIN_PASSWORD.');
+      console.error(
+        'Provide HR_ACCESS_TOKEN + HR_TENANT_ID, or ROSTER_LOGIN_EMAIL + ROSTER_LOGIN_PASSWORD (or ROSTER_LOGIN_PASSWORD_FILE).'
+      );
       process.exit(1);
     }
     const session = await login(ROSTER_API_BASE, email, password);
@@ -274,11 +338,25 @@ async function main() {
     for (const rawName of names) {
       const nameToken = rawName.trim();
       const search = encodeURIComponent(nameToken);
-      const empRes = await fetchJson(
-        `${ROSTER_API_BASE}/api/hr/employees?search=${search}&limit=50&page=1`,
-        { headers: authHeaders }
+      let list = extractEmployeeList(
+        (
+          await fetchJson(
+            `${ROSTER_API_BASE}/api/hr/employees?search=${search}&limit=50&page=1`,
+            { headers: authHeaders }
+          )
+        ).data
       );
-      const list = extractEmployeeList(empRes.data);
+      if (list.length === 0 && nameToken !== titleCaseToken(nameToken)) {
+        const alt = encodeURIComponent(titleCaseToken(nameToken));
+        list = extractEmployeeList(
+          (
+            await fetchJson(
+              `${ROSTER_API_BASE}/api/hr/employees?search=${alt}&limit=50&page=1`,
+              { headers: authHeaders }
+            )
+          ).data
+        );
+      }
       let emp;
       try {
         emp = pickEmployeeForName(nameToken, list);
@@ -339,7 +417,8 @@ async function main() {
         headers: authHeaders,
         body: JSON.stringify(entry)
       });
-      if (one.status < 400 && one.data?.success !== false) {
+      const okStatus = one.status >= 200 && one.status < 300;
+      if (okStatus && one.data?.success !== false) {
         ok++;
       } else {
         fail++;

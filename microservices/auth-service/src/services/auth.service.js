@@ -63,9 +63,24 @@ class AuthService {
       const mustChangePassword = userData.mustChangePassword === true;
       const passwordTemporary = userData.passwordTemporary === true;
 
+      // Validate required fields
+      if (!employee_id) {
+        throw new Error('Employee ID is required');
+      }
+      if (!name) {
+        throw new Error('Name is required');
+      }
+      if (!email) {
+        throw new Error('Email is required');
+      }
+      if (!password) {
+        throw new Error('Password is required');
+      }
+
       // Check if user already exists
+      const normalizedEmployeeId = employee_id.toUpperCase();
       const existingUser = await User.findOne({
-        $or: [{ email }, { employee_id: employee_id.toUpperCase() }]
+        $or: [{ email: email.toLowerCase() }, { employee_id: normalizedEmployeeId }]
       });
 
       if (existingUser) {
@@ -133,25 +148,59 @@ class AuthService {
       }
 
       // Create user
+      // Handle required fields for User model
+      const userDepartment = department ? department.toUpperCase() : 'HR'; // Default to HR if not provided
+      const validDepartments = ['SALES', 'TECH', 'ACCOUNTS', 'ECOMMERCE', 'FRANCHISE', 'LAB', 'DELIVERY', 'HR'];
+      const finalDepartment = validDepartments.includes(userDepartment) ? userDepartment : 'HR';
+      
       const user = new User({
-        tenantId: userData.tenantId || 'default', // Default tenant for now
-        employee_id: employee_id.toUpperCase(),
-        name,
-        email,
-        phone,
+        tenantId: (userData.tenantId || 'default').toLowerCase().trim(), // Default tenant for now
+        employee_id: normalizedEmployeeId,
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
+        phone: phone ? phone.trim() : undefined,
         password,
         role: normalizedRole, // Use normalized role
-        department,
-        designation,
+        department: finalDepartment, // Required field with valid enum value
+        band_level: userData.band_level || 'F', // Required field with default
+        hierarchy_level: userData.hierarchy_level || 'STORE', // Required field with default
+        designation: designation ? designation.trim() : (normalizedRole === 'employee' ? 'Employee' : normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1)), // Required field - must be provided or defaults based on role
         joining_date: joining_date || new Date(), // Default to current date if not provided
-        stores,
-        reporting_manager,
+        stores: stores || [],
+        reporting_manager: reporting_manager || undefined,
         mustChangePassword,
         passwordTemporary,
         created_by: createdBy
       });
 
-      await user.save();
+      // Save user with detailed error handling
+      try {
+        await user.save();
+      } catch (saveError) {
+        logger.error('Failed to save user to database', {
+          error: saveError.message,
+          stack: saveError.stack,
+          employeeId: normalizedEmployeeId,
+          email: email.toLowerCase(),
+          errors: saveError.errors,
+          code: saveError.code
+        });
+        
+        // Handle duplicate key error (MongoDB)
+        if (saveError.code === 11000 || saveError.code === 11001) {
+          const duplicateField = saveError.keyPattern ? Object.keys(saveError.keyPattern)[0] : 'unknown';
+          throw new Error(`User with this ${duplicateField} already exists`);
+        }
+        
+        // Handle validation errors
+        if (saveError.name === 'ValidationError') {
+          const validationErrors = Object.values(saveError.errors || {}).map(err => err.message).join(', ');
+          throw new Error(`Validation failed: ${validationErrors}`);
+        }
+        
+        // Re-throw with more context
+        throw new Error(`Failed to create user: ${saveError.message}`);
+      }
 
       // Generate tokens (include employee_id for microservice communication)
       const accessToken = generateAccessToken({ 
@@ -192,8 +241,31 @@ class AuthService {
         logger.warn('Could not initiate HR sync', { error: syncError.message });
       }
 
+      // Get public profile safely
+      let publicProfile;
+      try {
+        publicProfile = user.getPublicProfile ? user.getPublicProfile() : {
+          id: user._id,
+          employee_id: user.employee_id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          tenantId: user.tenantId
+        };
+      } catch (profileError) {
+        logger.warn('Failed to get public profile, using basic fields', { error: profileError.message });
+        publicProfile = {
+          id: user._id,
+          employee_id: user.employee_id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          tenantId: user.tenantId
+        };
+      }
+
       return {
-        user: user.getPublicProfile(),
+        user: publicProfile,
         accessToken,
         refreshToken
       };
@@ -212,103 +284,456 @@ class AuthService {
    * @param {string} userAgent - User agent
    * @returns {Promise<object>} User and tokens
    */
-  async login(emailOrEmployeeId, password, ip, userAgent) {
+  async login(emailOrEmployeeId, password, ip, userAgent, tenantId = null) {
     try {
-      // Check database connection first
+      const normalizedTenantId = tenantId ? String(tenantId).trim().toLowerCase() : null;
+      logger.info('Login attempt', { emailOrEmployeeId, ip, tenantId: normalizedTenantId || 'not-provided' });
+      
+      // Ensure database connection - use the global mongoose connection
       const mongoose = require('mongoose');
+      
+      // If not connected, wait a bit and check again (connection might be establishing)
       if (mongoose.connection.readyState !== 1) {
-        logger.error('Database not connected', { readyState: mongoose.connection.readyState });
-        throw new Error('Database connection unavailable. Please try again later.');
+        logger.warn('Database not connected, waiting...', { readyState: mongoose.connection.readyState });
+        
+        // Wait up to 2 seconds for connection
+        for (let i = 0; i < 20; i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (mongoose.connection.readyState === 1) {
+            logger.info('Database connection established after wait');
+            break;
+          }
+        }
+        
+        // If still not connected, try to connect
+        if (mongoose.connection.readyState !== 1) {
+          const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://admin:etelios123@mongodb.etelios-prod.svc.cluster.local:27017/etelios?authSource=admin';
+          try {
+            await mongoose.connect(MONGODB_URI, {
+              serverSelectionTimeoutMS: 5000,
+              socketTimeoutMS: 45000,
+            });
+            logger.info('Database connection established', { readyState: mongoose.connection.readyState });
+          } catch (connectError) {
+            logger.error('Failed to connect to database', { error: connectError.message });
+            throw new Error('Database connection unavailable. Please try again later.');
+          }
+        }
       }
       
-      // Find user by email or employee ID
+      const dbName = mongoose.connection.db?.databaseName || mongoose.connection.name;
+      logger.debug('Database connected', { readyState: mongoose.connection.readyState, dbName });
+      
+      // Ensure User model is loaded
+      if (!User) {
+        User = require('../models/User.model');
+      }
+      
+      // Find user by email or employee ID - use simple, direct query
       let user;
+      const queryEmail = emailOrEmployeeId.toLowerCase();
       
       if (emailOrEmployeeId.includes('@')) {
-        // Login with email
-        user = await User.findOne({ email: emailOrEmployeeId.toLowerCase() })
-          .select('+password') // CRITICAL: Select password field for comparison
-          .maxTimeMS(5000) // 5 second timeout for query
-          .populate('stores', 'name code')
-          .populate('reporting_manager', 'name employee_id');
+        // Login with email - simple direct query
+        logger.debug('Querying user by email', { email: queryEmail, dbName });
+        
+        // CRITICAL: Use lean() to get plain object, avoid Mongoose document validation
+        // Then fix missing fields before creating document instance
+        try {
+          const emailQuery = { email: queryEmail };
+          let userDoc = null;
+
+          if (normalizedTenantId) {
+            emailQuery.tenantId = normalizedTenantId;
+            userDoc = await User.findOne(emailQuery)
+              .select('+password')
+              .lean()
+              .maxTimeMS(10000);
+          } else {
+            // Backward compatibility: when tenant is not supplied, disambiguate
+            // duplicate-email users by checking which tenant account matches password.
+            const emailCandidates = await User.find(emailQuery)
+              .select('+password')
+              .lean()
+              .limit(20)
+              .maxTimeMS(10000);
+
+            if (emailCandidates.length === 1) {
+              userDoc = emailCandidates[0];
+            } else if (emailCandidates.length > 1) {
+              const bcrypt = require('bcryptjs');
+              const matches = [];
+              for (const candidate of emailCandidates) {
+                if (!candidate.password) continue;
+                const passwordMatches = await bcrypt.compare(password, candidate.password);
+                if (passwordMatches) matches.push(candidate);
+              }
+              if (matches.length === 1) {
+                userDoc = matches[0];
+              } else if (matches.length > 1) {
+                // Prefer real tenant over legacy "default" when the same password exists on duplicates
+                const preferred = matches.find(
+                  (m) => String(m.tenantId || '').toLowerCase() !== 'default'
+                );
+                userDoc = preferred || matches[0];
+              } else {
+                userDoc = emailCandidates[0];
+              }
+            }
+          }
+          
+          if (userDoc) {
+            // Fix missing auth-service required fields in plain object
+            if (!userDoc.employee_id && userDoc.employeeId) {
+              userDoc.employee_id = userDoc.employeeId;
+            }
+            if (!userDoc.name && (userDoc.firstName || userDoc.fullName)) {
+              userDoc.name = userDoc.fullName || (userDoc.lastName ? `${userDoc.firstName} ${userDoc.lastName}`.trim() : userDoc.firstName);
+            }
+            if (!userDoc.joining_date && userDoc.doj) {
+              userDoc.joining_date = userDoc.doj;
+            } else if (!userDoc.joining_date && !userDoc.doj) {
+              userDoc.joining_date = new Date();
+            }
+            
+            // Update database with missing fields (non-blocking)
+            const updateFields = {};
+            if (userDoc.employee_id && !userDoc.employeeId) updateFields.employee_id = userDoc.employee_id;
+            if (userDoc.name && !userDoc.firstName) updateFields.name = userDoc.name;
+            if (userDoc.joining_date && !userDoc.doj) updateFields.joining_date = userDoc.joining_date;
+            
+            if (Object.keys(updateFields).length > 0) {
+              User.updateOne({ _id: userDoc._id }, { $set: updateFields }).catch(err => 
+                logger.warn('Failed to update user fields (non-critical)', { error: err.message })
+              );
+            }
+            
+            // CRITICAL: Fix role - convert ObjectId to string enum value
+            let roleString = 'employee'; // Default
+            if (userDoc.role) {
+              if (typeof userDoc.role === 'object' && userDoc.role.name) {
+                roleString = userDoc.role.name.toLowerCase();
+              } else if (typeof userDoc.role === 'string') {
+                roleString = userDoc.role.toLowerCase();
+              } else {
+                // Role is ObjectId - need to fetch role name
+                try {
+                  const Role = require('../models/Role.model');
+                  const roleDoc = await Role.findById(userDoc.role).maxTimeMS(3000);
+                  if (roleDoc && roleDoc.name) {
+                    roleString = roleDoc.name.toLowerCase();
+                  }
+                } catch (roleError) {
+                  logger.warn('Failed to fetch role name, using default', { error: roleError.message });
+                }
+              }
+            }
+            userDoc.role = roleString; // Set as string for auth-service enum
+            
+            // Don't create User instance - work with plain object to avoid validation
+            user = userDoc;
+          }
+          
+          logger.debug('User query completed', { 
+            found: !!user, 
+            email: queryEmail, 
+            userId: user?._id?.toString(),
+            hasPassword: !!user?.password
+          });
+        } catch (queryError) {
+          logger.error('User query error', { error: queryError.message, stack: queryError.stack });
+          throw queryError;
+        }
       } else {
-        // Login with employee ID
-        user = await User.findOne({ employee_id: emailOrEmployeeId.toUpperCase() })
-          .select('+password') // CRITICAL: Select password field for comparison
-          .maxTimeMS(5000) // 5 second timeout for query
-          .populate('stores', 'name code')
-          .populate('reporting_manager', 'name employee_id');
+        // Login with employee ID - removed populate to avoid Store model registration issues
+        logger.debug('Querying user by employee ID', { employeeId: emailOrEmployeeId.toUpperCase() });
+        
+        // CRITICAL: Use lean() to get plain object, avoid Mongoose document validation
+        const employeeQuery = {
+          $or: [
+            { employee_id: emailOrEmployeeId.toUpperCase() },
+            { employeeId: emailOrEmployeeId.toUpperCase() }
+          ]
+        };
+        if (normalizedTenantId) {
+          employeeQuery.tenantId = normalizedTenantId;
+        }
+
+        let userDoc = null;
+        if (normalizedTenantId) {
+          userDoc = await User.findOne(employeeQuery)
+            .select('+password')
+            .lean()
+            .maxTimeMS(5000);
+        } else {
+          const employeeCandidates = await User.find({
+            $or: [
+              { employee_id: emailOrEmployeeId.toUpperCase() },
+              { employeeId: emailOrEmployeeId.toUpperCase() }
+            ]
+          })
+            .select('+password')
+            .lean()
+            .limit(20)
+            .maxTimeMS(10000);
+
+          if (employeeCandidates.length === 1) {
+            userDoc = employeeCandidates[0];
+          } else if (employeeCandidates.length > 1) {
+            const bcrypt = require('bcryptjs');
+            const matches = [];
+            for (const candidate of employeeCandidates) {
+              if (!candidate.password) continue;
+              const passwordMatches = await bcrypt.compare(password, candidate.password);
+              if (passwordMatches) matches.push(candidate);
+            }
+            if (matches.length === 1) {
+              userDoc = matches[0];
+            } else if (matches.length > 1) {
+              const preferred = matches.find(
+                (m) => String(m.tenantId || '').toLowerCase() !== 'default'
+              );
+              userDoc = preferred || matches[0];
+            } else {
+              userDoc = employeeCandidates[0];
+            }
+          }
+        }
+
+        if (userDoc) {
+          // Fix missing auth-service required fields
+          if (!userDoc.employee_id && userDoc.employeeId) {
+            userDoc.employee_id = userDoc.employeeId;
+          }
+          if (!userDoc.name && (userDoc.firstName || userDoc.fullName)) {
+            userDoc.name = userDoc.fullName || (userDoc.lastName ? `${userDoc.firstName} ${userDoc.lastName}`.trim() : userDoc.firstName);
+          }
+          if (!userDoc.joining_date && userDoc.doj) {
+            userDoc.joining_date = userDoc.doj;
+          } else if (!userDoc.joining_date && !userDoc.doj) {
+            userDoc.joining_date = new Date();
+          }
+          
+          // CRITICAL: Fix role - convert ObjectId to string enum value
+          let roleString = 'employee'; // Default
+          if (userDoc.role) {
+            if (typeof userDoc.role === 'object' && userDoc.role.name) {
+              roleString = userDoc.role.name.toLowerCase();
+            } else if (typeof userDoc.role === 'string') {
+              roleString = userDoc.role.toLowerCase();
+            } else {
+              // Role is ObjectId - need to fetch role name
+              try {
+                const Role = require('../models/Role.model');
+                const roleDoc = await Role.findById(userDoc.role).maxTimeMS(3000);
+                if (roleDoc && roleDoc.name) {
+                  roleString = roleDoc.name.toLowerCase();
+                }
+              } catch (roleError) {
+                logger.warn('Failed to fetch role name, using default', { error: roleError.message });
+              }
+            }
+          }
+          userDoc.role = roleString; // Set as string for auth-service enum
+          
+          // Update database with missing fields (non-blocking)
+          const updateFields = {};
+          if (userDoc.employee_id && !userDoc.employeeId) updateFields.employee_id = userDoc.employee_id;
+          if (userDoc.name && !userDoc.firstName) updateFields.name = userDoc.name;
+          if (userDoc.joining_date && !userDoc.doj) updateFields.joining_date = userDoc.joining_date;
+          
+          if (Object.keys(updateFields).length > 0) {
+            User.updateOne({ _id: userDoc._id }, { $set: updateFields }).catch(err => 
+              logger.warn('Failed to update user fields (non-critical)', { error: err.message })
+            );
+          }
+          
+          // Don't create User instance - work with plain object to avoid validation
+          user = userDoc;
+        }
+        
+        logger.debug('User query completed', { found: !!user, employeeId: emailOrEmployeeId.toUpperCase() });
       }
 
       if (!user) {
+        logger.error('User not found during login', { 
+          emailOrEmployeeId, 
+          emailLowercase: queryEmail,
+          query: emailOrEmployeeId.includes('@') ? { email: queryEmail } : { employee_id: emailOrEmployeeId.toUpperCase() }
+        });
         logAuthEvent('failed_login', null, { emailOrEmployeeId, reason: 'user_not_found' }, ip, userAgent);
         throw new Error('Invalid email or password');
       }
+      
+      logger.info('User found during login', { 
+        userId: user._id?.toString() || user.id, 
+        email: user.email,
+        hasPassword: !!user.password,
+        isActive: user.is_active,
+        status: user.status
+      });
 
       // Check if user is active
       if (!user.is_active || user.status === 'inactive') {
-        logAuthEvent('failed_login', user._id, { emailOrEmployeeId, reason: 'account_inactive' }, ip, userAgent);
+        logAuthEvent('failed_login', user._id || user.id, { emailOrEmployeeId, reason: 'account_inactive' }, ip, userAgent);
         throw new Error('Account is inactive');
       }
 
       // Check if user is suspended
       if (user.status === 'suspended') {
-        logAuthEvent('failed_login', user._id, { emailOrEmployeeId, reason: 'account_suspended' }, ip, userAgent);
+        logAuthEvent('failed_login', user._id || user.id, { emailOrEmployeeId, reason: 'account_suspended' }, ip, userAgent);
         throw new Error('Account is suspended');
       }
 
       // Verify password - ensure password field is available
       if (!user.password) {
-        logger.error('Password field not available for user', { userId: user._id, emailOrEmployeeId });
+        logger.error('Password field not available for user', { userId: user._id || user.id, emailOrEmployeeId });
         throw new Error('Authentication error. Please contact support.');
       }
       
-      const isPasswordValid = await user.comparePassword(password);
+      // CRITICAL: Compare password using bcrypt directly (avoid document method validation)
+      const bcrypt = require('bcryptjs');
+      const isPasswordValid = user.password ? await bcrypt.compare(password, user.password) : false;
       if (!isPasswordValid) {
-        logAuthEvent('failed_login', user._id, { emailOrEmployeeId, reason: 'invalid_password' }, ip, userAgent);
+        logAuthEvent('failed_login', user._id || user.id, { emailOrEmployeeId, reason: 'invalid_password' }, ip, userAgent);
         throw new Error('Invalid email or password');
       }
 
-      // Update last login
-      user.last_login = new Date();
-      user.last_activity = new Date();
-      await user.save();
+      // CRITICAL: Fix missing auth-service required fields in user object (for token generation)
+      // Also prepare update fields for database
+      const updateFields = {
+        last_login: new Date(),
+        last_activity: new Date()
+      };
+      
+      // Fix employee_id (auth-service requires this)
+      if (!user.employee_id && user.employeeId) {
+        updateFields.employee_id = user.employeeId;
+        user.employee_id = user.employeeId;
+      } else if (!user.employee_id) {
+        updateFields.employee_id = user.employeeId || user.code || 'UNKNOWN';
+        user.employee_id = updateFields.employee_id;
+      }
+      
+      // Fix name (auth-service requires this)
+      if (!user.name) {
+        if (user.fullName) {
+          updateFields.name = user.fullName;
+          user.name = user.fullName;
+        } else if (user.firstName) {
+          updateFields.name = user.lastName ? `${user.firstName} ${user.lastName}`.trim() : user.firstName;
+          user.name = updateFields.name;
+        } else {
+          updateFields.name = user.email.split('@')[0];
+          user.name = updateFields.name;
+        }
+      }
+      
+      // Fix joining_date (auth-service requires this)
+      if (!user.joining_date) {
+        if (user.doj) {
+          updateFields.joining_date = user.doj;
+          user.joining_date = user.doj;
+        } else {
+          updateFields.joining_date = new Date();
+          user.joining_date = new Date();
+        }
+      }
+      
+      // Update user document directly (bypasses validation)
+      const userId = user._id || user.id;
+      try {
+        await User.updateOne(
+          { _id: userId },
+          { $set: updateFields }
+        );
+        logger.debug('Updated user last_login and fixed missing fields', { 
+          userId,
+          email: user.email,
+          fieldsUpdated: Object.keys(updateFields)
+        });
+      } catch (updateError) {
+        logger.warn('Failed to update user during login (non-critical)', { 
+          error: updateError.message,
+          userId 
+        });
+      }
 
       // CRITICAL: Validate tenantId for non-super-admin users
-      if (user.role !== 'superadmin' && user.role !== 'super-admin') {
+      const userRole = typeof user.role === 'object' ? (user.role.name || 'employee') : (user.role || 'employee');
+      if (userRole !== 'superadmin' && userRole !== 'super-admin') {
         if (!user.tenantId) {
           logger.error('User missing tenantId during login', {
-            userId: user._id,
+            userId: user._id || user.id,
             email: user.email,
-            role: user.role
+            role: userRole
           });
           throw new Error('User account is not associated with a tenant. Contact administrator.');
         }
       }
 
       // Generate tokens (include tenantId for multi-tenant security)
+      // Use role name if role is ObjectId, otherwise use role string
+      const roleForToken = typeof user.role === 'object' ? (user.role.name || 'employee') : (user.role || 'employee');
       const accessToken = generateAccessToken({ 
-        userId: user._id, 
-        role: user.role,
+        userId: user._id || user.id, 
+        email: user.email, // ✅ CRITICAL: Include email for frontend validation
+        role: roleForToken,
         tenantId: user.tenantId, // ✅ CRITICAL: Include tenantId for multi-tenant security
-        employee_id: user.employee_id // ← CRITICAL: Include for attendance/HR services
+        employee_id: user.employee_id || user.employeeId // ← CRITICAL: Include for attendance/HR services
       });
       const refreshToken = generateRefreshToken({ userId: user._id });
 
-      // Store refresh token in Redis
-      await this.storeRefreshToken(user._id, refreshToken);
+      // Store refresh token in Redis (non-blocking - has fallback)
+      this.storeRefreshToken(user._id, refreshToken).catch(err => {
+        logger.warn('Failed to store refresh token in Redis, using in-memory fallback', { error: err.message, userId: user._id });
+      });
 
       // Log successful login
       logAuthEvent('login', user._id, { emailOrEmployeeId, role: user.role }, ip, userAgent);
 
-      logger.info('User logged in successfully', { userId: user._id, employeeId: user.employee_id });
+      // Check if password change is required (for first login / temporary password flow)
+      const mustChangePassword = !!user.mustChangePassword || !!user.passwordTemporary;
+      
+      if (mustChangePassword) {
+        logger.info('User logged in with temporary password - password change required', { 
+          userId: user._id, 
+          employeeId: user.employee_id,
+          mustChangePassword: !!user.mustChangePassword,
+          passwordTemporary: !!user.passwordTemporary
+        });
+      } else {
+        logger.info('User logged in successfully', { userId: user._id, employeeId: user.employee_id });
+      }
 
+      // Get public profile safely
+      let userProfile;
+      try {
+        userProfile = user.getPublicProfile ? user.getPublicProfile() : user.toObject ? user.toObject() : user;
+        // Remove sensitive fields
+        if (userProfile.password) delete userProfile.password;
+        if (userProfile.__v !== undefined) delete userProfile.__v;
+      } catch (profileError) {
+        logger.warn('Error getting public profile, using basic user data', { error: profileError.message, userId: user._id });
+        userProfile = {
+          _id: user._id,
+          email: user.email,
+          employee_id: user.employee_id,
+          name: user.name || user.fullName,
+          role: user.role,
+          tenantId: user.tenantId
+        };
+      }
+
+      // CRITICAL: Return 200 (not 401) even when password is temporary
+      // Frontend will check mustChangePassword flag and redirect to change-password page
       return {
-        user: user.getPublicProfile(),
+        user: userProfile,
         accessToken,
         refreshToken,
         // Tenant creation flow support: frontend can use this to show "change password" screen
-        mustChangePassword: !!user.mustChangePassword,
+        // If true, frontend should redirect to /auth/change-password?reason=first_login
+        mustChangePassword: mustChangePassword,
         passwordTemporary: !!user.passwordTemporary
       };
 
@@ -401,8 +826,50 @@ class AuthService {
    * @param {string} userAgent - User agent
    * @returns {Promise<void>}
    */
-  async logout(userId, ip, userAgent) {
+  async logout(userId, ip, userAgent, token = null) {
     try {
+      // Auto clock-out from attendance service if employee is clocked in
+      try {
+        const axios = require('axios');
+        const ATTENDANCE_SERVICE_URL = process.env.ATTENDANCE_SERVICE_URL || 'http://attendance-service:80';
+        
+        // Get user details to find employee
+        const User = require('../models/User.model');
+        const user = await User.findById(userId);
+        
+        if (user && (user.employee_id || user.employeeId)) {
+          // Try to auto clock-out
+          const clockOutData = {
+            latitude: 0, // Default coordinates (will be updated by attendance service if needed)
+            longitude: 0,
+            notes: 'Auto clock-out on logout'
+          };
+
+          await axios.post(`${ATTENDANCE_SERVICE_URL}/api/attendance/clock-out`, clockOutData, {
+            headers: {
+              'Authorization': token ? `Bearer ${token}` : '',
+              'Content-Type': 'application/json'
+            },
+            timeout: 3000 // 3 second timeout - don't block logout if attendance service is slow
+          }).catch(clockOutError => {
+            // Log but don't fail logout if clock-out fails
+            logger.warn('Auto clock-out on logout failed (non-blocking)', {
+              error: clockOutError.message,
+              userId,
+              employeeId: user.employee_id || user.employeeId
+            });
+          });
+
+          logger.info('Auto clock-out attempted on logout', { userId, employeeId: user.employee_id || user.employeeId });
+        }
+      } catch (autoClockOutError) {
+        // Don't fail logout if auto clock-out fails
+        logger.warn('Auto clock-out on logout error (non-blocking)', {
+          error: autoClockOutError.message,
+          userId
+        });
+      }
+
       // Remove refresh token from Redis
       await this.removeRefreshToken(userId);
 
@@ -452,6 +919,36 @@ class AuthService {
 
     } catch (error) {
       logger.error('Password change failed', { error: error.message, userId });
+      throw error;
+    }
+  }
+
+  /**
+   * Admin reset password (without current password)
+   * @param {string} userId - User ID
+   * @param {string} newPassword - New password
+   * @returns {Promise<void>}
+   */
+  async adminResetPassword(userId, newPassword) {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Update password (will be hashed by pre-save hook)
+      user.password = newPassword;
+      user.mustChangePassword = false;
+      user.passwordTemporary = false;
+      user.passwordChangedAt = new Date();
+      await user.save();
+
+      // Remove all refresh tokens to force re-login
+      await this.removeRefreshToken(userId);
+
+      logger.info('Admin password reset successfully', { userId });
+    } catch (error) {
+      logger.error('Admin password reset failed', { error: error.message, userId });
       throw error;
     }
   }

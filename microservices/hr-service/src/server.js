@@ -1281,12 +1281,11 @@ const loadRoutes = () => {
   
   try {
     const rosterRoutes = require('./routes/roster.routes.js');
-    // Mount at /api/hr/roster (primary route)
-    app.use('/api/hr/roster', apiRateLimit, rosterRoutes);
-    // Also mount at /api/roster for frontend compatibility (without /hr prefix)
+    // Primary path is /api/hr/roster via hr.routes.js (router.use('/roster', rosterRoutes)).
+    // Keep /api/roster alias only (same router instance; Node caches the require).
     app.use('/api/roster', apiRateLimit, rosterRoutes);
     routesLoaded.push('roster.routes.js');
-    logger.info('roster.routes.js loaded successfully (mounted at /api/hr/roster and /api/roster)');
+    logger.info('roster.routes.js: /api/hr/roster via hr.routes, /api/roster alias here');
   } catch (error) {
     routesFailed.push({ route: 'roster.routes.js', error: error.message });
     logger.error('roster.routes.js failed to load', { error: error.message, stack: error.stack });
@@ -1786,6 +1785,9 @@ const startServer = async () => {
       routesInfo.push('GET /health');
       routesInfo.push('GET /api/hr/status');
       routesInfo.push('GET /api/hr/health');
+      routesInfo.push('GET /api/hr/roster');
+      routesInfo.push('POST /api/hr/roster');
+      routesInfo.push('POST /api/hr/roster/bulk');
       
       res.status(404).json({
         success: false,

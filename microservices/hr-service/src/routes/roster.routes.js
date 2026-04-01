@@ -3,6 +3,7 @@ const router = express.Router();
 const rosterController = require('../controllers/rosterController');
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
+const { cacheMiddleware } = require('../middleware/cache.middleware');
 
 /**
  * @route   GET /api/hr/roster/weekly-enhanced
@@ -54,12 +55,13 @@ router.post(
 );
 
 /**
- * @route   PUT /api/hr/roster/settings/:id
+ * @route   PUT /api/hr/roster/settings/:storeId
  * @desc    Update roster settings
  * @access  Private (HR, Admin, SuperAdmin)
+ * @note    Frontend expects :storeId in path, not :id
  */
 router.put(
-  '/settings/:id',
+  '/settings/:storeId',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin']),
   rosterController.upsertRosterSettings
@@ -75,6 +77,19 @@ router.post(
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
   rosterController.generateAIRoster
+);
+
+/**
+ * @route   POST /api/hr/roster/sync-attendance
+ * @desc    Sync roster with attendance for a date
+ * @access  Private (HR, Admin, Manager)
+ * @note    MUST come before /bulk to avoid route conflict
+ */
+router.post(
+  '/sync-attendance',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.syncAttendance
 );
 
 /**
@@ -98,6 +113,7 @@ router.post(
 router.get(
   '/',
   authenticate,
+  cacheMiddleware(20000), // Cache for 20 seconds (roster changes frequently)
   rosterController.getRoster
 );
 
@@ -114,24 +130,26 @@ router.post(
 );
 
 /**
- * @route   PUT /api/hr/roster
+ * @route   PUT /api/hr/roster/:id
  * @desc    Update an existing roster entry
  * @access  Private (HR, Admin, Manager)
+ * @note    Frontend sends PUT /api/roster with id in body, but backend expects :id in path
  */
 router.put(
-  '/',
+  '/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
   rosterController.updateRoster
 );
 
 /**
- * @route   DELETE /api/hr/roster
+ * @route   DELETE /api/hr/roster/:id
  * @desc    Delete a roster entry
  * @access  Private (HR, Admin, Manager)
+ * @note    Frontend sends DELETE /api/roster?id=..., but backend expects :id in path
  */
 router.delete(
-  '/',
+  '/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
   rosterController.deleteRoster

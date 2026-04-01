@@ -29,6 +29,9 @@ const {
   getWorkforce
 } = require('../controllers/hrController');
 
+// OPTIMIZED: Add caching middleware for frequently accessed endpoints
+// Note: cacheMiddleware is already declared above, don't redeclare
+
 // Validation schemas
 const createEmployeeSchema = {
   body: Joi.object({
@@ -60,26 +63,165 @@ const createEmployeeSchema = {
 
 const updateEmployeeSchema = {
   body: Joi.object({
-    firstName: Joi.string().optional(),
-    lastName: Joi.string().optional(),
-    email: Joi.string().email().optional(),
-    phone: Joi.string().optional(),
-    jobTitle: Joi.string().optional(),
-    department: Joi.string().optional(),
-    designation: Joi.string().optional(), // Frontend compatibility
-    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee').optional(),
-    storeId: Joi.string().optional(),
-    status: Joi.string().valid('active', 'inactive', 'on-leave', 'terminated', 'pending').optional(),
-    dateOfBirth: Joi.date().optional(),
-    doj: Joi.date().optional(), // Date of joining
+    // Basic Information
+    firstName: Joi.string().allow('', null).optional(),
+    lastName: Joi.string().allow('', null).optional(),
+    fullName: Joi.string().allow('', null).optional(),
+    email: Joi.string().email().allow('', null).optional(),
+    phone: Joi.string().allow('', null).optional(),
+    gender: Joi.string().valid('Male', 'Female', 'Other').allow('', null).optional(),
+    dateOfBirth: Joi.date().allow(null).optional(),
+    dob: Joi.date().allow(null).optional(),
+    
+    // Work Details
+    jobTitle: Joi.string().allow('', null).optional(),
+    department: Joi.string().allow('', null).optional(),
+    designation: Joi.string().allow('', null).optional(), // Frontend compatibility
+    roleName: Joi.string().valid('SuperAdmin', 'Admin', 'HR', 'Manager', 'Employee').allow('', null).optional(),
+    roleFamily: Joi.string().allow('', null).optional(),
+    role_family: Joi.string().allow('', null).optional(),
+    gradeBand: Joi.string().allow('', null).optional(),
+    grade_band: Joi.string().allow('', null).optional(),
+    storeId: Joi.string().allow(null, '').optional(),
+    status: Joi.string().valid('active', 'inactive', 'on-leave', 'terminated', 'pending').allow('', null).optional(),
+    doj: Joi.date().allow(null).optional(), // Date of joining
+    joining_date: Joi.date().allow(null).optional(),
+    confirmationDate: Joi.date().allow(null).optional(),
+    confirmation_date: Joi.date().allow(null).optional(),
+    reportingManager: Joi.string().allow('', null).optional(),
+    reporting_manager: Joi.string().allow('', null).optional(),
+    
+    // Salary & Compensation
+    annual_ctc: Joi.number().min(0).allow(null).optional(),
+    annualCtc: Joi.number().min(0).allow(null).optional(),
+    salary_breakdown: Joi.object({
+      basic: Joi.number().min(0).allow(null).optional(),
+      hra: Joi.number().min(0).allow(null).optional(),
+      special_allowance: Joi.number().min(0).allow(null).optional(),
+      pf_employer: Joi.number().min(0).allow(null).optional(),
+      gratuity: Joi.number().min(0).allow(null).optional(),
+      other_allowances: Joi.alternatives().try(
+        Joi.number().min(0),
+        Joi.string().allow('').empty('').default(0)
+      ).optional().default(0)
+    }).optional(),
+    salaryBreakdown: Joi.object({
+      basic: Joi.number().min(0).allow(null).optional(),
+      hra: Joi.number().min(0).allow(null).optional(),
+      special_allowance: Joi.number().min(0).allow(null).optional(),
+      pf_employer: Joi.number().min(0).allow(null).optional(),
+      gratuity: Joi.number().min(0).allow(null).optional(),
+      other_allowances: Joi.alternatives().try(
+        Joi.number().min(0),
+        Joi.string().allow('').empty('').default(0)
+      ).optional().default(0)
+    }).optional(),
+    
+    // Statutory Information
+    uan: Joi.string().pattern(/^\d{12}$/).allow('', null).optional().empty('').default(null),
+    esiNo: Joi.string().pattern(/^\d{15}$/).allow('', null).optional().empty('').default(null),
+    esi_number: Joi.string().pattern(/^\d{15}$/).allow('', null).optional().empty('').default(null),
+    panNumber: Joi.string().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).allow('', null).optional().empty('').default(null),
+    pan_number: Joi.string().pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/).allow('', null).optional().empty('').default(null),
+    aadharMasked: Joi.string().allow('', null).optional().empty('').default(null),
+    aadhar_masked: Joi.string().allow('', null).optional().empty('').default(null),
+    
+    // Bank Account
+    bankAccount: Joi.object({
+      accountNumber: Joi.string().allow('', null).optional().empty('').default(null),
+      account_number: Joi.string().allow('', null).optional().empty('').default(null),
+      ifscCode: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).allow('', null).optional().empty('').default(null),
+      ifsc_code: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).allow('', null).optional().empty('').default(null),
+      bankName: Joi.string().allow('', null).optional().empty('').default(null),
+      bank_name: Joi.string().allow('', null).optional().empty('').default(null),
+      branchName: Joi.string().allow('', null).optional().empty('').default(null),
+      branch_name: Joi.string().allow('', null).optional().empty('').default(null),
+      accountType: Joi.string().valid('Savings', 'Current', 'Salary').allow('', null).optional().empty('').default(null),
+      account_type: Joi.string().valid('Savings', 'Current', 'Salary').allow('', null).optional().empty('').default(null)
+    }).optional().allow(null),
+    bank_account: Joi.object({
+      accountNumber: Joi.string().allow('', null).optional().empty('').default(null),
+      account_number: Joi.string().allow('', null).optional().empty('').default(null),
+      ifscCode: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).allow('', null).optional().empty('').default(null),
+      ifsc_code: Joi.string().pattern(/^[A-Z]{4}0[A-Z0-9]{6}$/).allow('', null).optional().empty('').default(null),
+      bankName: Joi.string().allow('', null).optional().empty('').default(null),
+      bank_name: Joi.string().allow('', null).optional().empty('').default(null),
+      branchName: Joi.string().allow('', null).optional().empty('').default(null),
+      branch_name: Joi.string().allow('', null).optional().empty('').default(null),
+      accountType: Joi.string().valid('Savings', 'Current', 'Salary').allow('', null).optional().empty('').default(null),
+      account_type: Joi.string().valid('Savings', 'Current', 'Salary').allow('', null).optional().empty('').default(null)
+    }).optional().allow(null),
+    
+    // Emergency Contact
+    emergencyContact: Joi.object({
+      name: Joi.string().allow('', null).optional().empty('').default(null),
+      relationship: Joi.string().valid('Father', 'Mother', 'Spouse', 'Sibling', 'Child', 'Friend', 'Other').allow('', null).optional().empty('').default(null),
+      phone: Joi.string().allow('', null).optional().empty('').default(null),
+      contact_number: Joi.string().allow('', null).optional().empty('').default(null)
+    }).optional().allow(null),
+    emergency_contact: Joi.object({
+      name: Joi.string().allow('', null).optional().empty('').default(null),
+      relationship: Joi.string().valid('Father', 'Mother', 'Spouse', 'Sibling', 'Child', 'Friend', 'Other').allow('', null).optional().empty('').default(null),
+      phone: Joi.string().allow('', null).optional().empty('').default(null),
+      contact_number: Joi.string().allow('', null).optional().empty('').default(null)
+    }).optional().allow(null),
+    
+    // Address
     address: Joi.object({
       street: Joi.string().optional(),
       city: Joi.string().optional(),
       state: Joi.string().optional(),
       zip: Joi.string().optional(),
       country: Joi.string().optional()
-    }).optional()
-  })
+    }).optional(),
+    currentAddress: Joi.object({
+      lines: Joi.array().items(Joi.string()).optional(),
+      address_line_1: Joi.string().optional(),
+      line1: Joi.string().optional(),
+      address_line_2: Joi.string().optional(),
+      line2: Joi.string().optional(),
+      city: Joi.string().optional(),
+      state: Joi.string().optional(),
+      pincode: Joi.string().optional(),
+      zip: Joi.string().optional(),
+      country: Joi.string().optional()
+    }).optional(),
+    current_address: Joi.object({
+      lines: Joi.array().items(Joi.string()).optional(),
+      address_line_1: Joi.string().optional(),
+      line1: Joi.string().optional(),
+      address_line_2: Joi.string().optional(),
+      line2: Joi.string().optional(),
+      city: Joi.string().optional(),
+      state: Joi.string().optional(),
+      pincode: Joi.string().optional(),
+      zip: Joi.string().optional(),
+      country: Joi.string().optional()
+    }).optional(),
+    
+    // Work Location
+    workLocation: Joi.object({
+      storeId: Joi.string().optional().allow(null, ''),
+      storeName: Joi.string().optional().allow(null, ''),
+      city: Joi.string().optional().allow(null, ''),
+      state: Joi.string().optional().allow(null, ''),
+      pincode: Joi.string().optional().allow(null, '')
+    }).optional().allow(null),
+    work_location: Joi.object({
+      storeId: Joi.string().optional().allow(null, ''),
+      storeName: Joi.string().optional().allow(null, ''),
+      city: Joi.string().optional().allow(null, ''),
+      state: Joi.string().optional().allow(null, ''),
+      pincode: Joi.string().optional().allow(null, '')
+    }).optional().allow(null),
+    
+    // Previous Employment
+    previousEmployment: Joi.object().optional().allow(null),
+    previous_employment: Joi.object().optional().allow(null),
+    
+    // Other fields
+    tenantId: Joi.string().optional()
+  }).min(1) // At least one field must be provided
 };
 
 const getEmployeesSchema = {
@@ -90,7 +232,8 @@ const getEmployeesSchema = {
     store: Joi.string().optional(),
     role: Joi.string().optional(),
     department: Joi.string().optional(),
-    search: Joi.string().optional()
+    search: Joi.string().optional(),
+    employeeId: Joi.string().optional() // CRITICAL: Allow employeeId query parameter for attendance service lookup
   })
 };
 
@@ -118,7 +261,8 @@ const createStoreSchema = {
   body: Joi.object({
     tenantId: Joi.string().optional().default('default'),
     name: Joi.string().required(),
-    code: Joi.string().required(),
+    code: Joi.string().optional(),
+    storeCode: Joi.string().optional(), // Frontend compatibility
     description: Joi.string().optional(),
     address: Joi.object({
       street: Joi.string().required(),
@@ -127,7 +271,19 @@ const createStoreSchema = {
       country: Joi.string().optional().default('India'),
       zipCode: Joi.string().optional(),
       zip: Joi.string().optional()
-    }).required(),
+    }).optional(),
+    // Flat address fields for frontend compatibility
+    street: Joi.string().optional(),
+    city: Joi.string().optional(),
+    state: Joi.string().optional(),
+    pincode: Joi.string().optional(),
+    country: Joi.string().optional(),
+    // Flat coordinates for frontend compatibility
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+    // Frontend-generated fields (ignored by backend service)
+    id: Joi.string().optional(),
+    full_address: Joi.string().optional(),
     coordinates: Joi.object({
       latitude: Joi.number().min(-90).max(90).optional(),
       longitude: Joi.number().min(-180).max(180).optional()
@@ -172,6 +328,28 @@ const createStoreSchema = {
     store_type: Joi.string().valid('retail', 'warehouse', 'office', 'field', 'other').optional().default('retail'),
     status: Joi.string().valid('active', 'inactive', 'maintenance', 'closed', 'ACTIVE', 'INACTIVE', 'MAINTENANCE', 'CLOSED').optional().default('active')
   })
+    .or('code', 'storeCode')
+    .custom((value, helpers) => {
+      // Accept either nested address or flat address; require street and city either way.
+      const hasNestedAddress = !!value.address;
+      const hasFlatAddress = !!(value.street || value.city);
+      const nestedStreet = value.address?.street;
+      const nestedCity = value.address?.city;
+
+      if (!hasNestedAddress && !hasFlatAddress) {
+        return helpers.error('any.invalid', { message: 'Either address object or flat street/city fields are required' });
+      }
+
+      if (hasNestedAddress && (!nestedStreet || !nestedCity)) {
+        return helpers.error('any.invalid', { message: 'address.street and address.city are required' });
+      }
+
+      if (!hasNestedAddress && (!value.street || !value.city)) {
+        return helpers.error('any.invalid', { message: 'street and city are required when address object is not provided' });
+      }
+
+      return value;
+    }, 'store payload compatibility validation')
 };
 
 const updateStoreSchema = {
@@ -276,7 +454,7 @@ router.get('/employee/:id',
 
 router.put('/employees/:id',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
-  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  validateTenantMiddleware({ allowSuperAdminWithoutTenant: true }), // 2. Validate tenant (allows superadmin to bypass for tenant migration)
   extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
   validateRequest(updateEmployeeSchema),
@@ -291,6 +469,7 @@ router.delete('/employees/:id',
   asyncHandler(deleteEmployee)
 );
 
+// Role assignment - Support both POST and PUT for frontend compatibility
 router.post('/employees/:id/assign-role',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
   validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
@@ -300,7 +479,28 @@ router.post('/employees/:id/assign-role',
   asyncHandler(assignRole)
 );
 
+// Frontend sends PUT requests - add PUT route for compatibility
+router.put('/employees/:id/assign-role',
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['role:assign']),
+  validateRequest(assignRoleSchema),
+  asyncHandler(assignRole)
+);
+
+// Employee status update - Support both PATCH and PUT for frontend compatibility
 router.patch('/employees/:id/status',
+  authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
+  validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
+  extractTenantId, // 3. Extract tenantId (already validated, just normalize)
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['user:update']),
+  validateRequest(updateStatusSchema),
+  asyncHandler(updateEmployeeStatus)
+);
+
+// Frontend sends PUT requests - add PUT route for status updates
+router.put('/employees/:id/status',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
   validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
   extractTenantId, // 3. Extract tenantId (already validated, just normalize)
@@ -330,7 +530,7 @@ router.post('/departments',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
   validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
   extractTenantId, // 3. Extract tenantId (already validated, just normalize)
-  requireRole(['Admin', 'SuperAdmin'], ['department:create']),
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['department:create']), // Added HR role
   asyncHandler(createDepartment)
 );
 
@@ -338,7 +538,7 @@ router.put('/departments/:id',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
   validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
   extractTenantId, // 3. Extract tenantId (already validated, just normalize)
-  requireRole(['Admin', 'SuperAdmin'], ['department:update']),
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['department:update']), // Added HR role
   asyncHandler(updateDepartment)
 );
 
@@ -346,7 +546,7 @@ router.delete('/departments/:id',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
   validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
   extractTenantId, // 3. Extract tenantId (already validated, just normalize)
-  requireRole(['Admin', 'SuperAdmin'], ['department:delete']),
+  requireRole(['HR', 'Admin', 'SuperAdmin'], ['department:delete']), // Added HR role
   asyncHandler(deleteDepartment)
 );
 
@@ -355,7 +555,7 @@ router.get('/stores',
   authenticate, // 1. Authenticate first (sets req.user with tenantId from token)
   validateTenantMiddleware(), // 2. Validate tenant (compares header with token)
   extractTenantId, // 3. Extract tenantId (already validated, just normalize)
-  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager'], ['store:read']),
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager', 'Employee'], []),
   validateRequest(getStoresSchema),
   asyncHandler(getStores)
 );
@@ -456,5 +656,11 @@ router.post('/letters/:id/approve',
     return hrLetterController.approveLetter(req, res, next);
   })
 );
+
+// Roster: nested under /api/hr/roster (same router as employees/stores).
+// Standalone app.use('/api/hr/roster', ...) in server.js can fail to run if that block errors;
+// mounting here guarantees registration whenever hr.routes loads.
+const rosterRoutes = require('./roster.routes');
+router.use('/roster', rosterRoutes);
 
 module.exports = router;

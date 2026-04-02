@@ -1,5 +1,7 @@
 # JTS Service Environment Variables
 
+**Where this runs:** Etelios production is intended for **AWS** (e.g. **EKS/ECS**, **Application Load Balancer** or **Ingress Controller**, **DocumentDB/RDS** or self-managed Mongo). Docker images and ingress rules should be wired there. If your **Git remote** is Azure DevOps (or GitHub), that only hosts source control — it is not the cloud where pods run.
+
 ## Tenant isolation (required for production)
 
 - JWT must include a valid Mongo **tenant id** (`tid` / `tenant_id` / `tenantId`). Missing → `403 JTS_TENANT_REQUIRED`.
@@ -89,13 +91,13 @@ ATTENDANCE_SERVICE_URL=http://attendance-service:3003
 
 ## Public URL prefix (ingress / MFE)
 
-Attachment links returned in task JSON use this prefix (no host). Match your ingress path.
+Attachment links returned in task JSON use this prefix (no host). Match **AWS ALB path rules** or your **Ingress** (`nginx`, ALB Ingress Controller, etc.).
 
 ```bash
 # Default (local / gateway with /api/jts)
 # JTS_PUBLIC_PATH_PREFIX=/api/jts
 
-# Etelios ALB: path prefix /jts → jts-service
+# Example: ALB or ingress strips /jts and forwards to jts-service
 JTS_PUBLIC_PATH_PREFIX=/jts
 ```
 

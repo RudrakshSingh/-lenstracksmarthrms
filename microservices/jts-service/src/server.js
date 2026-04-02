@@ -27,6 +27,9 @@ const startServer = async () => {
       const slaAndRecurrenceJob = require('./jobs/slaAndRecurrence.job');
       slaAndRecurrenceJob.start();
 
+      const slaAdminDigestJob = require('./jobs/slaAdminDigest.job');
+      slaAdminDigestJob.start();
+
       logger.info('Background jobs started');
     }
 

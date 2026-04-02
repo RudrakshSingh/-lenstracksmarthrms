@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Task = require('../models/Task.model');
 const TaskType = require('../models/TaskType.model');
 const OrgNode = require('../models/OrgNode.model');
@@ -543,7 +544,7 @@ class TaskService {
     return this.getTaskById(tenantId, taskId);
   }
 
-  async listSlaAlerts(tenantId, { employeeId, limit = 50 }) {
+  async listSlaAlerts(tenantId, { employeeId, teamId, limit = 50 }) {
     const now = new Date();
     const warnUntil = new Date(now.getTime() + 60 * 60 * 1000); // next 60 min
     const query = notDeleted({
@@ -554,9 +555,13 @@ class TaskService {
       due_at: { $lte: warnUntil }
     });
     if (employeeId) query.assigned_to_employee_id = employeeId;
+    if (teamId && mongoose.Types.ObjectId.isValid(String(teamId))) {
+      query.scope_org_node_id = new mongoose.Types.ObjectId(String(teamId));
+    }
 
     const tasks = await Task.find(query)
       .populate('assigned_to_employee_id', 'name code')
+      .populate('scope_org_node_id', 'name code type')
       .sort({ due_at: 1 })
       .limit(Number(limit) || 50);
 
@@ -564,12 +569,24 @@ class TaskService {
       const due = new Date(t.due_at).getTime();
       const deltaMinutes = Math.floor((due - now.getTime()) / 60000);
       const breached = deltaMinutes < 0;
+      const org = t.scope_org_node_id;
       return {
         taskId: String(t._id),
+        taskCode: t.code || null,
         title: t.title,
+        priority: t.priority,
         status: breached ? 'BREACHED' : 'WARNING',
         dueAt: t.due_at,
         remainingMinutes: deltaMinutes,
+        team:
+          org && typeof org === 'object' && org._id
+            ? {
+                id: String(org._id),
+                name: org.name,
+                code: org.code,
+                type: org.type
+              }
+            : null,
         assignee: t.assigned_to_employee_id
           ? {
               id: String(t.assigned_to_employee_id._id),

@@ -286,6 +286,23 @@ class NotificationService {
     return { modified_count: result.modifiedCount || 0 };
   }
 
+  /**
+   * Queue integration webhook (Slack/Zapier/custom). Processed by notificationDispatcher job.
+   */
+  async enqueueIntegrationWebhook(tenantId, webhookUrl, eventType, payload) {
+    const url = typeof webhookUrl === 'string' ? webhookUrl.trim() : '';
+    if (!url) return { enqueued: false };
+    await WebhookLog.create({
+      tenant_id: tenantId,
+      webhook_url: url,
+      event_type: eventType,
+      payload: { ...(payload && typeof payload === 'object' ? payload : {}), event_type: eventType },
+      status: 'PENDING',
+      created_at: new Date()
+    });
+    return { enqueued: true };
+  }
+
   async dispatch(tenantId, payload) {
     const {
       recipient_ids = [],

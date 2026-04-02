@@ -250,6 +250,44 @@ router.get(
 );
 
 router.get(
+  '/sla/executive-summary',
+  requireRole([
+    'MANAGER',
+    'STORE_MANAGER',
+    'CLUSTER_MANAGER',
+    'COUNTRY_OPS',
+    'TENANT_ADMIN',
+    'HOD',
+    'SUPERADMIN',
+    'ADMIN'
+  ]),
+  validate({
+    query: Joi.object({
+      hours: Joi.number().integer().min(1).max(168).optional(),
+      teamLimit: Joi.number().integer().min(5).max(100).optional(),
+      recentLimit: Joi.number().integer().min(5).max(100).optional(),
+      teamId: objectIdSchema.optional()
+    })
+  }),
+  (req, res) => taskController.getSlaExecutiveSummary(req, res)
+);
+
+router.patch(
+  '/sla/breach-events/:logId/acknowledge',
+  requireRole(['TENANT_ADMIN', 'COUNTRY_OPS', 'HOD', 'SUPERADMIN', 'ADMIN']),
+  validate({
+    params: Joi.object({ logId: objectIdSchema.required() }),
+    body: Joi.object({
+      note: Joi.string().max(2000).allow('', null).optional(),
+      acknowledgmentNote: Joi.string().max(2000).allow('', null).optional(),
+      reasonCode: Joi.string().max(64).allow('', null).optional(),
+      breach_reason_code: Joi.string().max(64).allow('', null).optional()
+    })
+  }),
+  (req, res) => taskController.acknowledgeSlaBreach(req, res)
+);
+
+router.get(
   '/workday/:workdayId',
   validate({
     params: Joi.object({ workdayId: Joi.string().max(64).required() }),

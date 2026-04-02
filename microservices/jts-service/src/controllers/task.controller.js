@@ -1,4 +1,6 @@
 const taskService = require('../services/task.service');
+const slaExecutiveService = require('../services/slaExecutive.service');
+const SlaBreachLog = require('../models/SlaBreachLog.model');
 const taskStatusService = require('../services/taskStatus.service');
 const catalogDefaults = require('../services/catalogDefaults.service');
 const logger = require('../config/logger');
@@ -18,6 +20,27 @@ const {
   resolveEmployeeIdToObjectId,
   resolveListFilterEmployeeId
 } = require('../utils/employeeRefResolve.util');
+
+/** Roles that may list SLA alerts for the whole tenant (all teams). */
+const SLA_ALERTS_TENANT_WIDE_ROLES = new Set([
+  'SUPERADMIN',
+  'ADMIN',
+  'TENANT_ADMIN',
+  'HOD',
+  'COUNTRY_OPS'
+]);
+
+/** Roles that can open the SLA executive / ops summary (heatmap + audit timeline). */
+const SLA_EXECUTIVE_ROLES = new Set([
+  'MANAGER',
+  'STORE_MANAGER',
+  'CLUSTER_MANAGER',
+  'COUNTRY_OPS',
+  'TENANT_ADMIN',
+  'HOD',
+  'SUPERADMIN',
+  'ADMIN'
+]);
 
 function emptyTasksListPayload(filters) {
   const page = parseInt(filters.page, 10) || 1;
@@ -208,21 +231,137 @@ class TaskController {
   async getSlaAlerts(req, res) {
     try {
       const { tenant_id } = req.user;
+      const role = (req.user.role || '').toUpperCase();
+      const tenantWide = SLA_ALERTS_TENANT_WIDE_ROLES.has(role);
+
       let employeeId = req.query.employeeId || req.query.employee_id || null;
-      if (employeeId) {
+      let teamId = req.query.teamId || null;
+
+      if (!tenantWide) {
+        teamId = null;
+        const myEmp = await resolveEmployeeId(tenant_id, req.user);
+        if (!myEmp) {
+          return res.json({ success: true, data: [], message: 'SLA alerts retrieved successfully' });
+        }
+        if (employeeId) {
+          const r = await resolveListFilterEmployeeId(tenant_id, employeeId);
+          if (r.empty || String(r.id) !== String(myEmp)) {
+            return res
+              .status(403)
+              .json(
+                buildErrorBody({
+                  code: 'SLA_ALERTS_FORBIDDEN',
+                  message: 'You can only view your own SLA alerts'
+                })
+              );
+          }
+          employeeId = r.id;
+        } else {
+          employeeId = myEmp;
+        }
+      } else if (employeeId) {
         const r = await resolveListFilterEmployeeId(tenant_id, employeeId);
         if (r.empty) {
           return res.json({ success: true, data: [], message: 'SLA alerts retrieved successfully' });
         }
         employeeId = r.id;
       }
+
       const data = await taskService.listSlaAlerts(tenant_id, {
         employeeId,
+        teamId,
         limit: req.query.limit
       });
       res.json({ success: true, data, message: 'SLA alerts retrieved successfully' });
     } catch (error) {
       logger.error('Get SLA alerts error', { error: error.message });
+      const mapped = toErrorPayload(error, 'TASK_FETCH_ERROR');
+      res.status(mapped.status).json(mapped.body);
+    }
+  }
+
+  /**
+   * GET /api/v1/tasks/sla/executive-summary
+   * Leadership / ops dashboard: heatmap, counts, breach audit timeline.
+   */
+  async getSlaExecutiveSummary(req, res) {
+    try {
+      const { tenant_id } = req.user;
+      const role = (req.user.role || '').toUpperCase();
+      if (!SLA_EXECUTIVE_ROLES.has(role)) {
+        return res.status(403).json(
+          buildErrorBody({
+            code: 'SLA_EXECUTIVE_FORBIDDEN',
+            message: 'Insufficient role for SLA executive summary'
+          })
+        );
+      }
+      const data = await slaExecutiveService.getExecutiveSummary(tenant_id, {
+        hours: req.query.hours,
+        teamLimit: req.query.teamLimit,
+        recentLimit: req.query.recentLimit,
+        teamId: req.query.teamId || null
+      });
+      res.json({
+        success: true,
+        data,
+        message: 'SLA executive summary retrieved successfully'
+      });
+    } catch (error) {
+      logger.error('Get SLA executive summary error', { error: error.message });
+      const mapped = toErrorPayload(error, 'TASK_FETCH_ERROR');
+      res.status(mapped.status).json(mapped.body);
+    }
+  }
+
+  /**
+   * PATCH /api/v1/tasks/sla/breach-events/:logId/acknowledge
+   * Acknowledge a breach audit row (post-mortem / visibility).
+   */
+  async acknowledgeSlaBreach(req, res) {
+    try {
+      const { tenant_id } = req.user;
+      const actorOid = await resolveEmployeeId(tenant_id, req.user);
+      if (!actorOid) {
+        return res
+          .status(400)
+          .json(
+            buildErrorBody({
+              code: 'ACTOR_UNKNOWN',
+              message: 'Employee profile not found for this user'
+            })
+          );
+      }
+      const log = await SlaBreachLog.findOne({
+        _id: req.params.logId,
+        tenant_id
+      });
+      if (!log) {
+        return res
+          .status(404)
+          .json(buildErrorBody({ code: 'SLA_BREACH_LOG_NOT_FOUND', message: 'Breach log not found' }));
+      }
+      const note = (req.body?.note ?? req.body?.acknowledgmentNote ?? '').toString().slice(0, 2000);
+      const reasonRaw = req.body?.reasonCode ?? req.body?.breach_reason_code ?? '';
+      const breach_reason_code = reasonRaw ? String(reasonRaw).slice(0, 64) : undefined;
+
+      log.acknowledged_at = new Date();
+      log.acknowledged_by_employee_id = actorOid;
+      log.acknowledgment_note = note || undefined;
+      if (breach_reason_code) log.breach_reason_code = breach_reason_code;
+      await log.save();
+
+      res.json({
+        success: true,
+        data: {
+          id: String(log._id),
+          acknowledgedAt: log.acknowledged_at,
+          breachReasonCode: log.breach_reason_code || null
+        },
+        message: 'SLA breach event acknowledged'
+      });
+    } catch (error) {
+      logger.error('Ack SLA breach error', { error: error.message });
       const mapped = toErrorPayload(error, 'TASK_FETCH_ERROR');
       res.status(mapped.status).json(mapped.body);
     }

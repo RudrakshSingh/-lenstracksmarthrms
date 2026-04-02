@@ -18,6 +18,10 @@ const TenantSchema = new Schema(
         type: String,
         enum: ['CALENDAR_TIME', 'BUSINESS_HOURS'],
         default: 'BUSINESS_HOURS'
+      },
+      integrations: {
+        /** POST JSON payloads for `jts.sla.breached` (processed by notification webhook worker). */
+        sla_breach_webhook_url: { type: String, trim: true }
       }
     }
   },

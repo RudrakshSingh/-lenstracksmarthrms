@@ -1,13 +1,12 @@
 const Task = require('../models/Task.model');
 const EscalationRule = require('../models/EscalationRule.model');
 const EscalationEvent = require('../models/EscalationEvent.model');
-const SlaBreachLog = require('../models/SlaBreachLog.model');
 const EmployeeRole = require('../models/EmployeeRole.model');
 const Employee = require('../models/Employee.model');
 const notificationService = require('./notification.service');
 const logger = require('../config/logger');
 
-const ACTIVE_STATUSES = ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'ON_HOLD', 'PENDING_REVIEW', 'BLOCKED'];
+const ACTIVE_STATUSES = ['ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'ON_HOLD', 'PENDING_REVIEW', 'BLOCKED', 'REOPENED'];
 const DEFAULT_LADDER = ['L0', 'L1', 'L2', 'L3'];
 
 class EscalationService {
@@ -88,19 +87,7 @@ class EscalationService {
 
     task.escalation_level = nextLevel;
     await task.save();
-
-    if (trigger === 'SLA_BREACH') {
-      const delayMin = Math.max(0, Math.floor((now.getTime() - new Date(task.due_at).getTime()) / 60000));
-      await SlaBreachLog.create({
-        tenant_id: tenantId,
-        task_id: task._id,
-        employee_id: task.assigned_to_employee_id,
-        due_at: task.due_at,
-        breached_at: now,
-        delay_minutes: delayMin,
-        created_at: now
-      });
-    }
+    // SLA breach audit row is created by slaWorkflow.service when breached_at is set.
   }
 
   defaultRolesForLevel(level) {

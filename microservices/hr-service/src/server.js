@@ -642,6 +642,7 @@ const addDirectPerformanceRoutes = () => {
       const { employeeId } = req.params;
       const { period = 'monthly' } = req.query;
       try {
+        const mongoose = require('mongoose');
         const User = require('./models/User.model');
         const PerformanceReview = require('./models/PerformanceReview.model');
         
@@ -680,7 +681,7 @@ const addDirectPerformanceRoutes = () => {
           });
         }
         
-        // Use the actual employee_id from the found employee
+        // Business code (for JSON); PerformanceReview.employee_id is ObjectId → use employee._id in queries
         const actualEmployeeId = employee.employee_id || employee.employeeId || employeeId;
         const now = new Date();
         let periodStart, periodEnd;
@@ -699,21 +700,20 @@ const addDirectPerformanceRoutes = () => {
           periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
           periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         }
-        // Build PerformanceReview query - only use employee._id if employee was found and has valid _id
+        if (!employee._id || !mongoose.Types.ObjectId.isValid(employee._id)) {
+          return res.status(404).json({
+            success: false,
+            message: 'Employee not found',
+            error: 'EMPLOYEE_NOT_FOUND'
+          });
+        }
         const reviewQuery = {
-          $or: [
-            { employee_id: actualEmployeeId }
-          ],
+          employee_id: employee._id,
           period: period,
           periodStart: { $gte: periodStart },
           periodEnd: { $lte: periodEnd }
         };
-        
-        // Only add employee ObjectId if employee was found and has valid _id
-        if (employee && employee._id && mongoose.Types.ObjectId.isValid(employee._id)) {
-          reviewQuery.$or.push({ employee: employee._id });
-        }
-        
+
         const review = await PerformanceReview.findOne(reviewQuery).sort({ periodStart: -1 }).lean();
         if (!review) {
           return res.json({

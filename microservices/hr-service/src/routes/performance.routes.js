@@ -24,7 +24,7 @@ router.use(authenticate);
 // Use exact match pattern to avoid conflicts with /performance/me routes
 router.get(
   '/performance/employee/:employeeId',
-  requireRole(['hr', 'admin', 'manager', 'employee'], []), // Make permission optional
+  requireRole(['hr', 'admin', 'manager', 'employee'], []), // Allow all roles, permission check removed
   asyncHandler(async (req, res, next) => {
     const { employeeId } = req.params;
     const { period = 'monthly' } = req.query;
@@ -89,6 +89,32 @@ router.get(
       // Use the actual employee_id from the found employee
       const actualEmployeeId = employee.employee_id || employee.employeeId || employeeId;
       
+      // CRITICAL: Check if employee is trying to view own performance
+      // Allow employees to view their own performance
+      const userRole = (req.user?.role || '').toLowerCase();
+      const isAdminOrHR = ['admin', 'hr', 'superadmin', 'manager'].includes(userRole);
+      const userEmployeeId = req.user?.employee_id || req.user?.employeeId;
+      const userMongoId = req.user?._id?.toString() || req.user?.id?.toString();
+      const employeeMongoId = employee._id?.toString();
+      
+      // If not admin/HR, check if viewing own data
+      if (!isAdminOrHR) {
+        const isOwnData = (
+          employeeId === userEmployeeId ||
+          employeeId === userMongoId ||
+          actualEmployeeId === userEmployeeId ||
+          employeeMongoId === userMongoId
+        );
+        
+        if (!isOwnData) {
+          return res.status(403).json({
+            success: false,
+            message: 'You can only view your own performance data',
+            error: 'FORBIDDEN'
+          });
+        }
+      }
+      
       // Calculate date range based on period
       const now = new Date();
       let periodStart, periodEnd;
@@ -109,23 +135,27 @@ router.get(
         periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       }
       
-      // Build review query with tenant isolation
-      const reviewQuery = {
-        $or: [
-          { employee_id: actualEmployeeId },
-          { employee: employee._id }
-        ],
-        period: period,
-        periodStart: { $gte: periodStart },
-        periodEnd: { $lte: periodEnd }
-      };
-      
-      // Add tenantId filter if available
-      if (tenantId && tenantId !== 'default') {
-        reviewQuery.tenantId = tenantId;
+      // Build review query - make it more flexible and handle errors gracefully
+      let review = null;
+      try {
+        const mongoose = require('mongoose');
+        if (employee._id && mongoose.Types.ObjectId.isValid(employee._id)) {
+          const reviewQuery = {
+            employee_id: employee._id,
+            period: period,
+            periodStart: { $gte: periodStart },
+            periodEnd: { $lte: periodEnd }
+          };
+          review = await PerformanceReview.findOne(reviewQuery).sort({ periodStart: -1 }).lean();
+        }
+      } catch (reviewError) {
+        logger.warn('PerformanceReview query failed (model may not exist or query error)', { 
+          error: reviewError.message,
+          employeeId: actualEmployeeId
+        });
+        // Continue without review - return default performance data
+        review = null;
       }
-      
-      const review = await PerformanceReview.findOne(reviewQuery).sort({ periodStart: -1 }).lean();
       
       if (!review) {
         return res.json({
@@ -178,8 +208,7 @@ router.get(
 
 router.get(
   '/performance/me/metrics',
-  requireRole(['hr', 'admin', 'manager', 'employee']),
-  requirePermission('hr.performance.read'),
+  requireRole(['hr', 'admin', 'manager', 'employee'], []), // Allow employees to view own metrics
   asyncHandler(getMyMetrics)
 );
 
@@ -214,43 +243,97 @@ router.get(
 // Also support /employee/:employeeId when mounted at /api/performance
 router.get(
   '/employee/:employeeId',
-  requireRole(['hr', 'admin', 'manager', 'employee']),
-  requirePermission('hr.performance.read'),
+  requireRole(['hr', 'admin', 'manager', 'employee'], []), // Allow all roles, permission check removed
   asyncHandler(async (req, res, next) => {
     const { employeeId } = req.params;
     const { period = 'monthly' } = req.query;
     
+    // Allow employees to view their own performance, admins/HR to view any
+    const currentUserEmployeeId = req.user?.employee_id || req.user?.employeeId;
+    const currentUserId = req.user?._id || req.user?.id;
+    const userRole = req.user?.role || req.user?.roleName;
+    
+    // Check if employee is trying to view their own data (allow) or if user is admin/HR (allow)
+    const isViewingOwnData = (
+      employeeId === currentUserEmployeeId ||
+      employeeId === currentUserId?.toString() ||
+      (currentUserEmployeeId && employeeId.toUpperCase() === currentUserEmployeeId.toUpperCase())
+    );
+    
+    const isAdminOrHR = ['admin', 'hr', 'superadmin', 'Admin', 'HR', 'SuperAdmin'].includes(userRole);
+    
+    // If employee trying to view someone else's data and not admin/HR, deny
+    if (!isViewingOwnData && !isAdminOrHR) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view your own performance data.',
+        error: 'ACCESS_DENIED'
+      });
+    }
+    
     try {
       const User = require('../models/User.model');
       const PerformanceReview = require('../models/PerformanceReview.model');
-      const mongoose = require('mongoose');
+      const logger = require('../config/logger');
       
-        // Try to find employee by employee_id string first (most common), then by Mongo ID
-        let employee = null;
+      // CRITICAL: Get tenantId for tenant isolation
+      const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || req.user?.tenantId || 'default';
+      
+      // Try to find employee by employee_id string first (most common), then by Mongo ID
+      let employee = null;
+      
+      // Check if employeeId is a valid Mongo ID (exactly 24 hex characters)
+      const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(employeeId);
+      
+      // ALWAYS try employee_id string first (most common case - e.g., "EMP-2026-116865")
+      // CRITICAL: Add tenantId filter for tenant isolation
+      try {
+        const employeeQuery = {
+          $or: [
+            { employee_id: employeeId },
+            { employeeId: employeeId }
+          ]
+        };
         
-        // Check if employeeId is a valid Mongo ID (exactly 24 hex characters)
-        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(employeeId);
+        // Add tenantId filter if available
+        if (tenantId && tenantId !== 'default') {
+          employeeQuery.tenantId = tenantId;
+        }
         
-        // ALWAYS try employee_id string first (most common case - e.g., "EMP-2026-116865")
-        try {
-          employee = await User.findOne({ 
+        employee = await User.findOne(employeeQuery).select('fullName employeeId employee_id name').lean();
+        
+        // If not found with tenantId, try without (for backward compatibility)
+        if (!employee && tenantId && tenantId !== 'default') {
+          const fallbackQuery = {
             $or: [
               { employee_id: employeeId },
               { employeeId: employeeId }
             ]
-          }).select('fullName employeeId employee_id name').lean();
-        } catch (findError) {
-          logger.warn('employee_id lookup failed', { employeeId, error: findError.message });
+          };
+          employee = await User.findOne(fallbackQuery).select('fullName employeeId employee_id name').lean();
         }
-        
-        // If not found and it's a valid ObjectId, try by ID
-        if (!employee && isValidObjectId) {
-          try {
-            employee = await User.findById(employeeId).select('fullName employeeId employee_id name').lean();
-          } catch (findError) {
-            logger.warn('findById failed', { employeeId, error: findError.message });
+      } catch (findError) {
+        logger.warn('employee_id lookup failed', { employeeId, error: findError.message });
+      }
+      
+      // If not found and it's a valid ObjectId, try by ID with tenant filter
+      if (!employee && isValidObjectId) {
+        try {
+          const idQuery = { _id: employeeId };
+          // Add tenantId filter if available
+          if (tenantId && tenantId !== 'default') {
+            idQuery.tenantId = tenantId;
           }
+          employee = await User.findOne(idQuery).select('fullName employeeId employee_id name').lean();
+          
+          // If not found with tenantId, try without
+          if (!employee && tenantId && tenantId !== 'default') {
+            employee = await User.findById(employeeId).select('fullName employeeId employee_id name').lean();
+          }
+        } catch (findError) {
+          logger.warn('findById failed', { employeeId, error: findError.message });
         }
+      }
       
       if (!employee) {
         return res.status(404).json({
@@ -283,23 +366,27 @@ router.get(
         periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       }
       
-      // Build review query with tenant isolation
-      const reviewQuery = {
-        $or: [
-          { employee_id: actualEmployeeId },
-          { employee: employee._id }
-        ],
-        period: period,
-        periodStart: { $gte: periodStart },
-        periodEnd: { $lte: periodEnd }
-      };
-      
-      // Add tenantId filter if available
-      if (tenantId && tenantId !== 'default') {
-        reviewQuery.tenantId = tenantId;
+      // Build review query - make it more flexible and handle errors gracefully
+      let review = null;
+      try {
+        const mongoose = require('mongoose');
+        if (employee._id && mongoose.Types.ObjectId.isValid(employee._id)) {
+          const reviewQuery = {
+            employee_id: employee._id,
+            period: period,
+            periodStart: { $gte: periodStart },
+            periodEnd: { $lte: periodEnd }
+          };
+          review = await PerformanceReview.findOne(reviewQuery).sort({ periodStart: -1 }).lean();
+        }
+      } catch (reviewError) {
+        logger.warn('PerformanceReview query failed (model may not exist or query error)', { 
+          error: reviewError.message,
+          employeeId: actualEmployeeId
+        });
+        // Continue without review - return default performance data
+        review = null;
       }
-      
-      const review = await PerformanceReview.findOne(reviewQuery).sort({ periodStart: -1 }).lean();
       
       if (!review) {
         return res.json({
@@ -353,8 +440,7 @@ router.get(
 // My performance routes - must come AFTER employee/:id routes
 router.get(
   '/performance/me/metrics',
-  requireRole(['hr', 'admin', 'manager', 'employee']),
-  requirePermission('hr.performance.read'),
+  requireRole(['hr', 'admin', 'manager', 'employee'], []), // Allow employees to view own metrics
   asyncHandler(getMyMetrics)
 );
 

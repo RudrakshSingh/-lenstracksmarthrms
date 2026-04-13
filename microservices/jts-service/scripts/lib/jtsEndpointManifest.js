@@ -39,6 +39,14 @@ function buildCompatOps() {
     ['POST', '/approvals/:approvalId/approve'],
     ['POST', '/approvals/:approvalId/reject'],
     ['GET', '/analytics'],
+    ['GET', '/analytics/overview'],
+    ['GET', '/analytics/by-employee'],
+    ['GET', '/analytics/by-team'],
+    ['GET', '/analytics/by-task-type'],
+    ['GET', '/reviews/queue'],
+    ['GET', '/sla-policies'],
+    ['GET', '/sla-policies/:id'],
+    ['GET', '/escalations/console'],
     ['GET', '/reviews']
   ];
 }
@@ -131,6 +139,7 @@ function buildCatalogOps() {
     ['PATCH', '/task-types/:id'],
     ['DELETE', '/task-types/:id'],
     ['GET', '/sla-rules'],
+    ['GET', '/sla-rules/:id'],
     ['PUT', '/sla-rules'],
     ['DELETE', '/sla-rules/:id'],
     ['GET', '/escalation-rules'],

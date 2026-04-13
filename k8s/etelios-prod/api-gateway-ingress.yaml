@@ -1,0 +1,167 @@
+---
+# DEPRECATED: Production uses etelios-ingress on api.etelios.com — see k8s/etelios-prod/etelios-ingress.json
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: etelios-api-ingress
+  namespace: etelios-prod
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '30'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '3'
+spec:
+  rules:
+  - host: api.etelios.com
+    http:
+      paths:
+      - path: /auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /hr
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+      - path: /attendance
+        pathType: Prefix
+        backend:
+          service:
+            name: attendance-service
+            port:
+              # Must match Service.spec.ports[].port (ClusterIP is 80 → targetPort 3003)
+              number: 80
+      - path: /payroll
+        pathType: Prefix
+        backend:
+          service:
+            name: payroll-service
+            port:
+              # Must match Service.spec.ports[].port (ClusterIP is 80 → targetPort 3004)
+              number: 80
+      - path: /crm
+        pathType: Prefix
+        backend:
+          service:
+            name: crm-service
+            port:
+              number: 3005
+      - path: /inventory
+        pathType: Prefix
+        backend:
+          service:
+            name: inventory-service
+            port:
+              number: 3006
+      - path: /sales
+        pathType: Prefix
+        backend:
+          service:
+            name: sales-service
+            port:
+              # Must match Service.spec.ports[].port (ClusterIP is 80 → targetPort 3007)
+              number: 80
+      - path: /purchase
+        pathType: Prefix
+        backend:
+          service:
+            name: purchase-service
+            port:
+              number: 3008
+      - path: /financial
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-service
+            port:
+              number: 3009
+      - path: /document
+        pathType: Prefix
+        backend:
+          service:
+            name: document-service
+            port:
+              number: 3010
+      - path: /service
+        pathType: Prefix
+        backend:
+          service:
+            name: service-management
+            port:
+              number: 3011
+      - path: /cpp
+        pathType: Prefix
+        backend:
+          service:
+            name: cpp-service
+            port:
+              number: 3012
+      - path: /prescription
+        pathType: Prefix
+        backend:
+          service:
+            name: prescription-service
+            port:
+              number: 3013
+      - path: /analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port:
+              number: 3014
+      - path: /notification
+        pathType: Prefix
+        backend:
+          service:
+            name: notification-service
+            port:
+              number: 3015
+      - path: /monitoring
+        pathType: Prefix
+        backend:
+          service:
+            name: monitoring-service
+            port:
+              number: 3016
+      - path: /realtime
+        pathType: Prefix
+        backend:
+          service:
+            name: realtime-service
+            port:
+              number: 3017
+      - path: /jts
+        pathType: Prefix
+        backend:
+          service:
+            name: jts-service
+            port:
+              number: 3018
+      - path: /tenant-management
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-management-service
+            port:
+              # Must match Service.spec.ports[].port (3019)
+              number: 3019
+      - path: /tenant-registry
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020

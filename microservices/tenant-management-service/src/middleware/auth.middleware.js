@@ -22,8 +22,12 @@ const authenticate = async (req, res, next) => {
         id: decoded.sub || decoded.userId,
         email: decoded.email,
         role: decoded.role,
-        tenantId: decoded.tenantId
+        tenantId: decoded.tenantId,
+        permissions: Array.isArray(decoded.permissions) ? decoded.permissions : []
       };
+
+      const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
+      await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => null, logger);
 
       next();
     } catch (error) {

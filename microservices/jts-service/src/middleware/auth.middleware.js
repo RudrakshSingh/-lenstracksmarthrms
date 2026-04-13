@@ -5,6 +5,12 @@ const logger = require('../config/logger');
 const { buildErrorBody } = require('../utils/apiError.util');
 const Tenant = require('../models/Tenant.model');
 
+function toTenantSlug(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  const slug = raw.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return slug || 'default';
+}
+
 /** @returns {boolean} true if response was sent (stop handler chain) */
 async function enforceTenantIsolation(req, res) {
   if (process.env.TEST_MODE === 'true') {
@@ -43,9 +49,35 @@ async function enforceTenantIsolation(req, res) {
     const tenantKey = String(tid).trim();
     const escapedTenantKey = tenantKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const tenantKeyRegex = new RegExp(`^${escapedTenantKey}$`, 'i');
-    const tenant = await Tenant.findOne({
+    let tenant = await Tenant.findOne({
       $or: [{ code: tenantKeyRegex }, { subdomain: tenantKeyRegex }, { name: tenantKeyRegex }]
     }).select('_id');
+
+    // Compatibility bridge: auth token may carry a tenant slug (e.g. "upcapto")
+    // before JTS has a corresponding Tenant document. Auto-provision once so
+    // requests can be tenant-scoped by ObjectId immediately.
+    if (!tenant) {
+      const slug = toTenantSlug(tenantKey);
+      try {
+        await Tenant.create({
+          code: slug,
+          subdomain: slug,
+          name: tenantKey
+        });
+      } catch (e) {
+        // Ignore duplicate race; resolve the row below.
+        if (!(e && e.code === 11000)) throw e;
+      }
+      tenant = await Tenant.findOne({
+        $or: [{ code: tenantKeyRegex }, { subdomain: tenantKeyRegex }, { name: tenantKeyRegex }]
+      }).select('_id');
+      if (!tenant) {
+        tenant = await Tenant.findOne({
+          $or: [{ code: slug }, { subdomain: slug }, { name: tenantKey }]
+        }).select('_id');
+      }
+    }
+
     if (tenant?._id) {
       req.user.tenant_key = tenantKey;
       req.user.tenant_id = String(tenant._id);
@@ -139,6 +171,17 @@ const authenticate = async (req, res, next) => {
       employee_id: decoded.employee_id || decoded.employeeId,
       email: decoded.email
     };
+
+    try {
+      const { resolvePermissionsFromJwtOrRedis } = require('../../../shared/utils/resolvePermissionsFromJwtOrRedis');
+      const { getRedisClient } = require('../config/redis');
+      const layer = await resolvePermissionsFromJwtOrRedis(decoded, () => getRedisClient(), logger);
+      if (layer.source !== 'none') {
+        req.user.permissions = layer.permissions;
+      }
+    } catch (permLayerErr) {
+      logger.debug('JTS: permission Redis/JWT layer skipped', { error: permLayerErr.message });
+    }
 
     if (await enforceTenantIsolation(req, res)) return;
 

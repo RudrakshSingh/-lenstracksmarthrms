@@ -9,6 +9,27 @@ const ApiError = require('../utils/ApiError');
 const httpStatusPkg = require('http-status');
 const httpStatus = httpStatusPkg.default || httpStatusPkg;
 
+const resolveAttendanceConfig = (workData = {}) => {
+  const rawWorkMode = String(workData.workMode || '').toUpperCase().trim();
+  const rawAttendancePolicy = String(workData.attendancePolicy || '').toUpperCase().trim();
+  const rawStoreId = String(workData.storeId || '').toLowerCase().trim();
+
+  let workMode = ['STORE_BOUND', 'BACKOFFICE', 'ROAMING'].includes(rawWorkMode)
+    ? rawWorkMode
+    : 'STORE_BOUND';
+  let attendancePolicy = ['STRICT_GEOFENCE', 'NO_GEOFENCE', 'FLEXI_SHIFT'].includes(rawAttendancePolicy)
+    ? rawAttendancePolicy
+    : 'STRICT_GEOFENCE';
+
+  // If onboarding selected special location types, default to non-store-bound behavior.
+  if (rawStoreId === 'backoffice' || rawStoreId === 'office') {
+    if (!rawWorkMode) workMode = 'BACKOFFICE';
+    if (!rawAttendancePolicy) attendancePolicy = 'NO_GEOFENCE';
+  }
+
+  return { workMode, attendancePolicy };
+};
+
 /**
  * Step 1: Register basic information
  */
@@ -223,6 +244,8 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
       storeId,
       designation,
       role_family,
+      workMode,
+      attendancePolicy,
       joining_date,
       reporting_manager_id,
       employee_status = 'ACTIVE',
@@ -239,6 +262,7 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
       leave_entitlements,
       incentive_slabs
     } = workData;
+    const attendanceConfig = resolveAttendanceConfig({ workMode, attendancePolicy, storeId });
 
     // Handle special store values: "backoffice", "office", "", or actual store ID
     if (storeId) {
@@ -294,6 +318,8 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
     user.jobTitle = jobTitle || user.jobTitle;
     user.department = department || user.department;
     user.status = employee_status.toLowerCase() || user.status;
+    user.workMode = attendanceConfig.workMode;
+    user.attendancePolicy = attendanceConfig.attendancePolicy;
     
     // Validate and reject old salary fields
     if (base_salary !== undefined || workData.salary !== undefined) {
@@ -624,6 +650,45 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
         toDate: previousEmployment.to_date ? new Date(previousEmployment.to_date) : undefined
       };
     }
+
+    // CRITICAL: Also save to User model directly for immediate availability
+    if (bankAccount) {
+      user.bankAccount = {
+        accountNumber: bankAccount.account_number,
+        account_number: bankAccount.account_number,
+        account_no: bankAccount.account_number,
+        ifscCode: bankAccount.ifsc_code?.toUpperCase(),
+        ifsc_code: bankAccount.ifsc_code?.toUpperCase(),
+        ifsc: bankAccount.ifsc_code?.toUpperCase(),
+        bankName: bankAccount.bank_name,
+        bank_name: bankAccount.bank_name,
+        accountType: bankAccount.account_type,
+        account_type: bankAccount.account_type
+      };
+    }
+    if (uan) {
+      user.uan = uan;
+    }
+    if (esiNo) {
+      user.esiNo = esiNo;
+      user.esi_no = esiNo;
+      user.esiNumber = esiNo;
+      user.esi_number = esiNo;
+    }
+    if (panNumberFinal) {
+      user.panNumber = panNumberFinal.toUpperCase();
+      user.pan_number = panNumberFinal.toUpperCase();
+      user.pan = panNumberFinal.toUpperCase();
+    }
+    if (previousEmployment) {
+      user.previousEmployment = {
+        hasPreviousEmployment: previousEmployment.has_previous_employment,
+        employerName: previousEmployment.employer_name,
+        fromDate: previousEmployment.from_date ? new Date(previousEmployment.from_date) : undefined,
+        toDate: previousEmployment.to_date ? new Date(previousEmployment.to_date) : undefined
+      };
+      user.previous_employment = user.previousEmployment;
+    }
     
     // Aggressively delete ALL existing profiles for this employee (multiple queries to catch all cases)
     const deleteQueries = [
@@ -740,6 +805,9 @@ const addStatutoryInfo = async (employeeId, statutoryData, updatedBy) => {
         throw upsertError;
       }
     }
+
+    // CRITICAL: Save user with updated statutory info
+    await user.save();
 
     logger.info('Statutory info added', {
       employeeId: user.employeeId

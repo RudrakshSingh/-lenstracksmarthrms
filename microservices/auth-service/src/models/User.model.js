@@ -72,68 +72,22 @@ const userSchema = new mongoose.Schema({
     default: 'STORE'
   },
   
-  // Custom Permissions (Admin can override)
+  // Extra allows on top of role defaults (validated against permission catalog in APIs)
   custom_permissions: [{
     type: String,
-    enum: [
-      // User Management
-      'read_users', 'write_users', 'delete_users', 'create_users', 'update_users',
-      'activate_users', 'deactivate_users',
-      
-      // Attendance Management
-      'read_attendance', 'write_attendance', 'approve_attendance',
-      'create_attendance', 'update_attendance', 'delete_attendance',
-      
-      // Reports
-      'read_reports', 'write_reports', 'export_reports',
-      'create_reports', 'update_reports', 'delete_reports',
-      
-      // Asset Management
-      'read_assets', 'write_assets', 'assign_assets',
-      'create_assets', 'update_assets', 'delete_assets',
-      
-      // Document Management
-      'read_documents', 'write_documents', 'delete_documents',
-      'upload_documents', 'download_documents', 'update_documents',
-      
-      // Transfer Management
-      'read_transfers', 'write_transfers', 'approve_transfers',
-      'create_transfers', 'update_transfers', 'delete_transfers',
-      
-      // Store Management
-      'read_stores', 'write_stores', 'create_stores', 'update_stores',
-      
-      // Role Management
-      'read_roles', 'write_roles', 'create_roles', 'update_roles',
-      
-      // System Administration
-      'system_admin', 'audit_logs', 'backup_restore',
-      
-      // Dashboard Permissions
-      'view_dashboard', 'manage_dashboard', 'view_all_widgets', 'manage_widgets',
-      'view_attendance_summary', 'view_employee_count', 'view_asset_summary',
-      'view_transfer_requests', 'view_document_status', 'view_store_performance',
-      'view_attendance_chart', 'view_employee_chart', 'view_asset_chart',
-      'view_transfer_chart', 'view_document_chart', 'view_store_chart',
-      'view_recent_activities', 'view_pending_approvals', 'view_system_alerts',
-      'view_attendance_trends', 'view_employee_trends', 'view_asset_trends',
-      'view_compliance_status', 'view_audit_logs', 'view_system_metrics',
-      
-      // Sales Specific
-      'view_sales_data', 'manage_sales', 'view_customer_data', 'manage_customers',
-      'view_optometry_data', 'manage_optometry', 'view_prescriptions',
-      
-      // Prescription Management
-      'prescription:create', 'prescription:read', 'prescription:update', 'prescription:sign',
-      'prescription:delete', 'checkup:create', 'checkup:read', 'checkup:update',
-      'qr_lead:create', 'qr_lead:read', 'qr_lead:link', 'rxlink:read', 'rxlink:redeem',
-      'clinical:calculate', 'prescription:export', 'prescription:audit',
-      
-      // Geofencing (Sales & Store Managers only)
-      'geofencing_access', 'location_tracking', 'store_geofencing'
-    ]
+    trim: true
   }],
-  
+  // Explicit blocks removed from effective set even if the role grants them
+  permission_denials: [{
+    type: String,
+    trim: true
+  }],
+  permissionsRevision: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
   // Geofencing Settings (for Sales and Store Managers)
   geofencing_enabled: {
     type: Boolean,

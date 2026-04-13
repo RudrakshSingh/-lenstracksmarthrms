@@ -48,7 +48,7 @@ const salesOrderSchema = new mongoose.Schema({
     quantity: {
       type: Number,
       required: true,
-      min: 1
+      min: 0  // Allow 0 quantity, but not negative
     },
     unit_price: {
       type: Number,

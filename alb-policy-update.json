@@ -1,0 +1,26 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "elasticloadbalancing:*"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:*",
+                "iam:CreateServiceLinkedRole",
+                "waf-regional:*",
+                "wafv2:*",
+                "shield:*",
+                "acm:*",
+                "cognito-idp:*",
+                "tag:*"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

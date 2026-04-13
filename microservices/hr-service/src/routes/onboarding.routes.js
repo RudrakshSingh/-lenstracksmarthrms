@@ -42,6 +42,8 @@ const workDetailsSchema = {
     jobTitle: Joi.string().required(),
     department: Joi.string().required(),
     storeId: Joi.string().allow(null, '').optional(), // Make storeId optional
+    workMode: Joi.string().valid('STORE_BOUND', 'BACKOFFICE', 'ROAMING').optional(),
+    attendancePolicy: Joi.string().valid('STRICT_GEOFENCE', 'NO_GEOFENCE', 'FLEXI_SHIFT').optional(),
     designation: Joi.string().required(),
     role_family: Joi.string().required(),
     joining_date: Joi.date().required(),
@@ -172,7 +174,7 @@ const saveDraftSchema = {
 
 const getDraftSchema = {
   query: Joi.object({
-    employee_id: Joi.string().required()
+    employee_id: Joi.string().optional() // Make optional - controller will handle fallback
   })
 };
 
@@ -335,6 +337,7 @@ router.post(
   extractTenantId, // 3. Extract tenantId (already validated, just normalize)
   requireRole(['hr', 'admin', 'superadmin']),
   uploadSingle('file'),
+  require('../middleware/s3Upload.middleware').uploadToS3Storage, // Upload to S3
   asyncHandler(onboardingController.uploadOnboardingDocument)
 );
 

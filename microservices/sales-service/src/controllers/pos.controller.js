@@ -1,11 +1,12 @@
+// POS Models - All models are now available
 const POSInvoice = require('../models/pos/posInvoice.model');
 const POSInvoiceLine = require('../models/pos/posInvoiceLine.model');
 const POSPayment = require('../models/pos/posPayment.model');
 const POSOffer = require('../models/pos/posOffer.model');
 const LabJob = require('../models/pos/labJob.model');
+const Prescription = require('../models/Prescription.model');
 const Customer = require('../models/Customer.model');
 const Product = require('../models/ProductMaster.model');
-const Prescription = require('../models/Prescription.model');
 
 // Items Management
 const searchItems = async (req, res) => {

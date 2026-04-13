@@ -1,38 +1,38 @@
-const { uploadToBlob, isBlobStorageReady } = require('../config/azureStorage');
+const { uploadToS3, isS3StorageReady } = require('../config/s3Storage');
 const logger = require('../config/logger');
 
 /**
- * Middleware to upload file to Azure Blob Storage
+ * Middleware to upload file to AWS S3
  * Use after multer middleware (upload.single('fieldName'))
  */
 const uploadToBlobStorage = async (req, res, next) => {
   try {
     // If no file uploaded, continue (selfie is optional)
     if (!req.file) {
-      logger.info('No file uploaded, continuing without blob upload');
+      logger.info('No file uploaded, continuing without S3 upload');
       return next();
     }
 
-    // Check if Azure Blob Storage is ready
-    if (!isBlobStorageReady()) {
-      logger.warn('Azure Blob Storage not configured, skipping upload');
+    // Check if AWS S3 is ready
+    if (!isS3StorageReady()) {
+      logger.warn('AWS S3 not configured, skipping upload');
       req.file.blobUrl = null; // Mark as not uploaded
       return next();
     }
 
-    // Upload to Azure Blob Storage
+    // Upload to AWS S3
     const fileName = req.file.originalname || `selfie-${Date.now()}.jpg`;
     const contentType = req.file.mimetype || 'image/jpeg';
     const fileBuffer = req.file.buffer;
 
-    const uploadResult = await uploadToBlob(fileBuffer, fileName, contentType);
+    const uploadResult = await uploadToS3(fileBuffer, fileName, contentType);
 
-    // Attach blob URL to req.file for controller to use
+    // Attach S3 URL to req.file for controller to use
     req.file.blobUrl = uploadResult.url;
-    req.file.blobName = uploadResult.blobName;
+    req.file.blobName = uploadResult.fileKey || uploadResult.blobName;
     req.file.uploadedAt = uploadResult.uploadedAt;
 
-    logger.info('File uploaded to blob storage successfully', {
+    logger.info('File uploaded to S3 successfully', {
       fileName,
       blobUrl: uploadResult.url,
       userId: req.user?._id
@@ -40,7 +40,7 @@ const uploadToBlobStorage = async (req, res, next) => {
 
     next();
   } catch (error) {
-    logger.error('Blob upload middleware error', {
+    logger.error('S3 upload middleware error', {
       error: error.message,
       userId: req.user?._id,
       fileName: req.file?.originalname

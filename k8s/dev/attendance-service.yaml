@@ -44,6 +44,8 @@ spec:
           value: "attendance-service"
         - name: K8S_ENV
           value: "true"
+        - name: JTS_SERVICE_URL
+          value: "http://jts-service:3018"
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:

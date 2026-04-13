@@ -2,6 +2,8 @@ const User = require('../models/User.model');
 const Role = require('../models/Role.model');
 const bcrypt = require('bcryptjs');
 const logger = require('../config/logger');
+const cache = require('../utils/cache');
+const { userEffectivePattern } = require('../../../shared/utils/permissionCacheKeys');
 
 class AdminUserService {
   /**
@@ -180,9 +182,22 @@ class AdminUserService {
       }
 
       // Update user
+      const touchedPermFields =
+        Object.prototype.hasOwnProperty.call(updateData, 'custom_permissions') ||
+        Object.prototype.hasOwnProperty.call(updateData, 'permission_denials');
+
       Object.assign(user, updateData);
+      if (touchedPermFields) {
+        user.permissionsRevision = (user.permissionsRevision != null ? user.permissionsRevision : 0) + 1;
+      }
       user.updatedBy = updatedBy;
       await user.save();
+
+      if (touchedPermFields) {
+        await cache.invalidatePattern(userEffectivePattern(userId)).catch((err) =>
+          logger.warn('HR: permission cache invalidate failed', { error: err.message })
+        );
+      }
 
       // Return user without password
       const userObj = user.toObject();

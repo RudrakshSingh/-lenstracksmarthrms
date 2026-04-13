@@ -24,6 +24,13 @@ const storeSchema = new mongoose.Schema({
     maxlength: 50,
     index: true
   },
+  // Legacy DBs may still enforce unique index on `store_id`.
+  // Keep this populated on every insert/update to avoid null duplicate key errors.
+  store_id: {
+    type: String,
+    trim: true,
+    index: true
+  },
   description: {
     type: String,
     trim: true,
@@ -275,4 +282,3 @@ storeSchema.pre('save', function(next) {
 });
 
 module.exports = mongoose.model('Store', storeSchema);
-

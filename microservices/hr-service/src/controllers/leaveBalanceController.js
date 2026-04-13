@@ -10,13 +10,32 @@ const getLeaveBalance = async (req, res, next) => {
   try {
     const { employeeId } = req.query;
     const leaveYear = req.query.leaveYear ? parseInt(req.query.leaveYear) : null;
-    const tenantId = req.tenantId || 'default';
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || req.user?.tenantId || 'default';
 
     // If employeeId not provided, use logged-in user's employeeId
     const targetEmployeeId = employeeId || req.user?.employee_id || req.user?.employeeId;
 
     if (!targetEmployeeId) {
       return sendError(res, 'employeeId is required', 'Validation failed', 400);
+    }
+
+    // CRITICAL: Check if employee is trying to view own balance
+    // Allow employees to view their own balance
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isAdminOrHR = ['admin', 'hr', 'superadmin', 'manager'].includes(userRole);
+    const userEmployeeId = req.user?.employee_id || req.user?.employeeId;
+    const userMongoId = req.user?._id?.toString() || req.user?.id?.toString();
+
+    // If not admin/HR, check if viewing own data
+    if (!isAdminOrHR) {
+      const isOwnData = (
+        targetEmployeeId === userEmployeeId ||
+        targetEmployeeId === userMongoId
+      );
+
+      if (!isOwnData) {
+        return sendError(res, 'You can only view your own leave balance', 'FORBIDDEN', 403);
+      }
     }
 
     const leaveBalance = await LeaveService.getLeaveBalance(targetEmployeeId, tenantId, leaveYear);

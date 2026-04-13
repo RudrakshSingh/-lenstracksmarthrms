@@ -1016,15 +1016,17 @@ const loadRoutes = () => {
     }
   });
 
-  // Proxy /api/jts/* to jts-service (frontend dev often uses HR origin :3002 as API host)
+  // Proxy /api/jts/* and /hrms/api/jts/* to jts-service (HRMS-MFE may use apiBase /hrms/api)
   const JTS_SERVICE_URL = process.env.JTS_SERVICE_URL ||
     (process.env.K8S_ENV === 'true' ? 'http://jts-service:3018' : 'http://localhost:3018');
-  app.use('/api/jts', async (req, res) => {
+
+  const proxyJtsToService = async (req, res, upstreamPath) => {
     try {
-      const targetUrl = `${JTS_SERVICE_URL.replace(/\/$/, '')}${req.originalUrl}`;
+      const targetUrl = `${JTS_SERVICE_URL.replace(/\/$/, '')}${upstreamPath}`;
       logger.debug('Proxying JTS request', {
         method: req.method,
         originalUrl: req.originalUrl,
+        upstreamPath,
         targetUrl
       });
 
@@ -1048,10 +1050,33 @@ const loadRoutes = () => {
         validateStatus: () => true
       });
 
-      if (typeof response.data === 'object' && response.data !== null) {
-        res.status(response.status).json(response.data);
+      let outStatus = response.status;
+      let outBody = response.data;
+      const dupBody =
+        outStatus === 500 &&
+        (typeof outBody === 'string'
+          ? outBody
+          : JSON.stringify(outBody != null ? outBody : {}));
+      if (
+        typeof dupBody === 'string' &&
+        /E11000/i.test(dupBody) &&
+        (/dup key/i.test(dupBody) || /duplicate key/i.test(dupBody)) &&
+        (/code/i.test(dupBody) || /tenant_id_1_code_1/i.test(dupBody))
+      ) {
+        outStatus = 409;
+        outBody = {
+          success: false,
+          error: 'TASK_CODE_DUPLICATE',
+          code: 'TASK_CODE_DUPLICATE',
+          message:
+            'Task number pehle se use ho chuka hai — dubara create try karein. (Backend ne naya code assign karna hai)'
+        };
+      }
+
+      if (typeof outBody === 'object' && outBody !== null) {
+        res.status(outStatus).json(outBody);
       } else {
-        res.status(response.status).send(response.data);
+        res.status(outStatus).send(outBody);
       }
     } catch (error) {
       logger.error('JTS service proxy error', {
@@ -1060,11 +1085,29 @@ const loadRoutes = () => {
         status: error.response?.status
       });
       if (error.response) {
-        const d = error.response.data;
+        let st = error.response.status;
+        let d = error.response.data;
+        const raw = typeof d === 'string' ? d : JSON.stringify(d != null ? d : {});
+        if (
+          st === 500 &&
+          typeof raw === 'string' &&
+          /E11000/i.test(raw) &&
+          (/dup key/i.test(raw) || /duplicate key/i.test(raw)) &&
+          (/code/i.test(raw) || /tenant_id_1_code_1/i.test(raw))
+        ) {
+          st = 409;
+          d = {
+            success: false,
+            error: 'TASK_CODE_DUPLICATE',
+            code: 'TASK_CODE_DUPLICATE',
+            message:
+              'Task number pehle se use ho chuka hai — dubara create try karein. (Backend ne naya code assign karna hai)'
+          };
+        }
         if (typeof d === 'object' && d !== null) {
-          res.status(error.response.status).json(d);
+          res.status(st).json(d);
         } else {
-          res.status(error.response.status).send(d);
+          res.status(st).send(d);
         }
       } else {
         res.status(503).json({
@@ -1074,6 +1117,12 @@ const loadRoutes = () => {
         });
       }
     }
+  };
+
+  app.use('/api/jts', async (req, res) => proxyJtsToService(req, res, req.originalUrl));
+  app.use('/hrms/api/jts', async (req, res) => {
+    const upstreamPath = req.originalUrl.replace(/^\/hrms/, '') || '/';
+    return proxyJtsToService(req, res, upstreamPath);
   });
   
   try {

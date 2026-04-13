@@ -91,7 +91,7 @@ app.options('*', (req, res, next) => {
   // Set all CORS headers
   res.header('Access-Control-Allow-Origin', allowedOrigin);
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma, X-Tenant-Id');
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Max-Age', '86400');
   
@@ -550,7 +550,7 @@ sortedServices.forEach(([key, service]) => {
           proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD';
         }
         if (!proxyRes.headers['access-control-allow-headers']) {
-          proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept';
+          proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, X-Tenant-Id';
         }
       }
       
@@ -602,7 +602,7 @@ sortedServices.forEach(([key, service]) => {
     // Set all CORS headers
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma, X-Tenant-Id');
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Max-Age', '86400');
     
@@ -621,7 +621,7 @@ sortedServices.forEach(([key, service]) => {
       // Set all CORS headers
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID, X-Requested-With, Origin, Accept, Cache-Control, Pragma, X-Tenant-Id');
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Access-Control-Max-Age', '86400');
       

@@ -7,6 +7,9 @@ function toMessageFromCode(code) {
   if (code === 'AUTH_FAILED') return 'Authentication failed';
   if (code === 'ROUTE_NOT_FOUND') return 'Route not found';
   if (code === 'INTERNAL_ERROR') return 'Internal server error';
+  if (code === 'TASK_CODE_DUPLICATE') {
+    return 'Task number pehle se use ho chuka hai — ek baar dubara create try karein. Server naya unique code assign karega.';
+  }
   return String(code);
 }
 

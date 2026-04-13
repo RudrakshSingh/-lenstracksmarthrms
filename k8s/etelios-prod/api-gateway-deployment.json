@@ -1,0 +1,165 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "annotations": {},
+    "labels": {
+      "app": "api-gateway"
+    },
+    "name": "api-gateway",
+    "namespace": "etelios-prod"
+  },
+  "spec": {
+    "progressDeadlineSeconds": 600,
+    "replicas": 2,
+    "revisionHistoryLimit": 10,
+    "selector": {
+      "matchLabels": {
+        "app": "api-gateway"
+      }
+    },
+    "strategy": {
+      "rollingUpdate": {
+        "maxSurge": "25%",
+        "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+    },
+    "template": {
+      "metadata": {
+        "annotations": {},
+        "labels": {
+          "app": "api-gateway"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "env": [
+              {
+                "name": "NODE_ENV",
+                "value": "production"
+              },
+              {
+                "name": "PORT",
+                "value": "3000"
+              },
+              {
+                "name": "SERVICE_NAME",
+                "value": "api-gateway"
+              },
+              {
+                "name": "K8S_ENV",
+                "value": "true"
+              },
+              {
+                "name": "API_GATEWAY_HOST",
+                "value": "api-gateway"
+              },
+              {
+                "name": "REDIS_URL",
+                "value": "redis://redis:6379"
+              }
+            ],
+            "envFrom": [
+              {
+                "configMapRef": {
+                  "name": "etelios-config"
+                }
+              },
+              {
+                "secretRef": {
+                  "name": "docdb-credentials"
+                }
+              }
+            ],
+            "image": "383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-jts-service:permrbac-202604031947",
+            "imagePullPolicy": "Always",
+            "livenessProbe": {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/health",
+                "port": 3000,
+                "scheme": "HTTP"
+              },
+              "initialDelaySeconds": 30,
+              "periodSeconds": 10,
+              "successThreshold": 1,
+              "timeoutSeconds": 5
+            },
+            "name": "api-gateway",
+            "ports": [
+              {
+                "containerPort": 3000,
+                "name": "http",
+                "protocol": "TCP"
+              }
+            ],
+            "readinessProbe": {
+              "failureThreshold": 3,
+              "httpGet": {
+                "path": "/health",
+                "port": 3000,
+                "scheme": "HTTP"
+              },
+              "initialDelaySeconds": 10,
+              "periodSeconds": 5,
+              "successThreshold": 1,
+              "timeoutSeconds": 3
+            },
+            "resources": {
+              "limits": {
+                "cpu": "200m",
+                "memory": "512Mi"
+              },
+              "requests": {
+                "cpu": "50m",
+                "memory": "256Mi"
+              }
+            },
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              },
+              "readOnlyRootFilesystem": false,
+              "runAsNonRoot": true,
+              "runAsUser": 1001
+            },
+            "terminationMessagePath": "/dev/termination-log",
+            "terminationMessagePolicy": "File",
+            "volumeMounts": [
+              {
+                "mountPath": "/etc/ssl/certs/ca-cert.pem",
+                "name": "docdb-ca-cert",
+                "readOnly": true,
+                "subPath": "ca-cert.pem"
+              }
+            ]
+          }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "imagePullSecrets": [
+          {
+            "name": "ecr-registry-secret"
+          }
+        ],
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "terminationGracePeriodSeconds": 30,
+        "volumes": [
+          {
+            "name": "docdb-ca-cert",
+            "secret": {
+              "defaultMode": 420,
+              "secretName": "docdb-ca-cert"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

@@ -10,6 +10,51 @@ const logger = require('../utils/logger');
  * Send notification to user
  * POST /api/events/notification
  */
+/**
+ * JTS → Realtime: in-app notification (tenant-scoped; client filters recipient)
+ * POST /api/events/jts-in-app
+ */
+exports.broadcastJtsInApp = async (req, res) => {
+  try {
+    const {
+      tenantId,
+      recipient_id,
+      recipient_email,
+      title,
+      message,
+      type,
+      notification_id,
+      payload
+    } = req.body;
+
+    if (!tenantId || !recipient_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'tenantId and recipient_id are required'
+      });
+    }
+
+    realtimeService.broadcastJtsInAppToTenant(String(tenantId), {
+      recipient_id: String(recipient_id),
+      recipient_email: recipient_email || null,
+      title: title || '',
+      message: message || '',
+      type: type || 'notification',
+      notification_id: notification_id ? String(notification_id) : null,
+      payload: payload && typeof payload === 'object' ? payload : {}
+    });
+
+    return res.json({ success: true, message: 'JTS in-app notification broadcast' });
+  } catch (error) {
+    logger.error('Broadcast JTS in-app error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to broadcast JTS notification',
+      error: error.message
+    });
+  }
+};
+
 exports.sendNotification = async (req, res) => {
   try {
     const { userId, notification } = req.body;

@@ -1,5 +1,13 @@
 const winston = require('winston');
-const DailyRotateFile = require('winston-daily-rotate-file');
+let DailyRotateFile = null;
+try {
+  DailyRotateFile = require('winston-daily-rotate-file');
+} catch (error) {
+  // Keep service booting even when optional rotation package is unavailable.
+  // Routes must still mount so APIs do not degrade into 404.
+  // eslint-disable-next-line no-console
+  console.warn('winston-daily-rotate-file not found, using console logger only');
+}
 
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -25,18 +33,16 @@ const consoleFormat = winston.format.combine(
   })
 );
 
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
-  format: logFormat,
-  defaultMeta: { service: 'hrms-backend' },
-  transports: [
-    // Console transport
-    new winston.transports.Console({
-      format: consoleFormat,
-      silent: process.env.NODE_ENV === 'test'
-    }),
+const transports = [
+  // Console transport
+  new winston.transports.Console({
+    format: consoleFormat,
+    silent: process.env.NODE_ENV === 'test'
+  })
+];
 
-    // File transports
+if (DailyRotateFile) {
+  transports.push(
     new DailyRotateFile({
       filename: 'logs/error-%DATE%.log',
       datePattern: 'YYYY-MM-DD',
@@ -45,7 +51,6 @@ const logger = winston.createLogger({
       maxFiles: process.env.LOG_FILE_MAX_FILES || '14d',
       format: logFormat
     }),
-
     new DailyRotateFile({
       filename: 'logs/combined-%DATE%.log',
       datePattern: 'YYYY-MM-DD',
@@ -53,7 +58,14 @@ const logger = winston.createLogger({
       maxFiles: process.env.LOG_FILE_MAX_FILES || '14d',
       format: logFormat
     })
-  ],
+  );
+}
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: logFormat,
+  defaultMeta: { service: 'hrms-backend' },
+  transports,
 
   // Handle uncaught exceptions and unhandled rejections
   exceptionHandlers: [

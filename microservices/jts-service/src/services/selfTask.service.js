@@ -82,6 +82,7 @@ class SelfTaskService {
       const requiresApproval = policy.mandatory_approval;
       const status = requiresApproval ? 'PENDING_APPROVAL' : 'ASSIGNED';
 
+      // Code must be allocated without txn session — see allocateNextTaskCode (task.service.js).
       const code = await taskService.nextTaskCode(tenantId);
 
       // Create task

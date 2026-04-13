@@ -70,8 +70,12 @@ const authenticate = async (req, res, next) => {
       id: decoded.userId || decoded.id || decoded.sub,
       role: decoded.role || 'user',
       email: decoded.email || '',
-      permissions: decoded.permissions || []
+      permissions: Array.isArray(decoded.permissions) ? decoded.permissions : [],
+      tenantId: decoded.tenantId || decoded.tenant_id // ✅ Extract tenantId from token
     };
+
+    const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
+    await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => null, logger);
 
     next();
   } catch (error) {

@@ -17,7 +17,11 @@ class AdminUserService {
    */
   async createAdminUsers(adminUserData, tenantId, tenantName, options = {}) {
     try {
-      const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
+      // Use Kubernetes service URL for auth-service
+      // Service exposes port 80 which routes to pod port 3000
+      const authServiceUrl = process.env.AUTH_SERVICE_URL || 'http://auth-service.etelios-prod.svc.cluster.local';
+      
+      logger.info('Creating admin users via auth service', { authServiceUrl, tenantId });
       const baseEmail = adminUserData.email || adminUserData.primaryEmail;
       const baseName = adminUserData.name || adminUserData.primaryContact || tenantName;
       const basePhone = adminUserData.phone || adminUserData.primaryPhone || '+919999999999';

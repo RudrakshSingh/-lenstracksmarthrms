@@ -2,7 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const logger = require('../config/logger');
-const { sendSuccess, sendError } = require('../../../shared/utils/response.util');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util');
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
@@ -59,7 +59,7 @@ const uploadDocument = async (req, res, next) => {
     let storageProvider = 'local';
     
     try {
-      const azureBlobStorage = require('../../../shared/utils/azureBlobStorage');
+      const azureBlobStorage = require('../../shared/utils/azureBlobStorage');
       if (azureBlobStorage.isConfigured()) {
         // Upload to Azure Blob Storage
         const filename = `${Date.now()}-${req.file.originalname}`;
@@ -202,4 +202,3 @@ module.exports = {
   getDocuments,
   deleteDocument
 };
-

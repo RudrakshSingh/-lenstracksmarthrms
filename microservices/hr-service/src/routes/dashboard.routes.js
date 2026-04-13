@@ -10,7 +10,9 @@ const {
   getDashboardDepartments,
   getUnifiedDashboard,
   getStoreDashboard,
-  getHRMSDashboard
+  getHRMSDashboard,
+  getTopPerformers,
+  getTopSales
 } = require('../controllers/dashboardController');
 
 // All routes require authentication
@@ -31,7 +33,7 @@ router.get(
 // Dashboard statistics
 router.get(
   '/dashboard/stats',
-  requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
+  requireRole(['hr', 'admin', 'superadmin', 'manager', 'employee'], []),
   asyncHandler(getDashboardStats)
 );
 
@@ -40,6 +42,20 @@ router.get(
   '/dashboard/recent-activities',
   requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
   asyncHandler(getRecentActivities)
+);
+
+// Top performers - Tenant Admin Dashboard
+router.get(
+  '/dashboard/top-performers',
+  requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
+  asyncHandler(getTopPerformers)
+);
+
+// Top sales - Tenant Admin Dashboard
+router.get(
+  '/dashboard/top-sales',
+  requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
+  asyncHandler(getTopSales)
 );
 
 // Department overview
@@ -76,5 +92,42 @@ router.get(
   asyncHandler(getHRMSDashboard)
 );
 
-module.exports = router;
+// ============================================
+// TENANT ADMIN DASHBOARD ROUTES
+// These routes are mounted at /api/dashboard (without /dashboard prefix)
+// ============================================
 
+// Create a separate router for tenant admin dashboard routes
+const tenantAdminRouter = express.Router();
+tenantAdminRouter.use(authenticate);
+
+// Stats endpoint for tenant admin
+tenantAdminRouter.get(
+  '/stats',
+  requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
+  asyncHandler(getDashboardStats)
+);
+
+// Top performers endpoint
+tenantAdminRouter.get(
+  '/top-performers',
+  requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
+  asyncHandler(getTopPerformers)
+);
+
+// Top sales endpoint
+tenantAdminRouter.get(
+  '/top-sales',
+  requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
+  asyncHandler(getTopSales)
+);
+
+// Recent activities endpoint
+tenantAdminRouter.get(
+  '/recent-activities',
+  requireRole(['hr', 'admin', 'superadmin', 'manager'], []),
+  asyncHandler(getRecentActivities)
+);
+
+module.exports = router;
+module.exports.tenantAdminRouter = tenantAdminRouter;

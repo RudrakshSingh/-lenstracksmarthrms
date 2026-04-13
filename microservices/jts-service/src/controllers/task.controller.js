@@ -20,6 +20,7 @@ const {
   resolveEmployeeIdToObjectId,
   resolveListFilterEmployeeId
 } = require('../utils/employeeRefResolve.util');
+const { buildListResponse } = require('../utils/httpEnvelope.util');
 
 /** Roles that may list SLA alerts for the whole tenant (all teams). */
 const SLA_ALERTS_TENANT_WIDE_ROLES = new Set([
@@ -45,15 +46,13 @@ const SLA_EXECUTIVE_ROLES = new Set([
 function emptyTasksListPayload(filters) {
   const page = parseInt(filters.page, 10) || 1;
   const limit = parseInt(filters.limit, 10) || 20;
-  return {
-    success: true,
+  return buildListResponse({
     data: [],
-    total: 0,
     page,
     limit,
-    pagination: { page, limit, total: 0, pages: 0 },
+    total: 0,
     message: 'Tasks retrieved successfully'
-  };
+  });
 }
 
 async function applyListFiltersEmployeeRefs(tenant_id, filters) {
@@ -160,15 +159,15 @@ class TaskController {
         result.tasks.map(async (t) => maybeAttachSignedUrls(serializeTask(t), t, includeSignedUrls))
       );
 
-      res.json({
-        success: true,
-        data,
-        total,
-        page,
-        limit,
-        pagination: result.pagination,
-        message: 'Tasks retrieved successfully'
-      });
+      res.json(
+        buildListResponse({
+          data,
+          page,
+          limit,
+          total,
+          message: 'Tasks retrieved successfully'
+        })
+      );
     } catch (error) {
       logger.error('Get tasks error', { error: error.message });
       const mapped = toErrorPayload(error, 'TASK_FETCH_ERROR');
@@ -377,15 +376,15 @@ class TaskController {
       }
       const result = await taskService.getWorkdayTasks(tenant_id, req.params.workdayId, raw);
       const { page, limit, total } = result.pagination;
-      res.json({
-        success: true,
-        data: result.tasks.map((t) => serializeTask(t)),
-        total,
-        page,
-        limit,
-        pagination: result.pagination,
-        message: 'Workday tasks retrieved successfully'
-      });
+      res.json(
+        buildListResponse({
+          data: result.tasks.map((t) => serializeTask(t)),
+          page,
+          limit,
+          total,
+          message: 'Workday tasks retrieved successfully'
+        })
+      );
     } catch (error) {
       logger.error('Get workday tasks error', { error: error.message });
       const mapped = toErrorPayload(error, 'TASK_FETCH_ERROR');
@@ -513,7 +512,19 @@ class TaskController {
   async deleteTask(req, res) {
     try {
       const { tenant_id } = req.user;
-      await taskService.deleteTask(tenant_id, req.params.id);
+      const actorId = await resolveEmployeeId(tenant_id, req.user);
+      if (!actorId) {
+        return res.status(403).json(
+          buildErrorBody({
+            code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
+            message: 'Employee context required to delete a task'
+          })
+        );
+      }
+      await taskService.deleteTask(tenant_id, req.params.id, {
+        actorId,
+        role: req.user.role
+      });
       res.status(204).send();
     } catch (error) {
       logger.error('Delete task error', { error: error.message });
@@ -598,6 +609,137 @@ class TaskController {
     } catch (error) {
       logger.error('Complete task error', { error: error.message });
       const mapped = toErrorPayload(error, 'TASK_COMPLETE_ERROR');
+      res.status(mapped.status).json(mapped.body);
+    }
+  }
+
+  /**
+   * Manager+ override: complete without checklist/timer blocking; skips review queue (always COMPLETED).
+   * POST /tasks/:id/force-complete
+   */
+  async forceCompleteTask(req, res) {
+    try {
+      const { tenant_id } = req.user;
+      const actorId = await resolveEmployeeId(tenant_id, req.user);
+      if (!actorId) {
+        return res.status(403).json({
+          success: false,
+          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
+          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
+        });
+      }
+
+      const task = await taskService.completeTask(
+        tenant_id,
+        req.params.id,
+        actorId,
+        req.body?.notes,
+        req.user.role,
+        { force: true }
+      );
+
+      res.json({
+        success: true,
+        data: serializeTask(task),
+        message: 'Task force-completed successfully'
+      });
+    } catch (error) {
+      logger.error('Force complete task error', { error: error.message });
+      const mapped = toErrorPayload(error, 'TASK_FORCE_COMPLETE_ERROR');
+      res.status(mapped.status).json(mapped.body);
+    }
+  }
+
+  /**
+   * Creates an EXTENSION_APPROVAL row (same effect as POST .../tasks/:taskId/approvals with that type).
+   */
+  async createExtensionRequest(req, res) {
+    try {
+      const { tenant_id } = req.user;
+      const actorId = await resolveEmployeeId(tenant_id, req.user);
+      if (!actorId) {
+        return res.status(403).json(buildErrorBody({ code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED' }));
+      }
+
+      const task = await taskService.getTaskById(tenant_id, req.params.id);
+      if (!task) {
+        return res.status(404).json(buildErrorBody({ code: 'TASK_001_NOT_FOUND', message: 'Task not found' }));
+      }
+
+      let approverRef =
+        req.body.approverEmployeeId || req.body.approver_employee_id || req.body.approverId;
+      if (!approverRef && task.approver_employee_id) {
+        const a = task.approver_employee_id;
+        approverRef = a._id ? a._id : a;
+      }
+      if (!approverRef) {
+        return res.status(400).json(buildErrorBody({ code: 'JTS_EXTENSION_APPROVER_REQUIRED' }));
+      }
+
+      const approverOid = await resolveEmployeeIdToObjectId(tenant_id, approverRef, { actorId });
+
+      const payload = {
+        newDueAt: req.body.newDueAt ?? req.body.new_due_at,
+        dueAt: req.body.dueAt ?? req.body.due_at,
+        due_at: req.body.due_at,
+        extensionMinutes: req.body.extensionMinutes ?? req.body.extendMinutes ?? req.body.extension_minutes,
+        extendMinutes: req.body.extendMinutes,
+        reason: req.body.reason
+      };
+
+      const row = await taskCollaborationService.createApproval(
+        tenant_id,
+        req.params.id,
+        actorId,
+        req.user.role,
+        {
+          approver_employee_id: approverOid,
+          approval_type: 'EXTENSION_APPROVAL',
+          payload
+        }
+      );
+
+      res.status(201).json({
+        success: true,
+        data: row,
+        message: 'Extension request created'
+      });
+    } catch (error) {
+      logger.error('Extension request error', { error: error.message });
+      const mapped = toErrorPayload(error, 'JTS_EXTENSION_REQUEST_ERROR');
+      res.status(mapped.status).json(mapped.body);
+    }
+  }
+
+  async bulkTasks(req, res) {
+    try {
+      const { tenant_id } = req.user;
+      const actorId = await resolveEmployeeId(tenant_id, req.user);
+      if (!actorId) {
+        return res.status(403).json(buildErrorBody({ code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED' }));
+      }
+
+      const { action, taskIds, payload } = req.body;
+      const result = await taskService.bulkTasks(tenant_id, actorId, req.user.role, {
+        action,
+        taskIds,
+        payload: payload || {}
+      });
+
+      res.json({
+        success: true,
+        data: {
+          succeeded: result.succeeded.map(({ taskId, task }) => ({
+            taskId,
+            task: serializeTask(task)
+          })),
+          failed: result.failed
+        },
+        message: 'Bulk task operation finished'
+      });
+    } catch (error) {
+      logger.error('Bulk tasks error', { error: error.message });
+      const mapped = toErrorPayload(error, 'TASK_BULK_ERROR');
       res.status(mapped.status).json(mapped.body);
     }
   }
@@ -700,12 +842,43 @@ class TaskController {
           code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
         });
       }
-      await taskStatusService.changeStatus(tenant_id, req.params.id, 'IN_PROGRESS', {
+
+      const taskId = req.params.id;
+      let task = await taskService.getTaskById(tenant_id, taskId);
+      if (!task) {
+        return res.status(404).json(buildErrorBody({ code: 'TASK_001_NOT_FOUND', message: 'Task not found' }));
+      }
+
+      const reason = req.body?.reason || null;
+      const from = task.status;
+
+      if (from === 'COMPLETED') {
+        await taskStatusService.changeStatus(tenant_id, taskId, 'REOPENED', {
+          actorId,
+          reason: reason || 'Reopened from completed'
+        });
+      } else if (from === 'REOPENED') {
+        /* already reopened — move to in progress */
+      } else {
+        return res.status(400).json(
+          buildErrorBody({
+            code: 'TASK_REOPEN_INVALID_STATE',
+            message: 'Reopen is only valid from COMPLETED or REOPENED'
+          })
+        );
+      }
+
+      await taskStatusService.changeStatus(tenant_id, taskId, 'IN_PROGRESS', {
         actorId,
-        reason: req.body?.reason || 'Reopened from completed'
+        reason: reason || 'Resume work after reopen'
       });
-      const task = await taskService.getTaskById(tenant_id, req.params.id);
-      res.json({ success: true, data: serializeTask(task), message: 'Task reopened' });
+
+      task = await taskService.getTaskById(tenant_id, taskId);
+      res.json({
+        success: true,
+        data: serializeTask(task),
+        message: 'Task reopened and set to in progress'
+      });
     } catch (error) {
       logger.error('Reopen task error', { error: error.message });
       const mapped = toErrorPayload(error, 'TASK_REOPEN_ERROR');

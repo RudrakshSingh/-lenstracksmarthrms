@@ -1,6 +1,15 @@
 const mongoose = require('mongoose');
 
 const leavePolicySchema = new mongoose.Schema({
+  // Tenant isolation
+  tenantId: {
+    type: String,
+    required: false, // Optional for backward compatibility
+    trim: true,
+    lowercase: true,
+    index: true
+  },
+  
   // Policy Identification
   policy_id: {
     type: String,

@@ -27,6 +27,13 @@ class PerformanceManagementService {
     const q = { tenant_id: tenantId };
     if (query.employee_id) q.employee_id = query.employee_id;
     if (query.status) q.status = query.status;
+    if (query.reviewPeriodOverlaps && query.reviewPeriodOverlaps.start && query.reviewPeriodOverlaps.end) {
+      const { start, end } = query.reviewPeriodOverlaps;
+      q.$and = (q.$and || []).concat([
+        { review_period_start: { $lte: end } },
+        { review_period_end: { $gte: start } }
+      ]);
+    }
     return PerformanceReview.find(q).sort({ review_period_start: -1 }).limit(Number(query.limit) || 50);
   }
 
@@ -94,6 +101,9 @@ class PerformanceManagementService {
     const q = { tenant_id: tenantId };
     if (query.employee_id) q.employee_id = query.employee_id;
     if (query.severity) q.severity = query.severity;
+    if (query.created_at && query.created_at.$gte && query.created_at.$lte) {
+      q.created_at = query.created_at;
+    }
     return PerformanceAlert.find(q).sort({ created_at: -1 }).limit(Number(query.limit) || 100);
   }
 

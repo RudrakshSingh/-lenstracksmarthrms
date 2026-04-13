@@ -478,10 +478,19 @@ const changePassword = async (req, res, next) => {
       });
     }
 
-    // Update password
-    user.password = await bcrypt.hash(new_password, 12);
-    user.updated_at = new Date();
-    await user.save();
+    const hashed = await bcrypt.hash(new_password, 12);
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          password: hashed,
+          mustChangePassword: false,
+          passwordTemporary: false,
+          passwordChangedAt: new Date(),
+          updated_at: new Date()
+        }
+      }
+    );
 
     logger.info('User password changed successfully', {
       userId: user._id

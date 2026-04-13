@@ -1,0 +1,101 @@
+# Prod: build attendance-service → ECR → kubectl apply (deployment + ALB ingress) → rollout.
+#
+# Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# Optional: KUBE_CONFIG_B64 (base64 kubeconfig) when apply_kubernetes is true
+
+name: Attendance prod — ECR + EKS + ALB ingress
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_kubernetes:
+        description: 'kubectl apply + set image + rollout (needs KUBE_CONFIG_B64)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      apply_ingress:
+        description: 'Apply k8s/ingress-alb-fixed.yaml'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ACCOUNT_ID: '383234048604'
+  ECR_REPOSITORY: etelios-attendance-service
+  K8S_NAMESPACE: etelios-prod
+
+jobs:
+  deploy-attendance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push attendance-service image
+        env:
+          REGISTRY: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DOCKER_BUILDKIT=1 docker build --platform linux/amd64 \
+            -f microservices/attendance-service/Dockerfile \
+            -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            -t "$REGISTRY/$ECR_REPOSITORY:latest" \
+            .
+          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          echo "PUSHED_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "Pushed $REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Install kubectl
+        if: inputs.apply_kubernetes == 'true'
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Configure kubeconfig
+        if: inputs.apply_kubernetes == 'true'
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KUBE_CONFIG_B64:-}" ]; then
+            echo "KUBE_CONFIG_B64 is empty. Add repo secret or deploy from laptop with scripts/ops/deploy-attendance-service-eks.sh"
+            exit 1
+          fi
+          mkdir -p "$HOME/.kube"
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$HOME/.kube/config"
+
+      - name: Apply deployment, ingress, rollout
+        if: inputs.apply_kubernetes == 'true'
+        env:
+          REGISTRY: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+        run: |
+          set -euo pipefail
+          kubectl apply -f k8s/etelios-prod/attendance-service-deployment.yaml
+          if [ "${{ inputs.apply_ingress }}" = "true" ]; then
+            kubectl apply -f k8s/ingress-alb-fixed.yaml
+          fi
+          IMAGE="${REGISTRY}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          kubectl -n "$K8S_NAMESPACE" set image deployment/attendance-service attendance-service="$IMAGE"
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/attendance-service --timeout=300s
+          kubectl -n "$K8S_NAMESPACE" get pods -l app=attendance-service -o wide

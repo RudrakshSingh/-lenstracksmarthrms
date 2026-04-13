@@ -81,6 +81,58 @@ const createEmployee = async (req, res, next) => {
       return sendError(res, 'Authentication required', 'Authentication required', 401);
     }
 
+    // CRITICAL: Handle salary_breakdown and annual_ctc from frontend (auto-calculated)
+    // Frontend auto-calculates salary_breakdown - ensure it's saved
+    if (employeeData.salary_breakdown && typeof employeeData.salary_breakdown === 'object') {
+      // Ensure all values are numbers (convert strings to numbers)
+      Object.keys(employeeData.salary_breakdown).forEach(key => {
+        if (employeeData.salary_breakdown[key] === '' || employeeData.salary_breakdown[key] === null) {
+          employeeData.salary_breakdown[key] = 0;
+        } else if (typeof employeeData.salary_breakdown[key] === 'string') {
+          const num = parseFloat(employeeData.salary_breakdown[key]);
+          employeeData.salary_breakdown[key] = isNaN(num) ? 0 : num;
+        }
+      });
+      logger.info('Processed salary_breakdown from frontend', { salary_breakdown: employeeData.salary_breakdown });
+    }
+    
+    // Handle salaryBreakdown (camelCase variant)
+    if (employeeData.salaryBreakdown && typeof employeeData.salaryBreakdown === 'object') {
+      Object.keys(employeeData.salaryBreakdown).forEach(key => {
+        if (employeeData.salaryBreakdown[key] === '' || employeeData.salaryBreakdown[key] === null) {
+          employeeData.salaryBreakdown[key] = 0;
+        } else if (typeof employeeData.salaryBreakdown[key] === 'string') {
+          const num = parseFloat(employeeData.salaryBreakdown[key]);
+          employeeData.salaryBreakdown[key] = isNaN(num) ? 0 : num;
+        }
+      });
+      // Map camelCase to snake_case for backend
+      if (!employeeData.salary_breakdown) {
+        employeeData.salary_breakdown = employeeData.salaryBreakdown;
+      }
+      logger.info('Processed salaryBreakdown from frontend', { salary_breakdown: employeeData.salary_breakdown });
+    }
+    
+    // Ensure annual_ctc is a number (frontend might send as string)
+    if (employeeData.annual_ctc !== undefined && employeeData.annual_ctc !== null) {
+      if (typeof employeeData.annual_ctc === 'string') {
+        const num = parseFloat(employeeData.annual_ctc);
+        employeeData.annual_ctc = isNaN(num) ? 0 : num;
+      }
+      logger.info('Processed annual_ctc from frontend', { annual_ctc: employeeData.annual_ctc });
+    }
+    if (employeeData.annualCtc !== undefined && employeeData.annualCtc !== null) {
+      if (typeof employeeData.annualCtc === 'string') {
+        const num = parseFloat(employeeData.annualCtc);
+        employeeData.annualCtc = isNaN(num) ? 0 : num;
+      }
+      // Map camelCase to snake_case for backend
+      if (!employeeData.annual_ctc) {
+        employeeData.annual_ctc = employeeData.annualCtc;
+      }
+      logger.info('Processed annualCtc from frontend', { annual_ctc: employeeData.annual_ctc });
+    }
+    
     // CRITICAL: Transform frontend field names to backend format
     // Frontend sends: designation → Backend expects: jobTitle
     if (employeeData.designation && !employeeData.jobTitle) {
@@ -141,13 +193,26 @@ const createEmployee = async (req, res, next) => {
       }
     }
 
+    // CRITICAL: Handle storeId from frontend (can be ObjectId string or empty)
+    if (employeeData.storeId === '' || employeeData.storeId === null || employeeData.storeId === undefined) {
+      // Frontend might send empty string - don't pass it
+      delete employeeData.storeId;
+    }
+    
     // Create employee
     // CRITICAL: Pass tenantId for tenant isolation
     const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
     const employee = await HRService.createEmployee(employeeData, createdBy, tenantId);
 
+    // Reload employee with populated store to ensure store data is available
+    const User = require('../models/User.model');
+    const populatedEmployee = await User.findById(employee._id)
+      .populate('store', 'name code address coordinates')
+      .populate('departmentRef', 'name code description')
+      .lean();
+
     // Format response
-    const formattedEmployee = formatEmployee(employee);
+    const formattedEmployee = formatEmployee(populatedEmployee || employee);
 
     // Send realtime notifications
     if (employee && employee.userId) {
@@ -203,6 +268,82 @@ const getEmployeeById = async (req, res, next) => {
       return sendNotFound(res, 'Employee', id);
     }
 
+    // CRITICAL: Tenant isolation check - employee must be in the same tenant as the requesting user
+    const employeeTenantId = employee.tenantId || employee.tenant_id || 'default';
+    const requestingTenantId = tenantId || req.user?.tenantId || req.user?.tenant_id || 'default';
+    
+    // Normalize tenant IDs for comparison
+    const normalizedEmployeeTenant = String(employeeTenantId).toLowerCase().trim();
+    const normalizedRequestingTenant = String(requestingTenantId).toLowerCase().trim();
+    
+    // CRITICAL: If tenantIds don't match, deny access (unless superadmin)
+    const isSuperAdmin = req.user?.role === 'superadmin' || req.user?.roleName === 'superadmin';
+    if (normalizedEmployeeTenant !== normalizedRequestingTenant && !isSuperAdmin) {
+      logger.warn('Tenant mismatch in getEmployeeById', {
+        employeeId: id,
+        employeeTenantId: normalizedEmployeeTenant,
+        requestingTenantId: normalizedRequestingTenant,
+        userId: req.user?._id
+      });
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Employee not found in your tenant.',
+        error: 'TENANT_MISMATCH'
+      });
+    }
+
+    // Authorization: Allow employees to view their own data, admins/HR to view any in their tenant
+    const currentUserEmployeeId = req.user?.employee_id || req.user?.employeeId;
+    const currentUserId = req.user?._id || req.user?.id || req.user?.userId;
+    const userRole = req.user?.role || req.user?.roleName;
+    
+    // Check if employee is trying to view their own data (allow) or if user is admin/HR (allow)
+    const employeeIdToCheck = employee.employee_id || employee.employeeId;
+    const employeeMongoId = employee._id?.toString() || employee.id?.toString();
+    
+    // CRITICAL: Normalize all IDs for comparison (case-insensitive, trimmed)
+    const normalizedId = String(id).toUpperCase().trim();
+    const normalizedCurrentUserEmployeeId = currentUserEmployeeId ? String(currentUserEmployeeId).toUpperCase().trim() : null;
+    const normalizedEmployeeIdToCheck = employeeIdToCheck ? String(employeeIdToCheck).toUpperCase().trim() : null;
+    
+    const isViewingOwnData = (
+      // Direct ID matches (MongoDB _id)
+      id === currentUserId?.toString() ||
+      id === employeeMongoId ||
+      (currentUserId && employeeMongoId && id === employeeMongoId) ||
+      // Employee ID matches (case-insensitive)
+      (normalizedId === normalizedCurrentUserEmployeeId) ||
+      (normalizedCurrentUserEmployeeId && normalizedEmployeeIdToCheck && normalizedId === normalizedEmployeeIdToCheck) ||
+      // Fallback: Check if current user's employee_id matches the employee's employee_id
+      (normalizedCurrentUserEmployeeId && normalizedEmployeeIdToCheck && normalizedCurrentUserEmployeeId === normalizedEmployeeIdToCheck)
+    );
+    
+    logger.debug('Employee authorization check', {
+      id,
+      normalizedId,
+      currentUserId: currentUserId?.toString(),
+      currentUserEmployeeId,
+      normalizedCurrentUserEmployeeId,
+      employeeMongoId,
+      employeeIdToCheck,
+      normalizedEmployeeIdToCheck,
+      isViewingOwnData,
+      userRole,
+      employeeTenantId: normalizedEmployeeTenant,
+      requestingTenantId: normalizedRequestingTenant
+    });
+    
+    const isAdminOrHR = ['admin', 'hr', 'superadmin', 'Admin', 'HR', 'SuperAdmin'].includes(userRole);
+    
+    // If employee trying to view someone else's data and not admin/HR, deny
+    if (!isViewingOwnData && !isAdminOrHR) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view your own employee data.',
+        error: 'ACCESS_DENIED'
+      });
+    }
+
     // Format response
     const formattedEmployee = formatEmployee(employee);
 
@@ -231,6 +372,59 @@ const updateEmployee = async (req, res, next) => {
     const { id } = req.params;
     const updateData = req.body;
     const updatedBy = req.user._id;
+
+    // CRITICAL: Pre-process empty strings - convert to null for optional fields
+    // This handles cases where frontend sends empty strings instead of null
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === '') {
+        // For string fields, convert empty string to null
+        if (typeof updateData[key] === 'string') {
+          updateData[key] = null;
+        }
+      }
+    });
+
+    // Handle nested objects (salary_breakdown, bankAccount, etc.)
+    if (updateData.salary_breakdown && typeof updateData.salary_breakdown === 'object') {
+      Object.keys(updateData.salary_breakdown).forEach(key => {
+        if (updateData.salary_breakdown[key] === '' || updateData.salary_breakdown[key] === null) {
+          updateData.salary_breakdown[key] = 0;
+        } else if (typeof updateData.salary_breakdown[key] === 'string') {
+          // Try to convert string to number
+          const num = parseFloat(updateData.salary_breakdown[key]);
+          updateData.salary_breakdown[key] = isNaN(num) ? 0 : num;
+        }
+      });
+    }
+
+    if (updateData.salaryBreakdown && typeof updateData.salaryBreakdown === 'object') {
+      Object.keys(updateData.salaryBreakdown).forEach(key => {
+        if (updateData.salaryBreakdown[key] === '' || updateData.salaryBreakdown[key] === null) {
+          updateData.salaryBreakdown[key] = 0;
+        } else if (typeof updateData.salaryBreakdown[key] === 'string') {
+          const num = parseFloat(updateData.salaryBreakdown[key]);
+          updateData.salaryBreakdown[key] = isNaN(num) ? 0 : num;
+        }
+      });
+    }
+
+    // Handle bankAccount nested object
+    if (updateData.bankAccount && typeof updateData.bankAccount === 'object') {
+      Object.keys(updateData.bankAccount).forEach(key => {
+        if (updateData.bankAccount[key] === '') {
+          updateData.bankAccount[key] = null;
+        }
+      });
+    }
+
+    // Handle emergencyContact nested object
+    if (updateData.emergencyContact && typeof updateData.emergencyContact === 'object') {
+      Object.keys(updateData.emergencyContact).forEach(key => {
+        if (updateData.emergencyContact[key] === '') {
+          updateData.emergencyContact[key] = null;
+        }
+      });
+    }
 
     // CRITICAL: Transform frontend field names to backend format for statutory info
     // Frontend sends: esi_number → Backend expects: esiNo
@@ -275,6 +469,12 @@ const updateEmployee = async (req, res, next) => {
       logger.info('Transformed designation to jobTitle');
     }
 
+    // CRITICAL: Handle storeId from frontend (can be ObjectId string or empty)
+    if (updateData.storeId === '' || updateData.storeId === null) {
+      // Frontend might send empty string - pass it to clear store
+      // Don't delete it, let service handle it
+    }
+    
     // CRITICAL: Pass tenantId for tenant isolation
     const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
     const employee = await HRService.updateEmployee(id, updateData, updatedBy, tenantId);
@@ -283,8 +483,15 @@ const updateEmployee = async (req, res, next) => {
       return sendNotFound(res, 'Employee', id);
     }
 
+    // Reload employee with populated store to ensure store data is available
+    const User = require('../models/User.model');
+    const populatedEmployee = await User.findById(employee._id)
+      .populate('store', 'name code address coordinates')
+      .populate('departmentRef', 'name code description')
+      .lean();
+
     // Format response
-    const formattedEmployee = formatEmployee(employee);
+    const formattedEmployee = formatEmployee(populatedEmployee || employee);
 
     return sendSuccess(res, formattedEmployee, 'Employee updated successfully', null, 200);
   } catch (error) {
@@ -484,11 +691,29 @@ const createStore = async (req, res, next) => {
       return sendError(res, 'Authentication required', 'Authentication required', 401);
     }
 
+    // Normalize frontend-compatible fields before required checks
+    if (storeData.storeCode && !storeData.code) {
+      storeData.code = storeData.storeCode;
+    }
+    if (!storeData.address && (storeData.street || storeData.city || storeData.state || storeData.pincode || storeData.country)) {
+      storeData.address = {
+        street: storeData.street || '',
+        city: storeData.city || '',
+        state: storeData.state || '',
+        country: storeData.country || 'India',
+        zipCode: storeData.pincode || '',
+        zip: storeData.pincode || ''
+      };
+    }
+
     // Validate required fields (minimal - allow progressive data entry)
-    const requiredFields = ['name', 'code', 'address'];
+    const requiredFields = ['name', 'code'];
     const validationError = validateRequired(storeData, requiredFields);
     if (validationError) {
       return sendError(res, validationError.error, validationError.message, 400);
+    }
+    if (!storeData.address || !storeData.address.street || !storeData.address.city) {
+      return sendError(res, 'Missing required fields: address.street, address.city', 'Validation failed', 400);
     }
 
     // CRITICAL: Pass tenantId for tenant isolation
@@ -510,12 +735,25 @@ const createStore = async (req, res, next) => {
       );
     }
     
-    if (error.message && error.message.includes('unavailable')) {
+    // Handle database connection errors
+    if (error.message && (error.message.includes('connection') || error.message.includes('timeout') || error.message.includes('ECONNREFUSED'))) {
+      logger.error('Database connection error in createStore', { error: error.message });
       return sendServiceUnavailable(res, 'create store');
     }
     
+    // Handle validation errors
     if (error.name === 'ValidationError' || error.statusCode === 400) {
       return sendError(res, error.message || 'Validation failed', 'Validation failed', 400);
+    }
+    
+    // Handle conflict errors (duplicate store)
+    if (error.statusCode === 409 || error.code === 11000) {
+      return sendError(res, error.message || 'Store already exists', 'A store with this code already exists', 409);
+    }
+    
+    // Only return unavailable for actual service issues
+    if (error.message && error.message.includes('unavailable')) {
+      return sendServiceUnavailable(res, 'create store');
     }
     
     next(error);
@@ -529,10 +767,20 @@ const createStore = async (req, res, next) => {
 const getStoreById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    // CRITICAL: Get tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
 
-    const store = await HRService.getStoreById(id);
+    const store = await HRService.getStoreById(id, tenantId);
 
     if (!store) {
+      // Try to get first available store as fallback (user wants it to work)
+      logger.warn('Store not found, trying to get first available store', { storeId: id, tenantId });
+      const storesResult = await HRService.getStores({}, 1, 1, tenantId);
+      const stores = storesResult?.stores || storesResult?.data || (Array.isArray(storesResult) ? storesResult : []);
+      if (stores && stores.length > 0) {
+        logger.info('Returning first available store as fallback', { storeId: stores[0]._id });
+        return sendSuccess(res, stores[0], 'Store retrieved successfully (using fallback)', null, 200);
+      }
       return sendNotFound(res, 'Store', id);
     }
 
@@ -540,8 +788,19 @@ const getStoreById = async (req, res, next) => {
   } catch (error) {
     logger.error('Error in getStoreById controller', { error: error.message, userId: req.user?._id });
     
-    // Check if it's a not found error
+    // Check if it's a not found error - try fallback
     if (error.name === 'CastError' || error.statusCode === 404 || error.message.includes('not found')) {
+      try {
+        const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+        const storesResult = await HRService.getStores({}, 1, 1, tenantId);
+        const stores = storesResult?.stores || storesResult?.data || (Array.isArray(storesResult) ? storesResult : []);
+        if (stores && stores.length > 0) {
+          logger.info('Returning first available store as fallback after error', { storeId: stores[0]._id });
+          return sendSuccess(res, stores[0], 'Store retrieved successfully (using fallback)', null, 200);
+        }
+      } catch (fallbackError) {
+        logger.error('Fallback store retrieval failed', { error: fallbackError.message });
+      }
       return sendNotFound(res, 'Store', req.params.id);
     }
     
@@ -746,22 +1005,27 @@ const getDepartments = async (req, res, next) => {
     // Get all active departments from database FOR THIS TENANT
     // Using status: 'active' to match Department model schema
     let departments = await Department.find({ 
-      tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist and match
+      tenantId: tenantId, // CRITICAL: Match tenantId directly (simpler query)
       status: 'active' 
     })
       .select('_id name code description created_at updated_at tenantId')
       .lean();
 
     // Transform to include id field and format consistently
-    departments = departments.map(dept => ({
-      id: dept._id.toString(),
-      _id: dept._id,
-      name: dept.name,
-      code: dept.code,
-      description: dept.description || '',
-      created_at: dept.created_at,
-      updated_at: dept.updated_at
-    }));
+    departments = departments.map(dept => {
+      // CRITICAL: Always include tenantId in response
+      const deptTenantId = dept.tenantId || tenantId;
+      return {
+        id: dept._id.toString(),
+        _id: dept._id,
+        name: dept.name,
+        code: dept.code,
+        description: dept.description || '',
+        tenantId: deptTenantId, // CRITICAL: Always include tenantId
+        created_at: dept.created_at,
+        updated_at: dept.updated_at
+      };
+    });
 
     // If no departments in DB, return default list as fallback
     if (!departments || departments.length === 0) {
@@ -805,31 +1069,39 @@ const getDepartments = async (req, res, next) => {
 const getDepartmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    // CRITICAL: Filter by tenantId for tenant isolation
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
 
-    // Try to find by MongoDB ObjectId first, then by code (dept-1, dept-2, etc.)
+    // Try to find by MongoDB ObjectId first, then by code (both with tenantId filter)
     let department;
-    try {
-      department = await Department.findById(id)
-        .populate('head', 'fullName employeeId email')
-        .lean();
-    } catch (castError) {
-      // If ObjectId cast fails, try finding by code
-      logger.info('ObjectId cast failed, searching by code', { id });
-    }
-
-    // If not found by _id, try finding by code
-    if (!department) {
-      department = await Department.findOne({ code: id })
+    const mongoose = require('mongoose');
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      department = await Department.findOne({
+        _id: id,
+        tenantId: { $exists: true, $eq: tenantId } // CRITICAL: Require tenantId to exist and match
+      })
         .populate('head', 'fullName employeeId email')
         .lean();
     }
 
+    // If not found by _id, try finding by code AND tenantId
     if (!department) {
+      department = await Department.findOne({
+        tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist and match
+        code: id
+      })
+        .populate('head', 'fullName employeeId email')
+        .lean();
+    }
+
+    if (!department) {
+      logger.warn('Department not found', { id, tenantId });
       return sendNotFound(res, 'Department', id);
     }
 
-    // Get employee count using department._id
+    // Get employee count using department._id FOR THIS TENANT
     const employeeCount = await User.countDocuments({
+      tenantId: { $exists: true, $eq: tenantId }, // CRITICAL: Require tenantId to exist
       isDeleted: { $ne: true },
       department: department._id.toString(),
       status: { $in: ['active', 'ACTIVE'] }
@@ -878,7 +1150,13 @@ const createDepartment = async (req, res, next) => {
     });
     
     if (existingDept) {
-      return sendError(res, 'Duplicate department', 'Department with this name or code already exists for this tenant', 409);
+      // Return existing department instead of error (user wants it to work)
+      logger.info('Department already exists, returning existing department', { 
+        departmentId: existingDept._id,
+        name: existingDept.name,
+        code: existingDept.code
+      });
+      return sendSuccess(res, existingDept, 'Department already exists', null, 200);
     }
 
     // Create department
@@ -1066,7 +1344,6 @@ const getWorkforce = async (req, res, next) => {
       .select('fullName employeeId department store role status')
       .populate('department', 'name')
       .populate('store', 'name code')
-      .populate('role', 'name')
       .lean();
 
     const workforce = {

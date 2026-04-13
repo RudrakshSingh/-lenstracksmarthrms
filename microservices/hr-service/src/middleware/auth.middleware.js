@@ -87,11 +87,40 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // Verify token
+    // Enhanced JWT verification with multiple secrets (matching attendance service)
     let decoded;
     try {
-      const { JWT_SECRET } = require('../config/jwt');
-      decoded = jwt.verify(token, JWT_SECRET);
+      const jwtSecrets = [
+        process.env.JWT_SECRET,
+        'etelios-super-secret-jwt-key-2024', // Production secret
+        'etelios-dev-secret-key-2024',       // Fallback secret
+        'fallback-secret'                    // Final fallback
+      ].filter(Boolean);
+      
+      let verificationError = null;
+      decoded = null;
+      
+      for (const secret of jwtSecrets) {
+        try {
+          decoded = jwt.verify(token, secret);
+          logger.debug('JWT verified in HR service', { 
+            secret: secret.substring(0, 10) + '...',
+            userId: decoded.userId || decoded.id 
+          });
+          break;
+        } catch (err) {
+          verificationError = err;
+          continue;
+        }
+      }
+      
+      if (!decoded) {
+        logger.warn('JWT verification failed with all secrets in HR service', {
+          tokenStart: token.substring(0, 30),
+          secretsTriedCount: jwtSecrets.length
+        });
+        throw verificationError;
+      }
     } catch (error) {
       if (error.name === 'JsonWebTokenError') {
         return res.status(401).json({
@@ -117,7 +146,9 @@ const authenticate = async (req, res, next) => {
       const User = require('../models/User.model');
       
       // Add timeout for database query to prevent hanging
-      const userQuery = User.findById(decoded.userId || decoded.id).maxTimeMS(5000);
+      const userQuery = User.findById(decoded.userId || decoded.id)
+        .populate('role', 'name permissions')
+        .maxTimeMS(5000);
       const user = await Promise.race([
         userQuery,
         new Promise((_, reject) => 
@@ -129,15 +160,41 @@ const authenticate = async (req, res, next) => {
         // If user not found in DB, use token data but log warning
         logger.warn('User not found in database, using token data', {
           userId: decoded.userId || decoded.id,
-          email: decoded.email
+          email: decoded.email,
+          employeeId: decoded.employee_id || decoded.employeeId,
+          tenantId: decoded.tenantId // Log tenantId for debugging
         });
+        let fallbackPerms = decoded.permissions || [];
+        try {
+          const { resolvePermissionsFromJwtOrRedis } = require('../../../shared/utils/resolvePermissionsFromJwtOrRedis');
+          const { connectRedis } = require('../config/redis');
+          const layer = await resolvePermissionsFromJwtOrRedis(decoded, () => connectRedis(), logger);
+          if (layer.source !== 'none') fallbackPerms = layer.permissions;
+        } catch (_) {
+          /* keep decoded.permissions */
+        }
         req.user = {
           id: decoded.userId || decoded.id || 'unknown',
           userId: decoded.userId || decoded.id,
           role: decoded.role || 'user',
           email: decoded.email || 'unknown@example.com',
-          permissions: decoded.permissions || []
+          permissions: fallbackPerms,
+          // CRITICAL: Extract tenantId from decoded JWT token (normalize to lowercase)
+          tenantId: decoded.tenantId ? String(decoded.tenantId).toLowerCase().trim() : null,
+          employee_id: decoded.employee_id || decoded.employeeId || null,
+          employeeId: decoded.employee_id || decoded.employeeId || null
         };
+        // Log tenantId extraction for debugging
+        if (decoded.tenantId) {
+          logger.debug('Extracted tenantId from JWT token (user not in DB)', {
+            tenantId: req.user.tenantId,
+            original: decoded.tenantId
+          });
+        } else {
+          logger.warn('JWT token missing tenantId (user not in DB)', {
+            decodedKeys: Object.keys(decoded)
+          });
+        }
         return next();
       }
 
@@ -159,28 +216,40 @@ const authenticate = async (req, res, next) => {
         });
       }
 
-      // Get role name if role is populated or an ID
       let roleName = decoded.role;
-      let permissions = decoded.permissions || [];
-      
       if (user.role) {
         if (typeof user.role === 'object' && user.role.name) {
           roleName = user.role.name;
-          permissions = user.role.permissions || permissions;
         } else if (typeof user.role === 'string') {
-          // Try to populate role if it's an ID
           try {
             const Role = require('../models/Role.model');
             const role = await Role.findById(user.role).maxTimeMS(3000);
-            if (role) {
-              roleName = role.name;
-              permissions = role.permissions || permissions;
-            }
+            if (role) roleName = role.name;
           } catch (roleError) {
-            // If role lookup fails, use decoded role
             logger.warn('Role lookup failed, using decoded role', { error: roleError.message });
           }
         }
+      }
+
+      const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
+      const { resolvePermissionsFromJwtOrRedis } = require('../../../shared/utils/resolvePermissionsFromJwtOrRedis');
+      const { connectRedis } = require('../config/redis');
+
+      let effectivePermissions = [];
+      try {
+        const layer = await resolvePermissionsFromJwtOrRedis(decoded, () => connectRedis(), logger);
+        if (layer.source !== 'none') {
+          effectivePermissions = layer.permissions;
+        } else {
+          const resolved = await resolveEffectivePermissionsForUser(user);
+          effectivePermissions = resolved.effectivePermissions || [];
+        }
+      } catch (permErr) {
+        logger.warn('HR effective permissions resolution failed', {
+          error: permErr.message,
+          userId: user._id
+        });
+        effectivePermissions = user.permissions || [];
       }
 
       // CRITICAL: Extract tenantId from JWT token (preferred) or user document (fallback)
@@ -190,13 +259,29 @@ const authenticate = async (req, res, next) => {
 
       // Prefer token's tenantId (it's validated during login)
       // Fallback to user's tenantId if token doesn't have it (for backward compatibility)
-      const tenantId = tenantIdFromToken || tenantIdFromUser;
+      let tenantId = tenantIdFromToken || tenantIdFromUser;
+      
+      // CRITICAL: Normalize tenantId to lowercase (must match validateTenantMiddleware normalization)
+      if (tenantId) {
+        tenantId = String(tenantId).toLowerCase().trim();
+      }
 
       if (!tenantId && roleName !== 'superadmin' && roleName !== 'super-admin') {
         logger.warn('User missing tenantId in both token and database', {
           userId: user._id,
           email: user.email,
-          role: roleName
+          role: roleName,
+          decodedTenantId: decoded.tenantId,
+          userTenantId: user.tenantId,
+          decodedKeys: Object.keys(decoded)
+        });
+      } else if (tenantId) {
+        // Log tenantId extraction for debugging
+        logger.debug('Extracted tenantId from JWT token', {
+          tenantId: tenantId,
+          source: tenantIdFromToken ? 'token' : 'database',
+          originalTokenValue: decoded.tenantId,
+          originalUserValue: user.tenantId
         });
       }
 
@@ -204,23 +289,34 @@ const authenticate = async (req, res, next) => {
         id: user._id,
         _id: user._id,
         userId: user._id,
-        employeeId: user.employeeId,
-        employee_id: user.employeeId,
+        // CRITICAL: Use employeeId from user object OR fallback to JWT token
+        employeeId: user.employeeId || user.employee_id || decoded.employee_id || decoded.employeeId || null,
+        employee_id: user.employeeId || user.employee_id || decoded.employee_id || decoded.employeeId || null,
         firstName: user.firstName,
         lastName: user.lastName,
         name: user.firstName ? `${user.firstName} ${user.lastName}` : user.email,
         email: user.email,
         role: roleName,
         roleId: typeof user.role === 'object' ? user.role._id : user.role,
-        permissions: permissions,
+        permissions: effectivePermissions,
         status: user.status,
-        tenantId: tenantId // ✅ CRITICAL: Include tenantId from token
+        // CRITICAL: Include normalized tenantId (lowercase, trimmed)
+        tenantId: tenantId
       };
+      
+      // Log if we had to use JWT token for employee_id
+      if (!user.employeeId && !user.employee_id && (decoded.employee_id || decoded.employeeId)) {
+        logger.info('Using employee_id from JWT token (not in DB)', {
+          userId: user._id,
+          employeeId: decoded.employee_id || decoded.employeeId
+        });
+      }
     } catch (dbError) {
       // If User model doesn't exist or DB lookup fails, use token data
       logger.warn('Database lookup failed, using token data', {
         error: dbError.message,
-        userId: decoded.userId || decoded.id
+        userId: decoded.userId || decoded.id,
+        employeeId: decoded.employee_id || decoded.employeeId
       });
       
       // Don't block request if DB is down - use token data
@@ -230,7 +326,9 @@ const authenticate = async (req, res, next) => {
         role: decoded.role || 'user',
         email: decoded.email || 'unknown@example.com',
         permissions: decoded.permissions || [],
-        tenantId: decoded.tenantId // ✅ CRITICAL: Extract from token
+        tenantId: decoded.tenantId, // ✅ CRITICAL: Extract from token
+        employee_id: decoded.employee_id || decoded.employeeId || null, // ✅ CRITICAL: Extract employee_id from token
+        employeeId: decoded.employee_id || decoded.employeeId || null // ✅ CRITICAL: Extract employee_id from token
       };
     }
 

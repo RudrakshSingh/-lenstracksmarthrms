@@ -355,6 +355,7 @@ class NotificationService {
           title,
           message,
           payload: metadata || {},
+          delivery_channels: ['in_app'],
           created_at: new Date()
         });
       }

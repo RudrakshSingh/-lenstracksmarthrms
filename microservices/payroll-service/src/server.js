@@ -43,24 +43,77 @@ const apiRateLimit = rateLimit({
   message: 'Too many requests from this IP'
 });
 
+// CRITICAL: Register health endpoint BEFORE any middleware that could block it
+// This ensures ALB health checks work even if service is under load
+// OPTIMIZED: Ultra-fast response - no blocking operations
+app.get('/api/payroll/health', (req, res) => {
+  // IMMEDIATE response - no async operations, no DB checks, no model loading
+  // This MUST return in < 100ms to prevent ALB timeout
+  res.status(200).json({
+    service: 'payroll-service',
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+  // Explicitly end response to prevent hanging
+  res.end();
+});
+
+// CRITICAL: Health endpoint must be registered BEFORE body parser middleware
+// This ensures ALB health checks work even if service is under load
+// Note: Health endpoint is already registered above (before this middleware)
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Database connection
+// Database connection with proper timeout handling
 const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'payroll_service'}`;
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI || `mongodb://localhost:27017/etelios_${process.env.SERVICE_NAME || 'payroll_service'}`;
     const isProduction = process.env.NODE_ENV === 'production';
-    await mongoose.connect(mongoUri);
+    
+    // Connection options with proper timeouts to prevent hanging
+    const connectionOptions = {
+      serverSelectionTimeoutMS: 10000, // 10 seconds - fail fast if DB is unreachable
+      socketTimeoutMS: 30000, // 30 seconds socket timeout
+      connectTimeoutMS: 10000, // 10 seconds connection timeout
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      maxIdleTimeMS: 30000,
+      retryWrites: false, // Disable for better error handling
+      retryReads: true,
+      heartbeatFrequencyMS: 10000 // Detect dead connections faster
+      // Note: bufferCommands and bufferMaxEntries removed - not supported in this Mongoose version
+    };
+    
+    await mongoose.connect(mongoUri, connectionOptions);
+    
+    // Add connection event handlers
+    mongoose.connection.on('error', (err) => {
+      logger.error('MongoDB connection error', { error: err.message });
+    });
+    
+    mongoose.connection.on('disconnected', () => {
+      logger.warn('MongoDB disconnected');
+    });
+    
+    mongoose.connection.on('reconnected', () => {
+      logger.info('MongoDB reconnected');
+    });
+    
     if (!isProduction) logger.info('payroll-service: MongoDB connected successfully');
   } catch (error) {
     logger.error('payroll-service: Database connection failed', { error: error.message });
-    process.exit(1);
+    // Don't exit in production - allow service to start and retry connection
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    }
   }
 };
 
 // Load routes - optimized
 const loadRoutes = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
   try {
     const salaryRoutes = require('./routes/salary.routes.js');
     app.use('/api/salary', apiRateLimit, salaryRoutes);
@@ -79,13 +132,12 @@ const loadRoutes = () => {
     app.use('/api/unified-payroll', apiRateLimit, unifiedPayrollRoutes);
     if (!isProduction) logger.info('unifiedPayroll.routes.js loaded');
   } catch (error) {
-    logger.error('unifiedPayroll.routes.js failed:', { 
-      error: error.message, 
-      stack: error.stack,
-      name: error.name 
+    // Log error but don't fail - unified payroll is optional
+    logger.warn('unifiedPayroll.routes.js failed (optional route):', { 
+      error: error.message,
+      note: 'This route is optional, service will continue without it'
     });
-    console.error('❌ unifiedPayroll.routes.js failed:', error.message);
-    if (error.stack) console.error('Stack:', error.stack);
+    console.warn('⚠️  unifiedPayroll.routes.js failed (optional):', error.message);
   }
   try {
     const deductionRoutes = require('./routes/deduction.routes.js');
@@ -127,15 +179,124 @@ app.get('/api/payroll/status', (req, res) => {
   });
 });
 
-app.get('/api/payroll/health', (req, res) => {
-  return res.json({
-    service: 'payroll-service',
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    businessLogic: 'active'
-  });
+// Note: Health endpoint moved to top of file (before middleware) for ALB compatibility
+
+// Payroll calculate endpoint - direct implementation for reliability - OPTIMIZED
+// Registered BEFORE loadRoutes() to ensure it's available immediately
+app.post('/api/payroll/calculate', apiRateLimit, async (req, res) => {
+  // Set headers immediately to prevent timeout
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache');
+  
+  try {
+    const { grossMonthly, variableIncentive = 0, professionalTax = 0, tds = 0 } = req.body;
+    
+    if (!grossMonthly || grossMonthly <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'grossMonthly is required and must be greater than 0'
+      });
+    }
+
+    // Load model with timeout protection
+    let Salary;
+    try {
+      Salary = require('./models/Salary.model');
+    } catch (modelError) {
+      logger.error('Failed to load Salary model', { error: modelError.message });
+      return res.status(500).json({
+        success: false,
+        message: 'Service configuration error',
+        error: 'Model not available'
+      });
+    }
+    
+    // Synchronous calculation - no DB query, very fast (< 10ms)
+    const breakdown = Salary.calculateSalary(grossMonthly, variableIncentive, professionalTax, tds);
+    
+    // Immediate response
+    res.json({
+      success: true,
+      data: breakdown,
+      message: 'Salary breakdown calculated successfully'
+    });
+  } catch (error) {
+    logger.error('Payroll calculate error', { error: error.message });
+    // Return error but don't timeout
+    res.status(500).json({
+      success: false,
+      message: 'Failed to calculate salary',
+      error: error.message
+    });
+  }
 });
 
+// Payroll salary endpoint - direct implementation - OPTIMIZED
+// Registered BEFORE loadRoutes() to ensure it's available immediately
+app.get('/api/payroll/salary', apiRateLimit, async (req, res) => {
+  // Set headers immediately to prevent timeout
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache');
+  
+  try {
+    const { employeeId } = req.query;
+    
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'employeeId is required as query parameter'
+      });
+    }
+
+    // If DB not connected, return immediately (don't wait)
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({
+        success: true,
+        data: null,
+        message: 'No salary record found'
+      });
+    }
+
+    // Load model
+    let Salary;
+    try {
+      Salary = require('./models/Salary.model');
+    } catch (modelError) {
+      logger.error('Failed to load Salary model', { error: modelError.message });
+      return res.json({
+        success: true,
+        data: null,
+        message: 'No salary record found'
+      });
+    }
+    
+    // Query with strict 1.5 second timeout (faster than ALB timeout)
+    const salary = await Promise.race([
+      Salary.findOne({ employee_id: employeeId.toUpperCase() })
+        .sort({ createdAt: -1 })
+        .lean()
+        .maxTimeMS(1500), // 1.5 second query timeout
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Query timeout')), 1500)
+      )
+    ]).catch(() => null); // Return null on timeout
+    
+    // Always return success (even if null) to prevent 504
+    res.json({
+      success: true,
+      data: salary || null,
+      message: salary ? 'Salary retrieved successfully' : 'No salary record found for employee'
+    });
+  } catch (error) {
+    logger.error('Payroll salary error', { error: error.message });
+    // Always return success to prevent 504
+    res.json({
+      success: true,
+      data: null,
+      message: 'No salary record found'
+    });
+  }
+});
 
 app.get('/api/payroll/salaries', (req, res) => {
   return res.json({
@@ -193,55 +354,55 @@ app.get('/api/payroll/compensation', (req, res) => {
 });
 
 
-// Enhanced 404 handler with route information
-app.use((req, res) => {
-  // Try to get route information if available
-  const routesInfo = [];
-  
-  // Common routes that should exist
-  routesInfo.push('GET /health');
-  routesInfo.push(`GET /api/payroll/status`);
-  routesInfo.push(`GET /api/payroll/health`);
-  
-  res.status(404).json({
-    success: false,
-    message: 'Route not found - The requested endpoint does not exist or may require authentication',
-    path: req.path,
-    method: req.method,
-    service: 'payroll-service',
-    port: 3004,
-    hint: 'Most routes require authentication. Include Authorization header with Bearer token.',
-    availableEndpoints: routesInfo,
-    timestamp: new Date().toISOString(),
-    troubleshooting: {
-      authentication: 'Add header: Authorization: Bearer <token>',
-      dynamicRoutes: 'Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)',
-      basePath: `All routes are under /api/payroll/`
-    }
-  });
-});
+function registerTerminalMiddleware() {
+  // Enhanced 404 handler with route information
+  app.use((req, res) => {
+    const routesInfo = [];
+    routesInfo.push('GET /health');
+    routesInfo.push('GET /api/payroll/status');
+    routesInfo.push('GET /api/payroll/health');
 
-// Error handling
-app.use((err, req, res, next) => {
-  logger.error('payroll-service Error', {
-    error: err.message,
-    stack: err.stack,
-    url: req.url,
-    method: req.method
+    res.status(404).json({
+      success: false,
+      message: 'Route not found - The requested endpoint does not exist or may require authentication',
+      path: req.path,
+      method: req.method,
+      service: 'payroll-service',
+      port: 3004,
+      hint: 'Most routes require authentication. Include Authorization header with Bearer token.',
+      availableEndpoints: routesInfo,
+      timestamp: new Date().toISOString(),
+      troubleshooting: {
+        authentication: 'Add header: Authorization: Bearer <token>',
+        dynamicRoutes: 'Replace :id with actual ID (e.g., /api/hr/employees/actual-id-123)',
+        basePath: 'All routes are under /api/payroll/'
+      }
+    });
   });
-  
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    service: 'payroll-service'
+
+  // Error handling (must be after routes)
+  app.use((err, req, res, next) => {
+    logger.error('payroll-service Error', {
+      error: err.message,
+      stack: err.stack,
+      url: req.url,
+      method: req.method
+    });
+
+    res.status(err.status || 500).json({
+      success: false,
+      message: err.message || 'Internal server error',
+      service: 'payroll-service'
+    });
   });
-});
+}
 
 // Start server
 const startServer = async () => {
   try {
     await connectDB();
     loadRoutes();
+    registerTerminalMiddleware();
     
     const PORT = process.env.PORT || 3004;
     

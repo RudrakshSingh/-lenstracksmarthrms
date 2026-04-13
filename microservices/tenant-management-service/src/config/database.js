@@ -85,10 +85,10 @@ const connectDB = async () => {
       }
     }
     
-    // Determine if this is Cosmos DB
-    const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
+    // Determine if this is AWS DocumentDB
+    const isDocumentDB = mongoUri.includes('docdb.amazonaws.com');
     
-    // Set connection options optimized for Azure Cosmos DB
+    // Set connection options optimized for AWS DocumentDB
     const connectionOptions = {
       serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 60000,
@@ -96,17 +96,18 @@ const connectDB = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      retryWrites: true,
+      retryWrites: false,
       retryReads: true,
       dbName: targetDbName, // Explicitly set the database name
     };
     
-    // Azure Cosmos DB specific options
-    if (isCosmosDB) {
+    // AWS DocumentDB specific options
+    if (isDocumentDB) {
       connectionOptions.tls = true;
       connectionOptions.tlsInsecure = false;
-      connectionOptions.retryWrites = true;
-      logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
+      connectionOptions.tlsCAFile = process.env.DOCDB_TLS_CA_FILE || '/etc/ssl/certs/ca-cert.pem';
+      connectionOptions.retryWrites = false;
+      logger.info('Connecting to AWS DocumentDB');
     }
     
     const conn = await mongoose.connect(mongoUri, connectionOptions);

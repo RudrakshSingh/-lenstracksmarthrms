@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Task = require('../models/Task.model');
+const TaskCodeCounter = require('../models/TaskCodeCounter.model');
 const TaskType = require('../models/TaskType.model');
 const OrgNode = require('../models/OrgNode.model');
 const Employee = require('../models/Employee.model');
@@ -25,41 +26,111 @@ function notDeleted(base = {}) {
   return { ...base, is_deleted: { $ne: true } };
 }
 
-/**
- * Next human-readable task code per tenant (JTS-YYYY-NNNNNN).
- */
-async function allocateNextTaskCode(tenantId) {
-  const year = new Date().getFullYear();
-  const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const prefix = `JTS-${year}-`;
-  const rows = await Task.find(
-    notDeleted({
-      tenant_id: tenantId,
-      code: { $regex: new RegExp(`^${esc(prefix)}`) }
-    })
-  )
-    .select('code')
-    .lean();
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
+function isPrivilegedTaskRole(role) {
+  const r = String(role || '').toUpperCase();
+  return [
+    'TENANT_ADMIN',
+    'COUNTRY_OPS',
+    'SUPERADMIN',
+    'ADMIN',
+    'HOD',
+    'CLUSTER_MANAGER',
+    'MANAGER',
+    'STORE_MANAGER'
+  ].includes(r);
+}
+
+/** Statuses where assignee/creator may soft-delete without manager role */
+const EMPLOYEE_SELF_DELETE_STATUSES = new Set([
+  'DRAFT',
+  'CANCELLED',
+  'REJECTED',
+  'PENDING_APPROVAL'
+]);
+
+function tenantObjectId(tenantId) {
+  if (tenantId instanceof mongoose.Types.ObjectId) return tenantId;
+  if (mongoose.Types.ObjectId.isValid(String(tenantId))) {
+    return new mongoose.Types.ObjectId(String(tenantId));
+  }
+  throw new Error('VALIDATION_ERROR');
+}
+
+/**
+ * Raise TaskCodeCounter.seq to at least max numeric suffix among existing tasks for JTS-{year}-* (includes soft-deleted).
+ */
+async function syncCounterToMaxTaskSeq(tenantOid, year, session) {
+  const prefix = `JTS-${year}-`;
+  const re = new RegExp(`^${escapeRegex(prefix)}`);
+  let q = Task.find({ tenant_id: tenantOid, code: { $regex: re } }).select('code').lean();
+  if (session) q = q.session(session);
+  const rows = await q;
   let max = 0;
   for (const r of rows) {
     const n = parseInt(String(r.code).slice(prefix.length), 10);
     if (!Number.isNaN(n) && n > max) max = n;
   }
-
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const next = max + 1 + attempt;
-    const code = `${prefix}${String(next).padStart(6, '0')}`;
-    const clash = await Task.findOne(notDeleted({ tenant_id: tenantId, code }))
-      .select('_id')
-      .lean();
-    if (!clash) return code;
-  }
-  throw new Error('TASK_CODE_ALLOCATION_FAILED');
+  if (max <= 0) return;
+  await TaskCodeCounter.findOneAndUpdate(
+    { tenant_id: tenantOid, year },
+    { $max: { seq: max } },
+    { upsert: true, ...(session ? { session } : {}) }
+  );
 }
 
-function escapeRegex(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function isMongoDupKeyTaskCode(err) {
+  if (!err || err.code !== 11000) return false;
+  const kp = err.keyPattern || {};
+  const kv = err.keyValue || {};
+  return Boolean(kp.code) || kv.code != null;
+}
+
+/** Concurrent upserts on TaskCodeCounter (same tenant_id+year) — retry. */
+function isTaskCodeCounterDupKey(err) {
+  if (!err || err.code !== 11000) return false;
+  const kp = err.keyPattern || {};
+  return kp.tenant_id != null && kp.year != null;
+}
+
+/**
+ * Next human-readable task code per tenant (JTS-YYYY-NNNNNN).
+ * Atomic $inc on TaskCodeCounter + clash check (legacy/manual rows, deleted tasks still holding code).
+ *
+ * Important: never pass a mongoose ClientSession into TaskCodeCounter/Task.findOne here.
+ * A $inc inside an uncommitted transaction is invisible to other connections, so two flows
+ * (e.g. self-task txn + manager create) can otherwise receive the same code and hit E11000.
+ */
+async function allocateNextTaskCode(tenantId, options = {}) {
+  void options.session;
+  const tenantOid = tenantObjectId(tenantId);
+  const year = new Date().getFullYear();
+  const prefix = `JTS-${year}-`;
+  const maxAttempts = 32;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let counter;
+    try {
+      counter = await TaskCodeCounter.findOneAndUpdate(
+        { tenant_id: tenantOid, year },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+    } catch (e) {
+      if (isTaskCodeCounterDupKey(e)) continue;
+      throw e;
+    }
+    const code = `${prefix}${String(counter.seq).padStart(6, '0')}`;
+
+    const clash = await Task.findOne({ tenant_id: tenantOid, code }).select('_id').lean();
+    if (!clash) return code;
+
+    await syncCounterToMaxTaskSeq(tenantOid, year, null);
+  }
+  throw new Error('TASK_CODE_ALLOCATION_FAILED');
 }
 
 function isPrivileged(role) {
@@ -130,8 +201,6 @@ class TaskService {
       if (!ap) throw new Error('EMPLOYEE_001_NOT_FOUND');
     }
 
-    const code = await allocateNextTaskCode(tenantId);
-
     // Calculate SLA
     const slaMinutes = await slaCalculator.resolveSlaMinutes(
       tenantId,
@@ -153,10 +222,10 @@ class TaskService {
       meta.workday_id = dto.workday_id;
     }
 
-    // Create task
-    const task = await Task.create({
-      tenant_id: tenantId,
-      code,
+    const tenantOid = tenantObjectId(tenantId);
+    const year = new Date().getFullYear();
+    const taskPayloadBase = {
+      tenant_id: tenantOid,
       title: dto.title,
       description: dto.description,
       category: dto.category != null ? dto.category : taskType.category || undefined,
@@ -185,11 +254,31 @@ class TaskService {
       last_activity_at: new Date(),
       is_deleted: false,
       metadata: meta
-    });
+    };
+
+    let task = null;
+    let dupRetries = 0;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const code = await allocateNextTaskCode(tenantId);
+      try {
+        task = await Task.create({ ...taskPayloadBase, code });
+        break;
+      } catch (e) {
+        if (isMongoDupKeyTaskCode(e)) {
+          dupRetries += 1;
+          await syncCounterToMaxTaskSeq(tenantOid, year, null);
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (!task) {
+      throw new Error(dupRetries > 0 ? 'TASK_CODE_DUPLICATE' : 'TASK_CODE_ALLOCATION_FAILED');
+    }
 
     // Log initial status without transition validation.
     await TaskStatusHistory.create({
-      tenant_id: tenantId,
+      tenant_id: tenantOid,
       task_id: task._id,
       from_status: null,
       to_status: task.status,
@@ -401,9 +490,22 @@ class TaskService {
     return this.getTaskById(tenantId, taskId);
   }
 
-  async deleteTask(tenantId, taskId) {
+  async deleteTask(tenantId, taskId, auth = null) {
     const task = await Task.findOne(notDeleted({ _id: taskId, tenant_id: tenantId }));
     if (!task) throw new Error('TASK_001_NOT_FOUND');
+
+    if (auth && auth.actorId != null) {
+      const privileged = isPrivilegedTaskRole(auth.role);
+      const aid = String(auth.actorId);
+      const assignee = task.assigned_to_employee_id ? String(task.assigned_to_employee_id) : null;
+      const creator = task.created_by_employee_id ? String(task.created_by_employee_id) : null;
+      const employeeMayDelete =
+        (assignee === aid || creator === aid) && EMPLOYEE_SELF_DELETE_STATUSES.has(String(task.status || ''));
+      if (!privileged && !employeeMayDelete) {
+        throw new Error('JTS_TASK_DELETE_FORBIDDEN');
+      }
+    }
+
     task.is_deleted = true;
     task.deleted_at = new Date();
     await task.save();
@@ -501,7 +603,12 @@ class TaskService {
     return merged.slice(0, lim);
   }
 
-  async completeTask(tenantId, taskId, actorId, notes, actorRole) {
+  async completeTask(tenantId, taskId, actorId, notes, actorRole, options = {}) {
+    const force = options.force === true;
+    if (force && !isPrivileged(actorRole)) {
+      throw new Error('JTS_FORCE_COMPLETE_FORBIDDEN');
+    }
+
     let task = await Task.findOne(notDeleted({ _id: taskId, tenant_id: tenantId }));
     if (!task) throw new Error('TASK_001_NOT_FOUND');
 
@@ -526,12 +633,15 @@ class TaskService {
     if (!task) throw new Error('TASK_001_NOT_FOUND');
 
     const reviewTarget =
-      task.requires_review === true && ['IN_PROGRESS', 'ON_HOLD'].includes(task.status);
+      !force &&
+      task.requires_review === true &&
+      ['IN_PROGRESS', 'ON_HOLD'].includes(task.status);
     const targetStatus = reviewTarget ? 'PENDING_REVIEW' : 'COMPLETED';
 
     await taskStatusService.changeStatus(tenantId, taskId, targetStatus, {
       actorId,
-      reason: notes || null
+      reason: notes || null,
+      bypassWorkflowGuards: force && targetStatus === 'COMPLETED'
     });
 
     if (notes) {
@@ -542,6 +652,69 @@ class TaskService {
       }
     }
     return this.getTaskById(tenantId, taskId);
+  }
+
+  /**
+   * Run an action across many tasks; per-task failures do not abort the batch.
+   * @param {string} tenantId
+   * @param {import('mongoose').Types.ObjectId} actorId
+   * @param {string} actorRole
+   * @param {{ action: string, taskIds: string[], payload?: { notes?: string, reason?: string } }} body
+   */
+  async bulkTasks(tenantId, actorId, actorRole, { action, taskIds, payload = {} }) {
+    const succeeded = [];
+    const failed = [];
+
+    for (const rawId of taskIds) {
+      const idStr = String(rawId);
+      try {
+        let task;
+        switch (action) {
+          case 'complete':
+            task = await this.completeTask(tenantId, idStr, actorId, payload.notes, actorRole);
+            break;
+          case 'force_complete':
+            task = await this.completeTask(tenantId, idStr, actorId, payload.notes, actorRole, {
+              force: true
+            });
+            break;
+          case 'accept':
+            await taskStatusService.changeStatus(tenantId, idStr, 'ACCEPTED', {
+              actorId,
+              reason: payload.reason || null
+            });
+            task = await this.getTaskById(tenantId, idStr);
+            break;
+          case 'reject':
+            await taskStatusService.changeStatus(tenantId, idStr, 'REJECTED', {
+              actorId,
+              reason: payload.reason || null
+            });
+            task = await this.getTaskById(tenantId, idStr);
+            break;
+          case 'start':
+            await taskStatusService.changeStatus(tenantId, idStr, 'IN_PROGRESS', {
+              actorId,
+              reason: payload.reason || null
+            });
+            task = await this.getTaskById(tenantId, idStr);
+            break;
+          case 'cancel':
+            await taskStatusService.changeStatus(tenantId, idStr, 'CANCELLED', {
+              actorId,
+              reason: payload.reason || null
+            });
+            task = await this.getTaskById(tenantId, idStr);
+            break;
+          default:
+            throw new Error('VALIDATION_ERROR');
+        }
+        succeeded.push({ taskId: idStr, task });
+      } catch (e) {
+        failed.push({ taskId: idStr, code: e.message || 'ERROR' });
+      }
+    }
+    return { succeeded, failed };
   }
 
   async listSlaAlerts(tenantId, { employeeId, teamId, limit = 50 }) {
@@ -648,8 +821,8 @@ class TaskService {
   }
 
   /** Allocate next display code (for self-task and other entry points outside createManagerTask). */
-  async nextTaskCode(tenantId) {
-    return allocateNextTaskCode(tenantId);
+  async nextTaskCode(tenantId, options = {}) {
+    return allocateNextTaskCode(tenantId, options);
   }
 }
 

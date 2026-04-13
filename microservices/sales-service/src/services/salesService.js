@@ -1,11 +1,7 @@
 const Customer = require('../models/Customer.model');
 const SalesOrder = require('../models/SalesOrder.model');
-const Prescription = require('../models/Prescription.model');
-const ProductVariant = require('../models/ProductVariant.model');
-const Inventory = require('../models/Inventory.model');
-const InventoryBatch = require('../models/pos/InventoryBatch.model');
-const Ledger = require('../models/Ledger.model');
-const gstService = require('./gstService');
+// Only keep essential models - removed Prescription and other optional models
+// Simple daily sales entry doesn't need them
 const logger = require('../config/logger');
 
 class SalesService {
@@ -341,6 +337,9 @@ class SalesService {
    */
   async createPrescription(prescriptionData, createdBy) {
     try {
+      if (!Prescription) {
+        throw new Error('Prescription model not available. Use prescription-service for prescription management.');
+      }
       const prescription = new Prescription({
         ...prescriptionData,
         created_by: createdBy
@@ -381,6 +380,9 @@ class SalesService {
         if (date_to) query.prescription_date.$lte = new Date(date_to);
       }
       
+      if (!Prescription) {
+        throw new Error('Prescription model not available. Use prescription-service for prescription management.');
+      }
       const prescriptions = await Prescription.find(query)
         .populate('customer_id', 'full_name phone email')
         .populate('store_id', 'name address')
@@ -509,8 +511,20 @@ class SalesService {
           tax_rate = 0
         } = item;
 
-        if (!product_name || !quantity || !unit_price) {
-          throw new Error('Item must have product_name, quantity, and unit_price');
+        if (!product_name) {
+          throw new Error('Item must have product_name');
+        }
+        
+        // Validate quantity: must be >= 0 (0 allowed, any positive number allowed, negative not allowed)
+        // NO UPPER LIMIT - can be any positive number
+        if (quantity === undefined || quantity === null || isNaN(quantity) || quantity < 0) {
+          throw new Error('Item quantity must be 0 or positive number (negative values not allowed)');
+        }
+        
+        // Validate unit_price: must be >= 0 (0 allowed, any positive number allowed, negative not allowed)
+        // NO UPPER LIMIT - can be any positive number (0, 1, 100, 1000, 100000, 1000000, etc.)
+        if (unit_price === undefined || unit_price === null || isNaN(unit_price) || unit_price < 0) {
+          throw new Error('Item unit_price must be 0 or positive number (negative values not allowed). No upper limit.');
         }
 
         const discountAmount = (unit_price * quantity * discount_percentage) / 100;
@@ -536,7 +550,19 @@ class SalesService {
       const total_discount = processedItems.reduce((sum, item) => sum + item.discount_amount, 0);
       const total_tax = processedItems.reduce((sum, item) => sum + item.tax_amount, 0);
       const shipping_charges = orderData.shipping_charges || 0;
+      
+      // Validate shipping charges: must be >= 0 (any positive number allowed, no upper limit)
+      if (shipping_charges < 0 || isNaN(shipping_charges)) {
+        throw new Error('Shipping charges must be 0 or positive number (negative values not allowed)');
+      }
+      
       const total_amount = subtotal - total_discount + total_tax + shipping_charges;
+      
+      // Validate total amount: must be >= 0 (0 allowed, any positive number allowed, negative not allowed)
+      // NO UPPER LIMIT - sales can be any amount (0, 1, 100, 1000, 100000, 1000000, 10000000, etc.)
+      if (isNaN(total_amount) || total_amount < 0) {
+        throw new Error('Total amount cannot be negative. Please check item prices, discounts, and shipping charges.');
+      }
 
       // Create or find customer (simplified - just use name/phone)
       let customer = null;

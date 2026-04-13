@@ -389,6 +389,101 @@ class TenantController {
   }
 
   /**
+   * Get current user's company/tenant info
+   * GET /api/tenant/company
+   */
+  async getCurrentCompany(req, res) {
+    try {
+      // Get tenantId from JWT token (req.user.tenantId) or headers
+      const tenantId = req.user?.tenantId || req.headers['x-tenant-id'] || req.query.tenantId;
+      
+      logger.debug('Get current company request', {
+        tenantId,
+        user: req.user,
+        hasUser: !!req.user,
+        headers: req.headers['x-tenant-id']
+      });
+      
+      if (!tenantId) {
+        // If no tenantId, try to get first active tenant (for testing)
+        const firstTenant = await Tenant.findOne({ status: 'active' }).lean();
+        if (firstTenant) {
+          return res.json({
+            success: true,
+            data: {
+              id: firstTenant._id?.toString(),
+              tenantId: firstTenant.tenantId,
+              name: firstTenant.name,
+              domain: firstTenant.domain,
+              email: firstTenant.email,
+              status: firstTenant.status
+            },
+            message: 'Company retrieved successfully (using first active tenant)'
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          message: 'Tenant ID not found in token or headers',
+          error: 'TENANT_ID_MISSING'
+        });
+      }
+
+      // Try to find tenant by tenantId first, then by name if not found
+      let tenant = await Tenant.findOne({ tenantId }).lean();
+      
+      // Fallback: try finding by name if tenantId doesn't match
+      if (!tenant && tenantId) {
+        tenant = await Tenant.findOne({ name: new RegExp(tenantId, 'i') }).lean();
+      }
+      
+      // If still not found, try to get any tenant (for testing)
+      if (!tenant) {
+        tenant = await Tenant.findOne({ status: 'active' }).lean();
+      }
+      
+      if (!tenant) {
+        return res.status(404).json({
+          success: false,
+          message: 'Company not found',
+          error: 'COMPANY_NOT_FOUND'
+        });
+      }
+
+      // Return company info in frontend-friendly format
+      const companyData = {
+        id: tenant._id?.toString(),
+        tenantId: tenant.tenantId,
+        name: tenant.name,
+        domain: tenant.domain,
+        email: tenant.email,
+        phone: tenant.phone || tenant.contact?.primaryPhone || null,
+        status: tenant.status,
+        plan: tenant.plan,
+        address: tenant.address?.street || null,
+        city: tenant.address?.city || null,
+        state: tenant.address?.state || null,
+        country: tenant.address?.country || null,
+        createdAt: tenant.createdAt?.toISOString?.() || tenant.createdAt,
+        updatedAt: tenant.updatedAt?.toISOString?.() || tenant.updatedAt
+      };
+
+      res.json({
+        success: true,
+        data: companyData,
+        message: 'Company retrieved successfully'
+      });
+
+    } catch (error) {
+      logger.error('Get current company failed:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve company',
+        error: 'GET_COMPANY_ERROR'
+      });
+    }
+  }
+
+  /**
    * Get tenant by ID
    */
   async getTenant(req, res) {

@@ -33,6 +33,41 @@ services:
                 - Authorization
                 - Content-Type
                 - X-Requested-With
+      - name: auth-permission-routes
+        paths:
+          - /api/permission
+          - /api/user
+        methods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 200
+              hour: 2000
+          - name: cors
+            config:
+              origins:
+                - http://localhost:3000
+                - https://yourdomain.com
+              methods:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - OPTIONS
+              headers:
+                - Accept
+                - Authorization
+                - Content-Type
+                - X-Requested-With
+                - X-Tenant-Id
+                - If-Match
   - name: hr-service
     url: http://hr-service:3002
     routes:

@@ -1,0 +1,33 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: etelios-prod-v2
+  region: ap-south-1
+  version: "1.30"
+
+# Managed node group
+managedNodeGroups:
+  - name: main-workers
+    instanceType: t3.medium
+    desiredCapacity: 3
+    minSize: 2
+    maxSize: 10
+    privateNetworking: false
+    ssh:
+      allow: false
+    iam:
+      withAddonPolicies:
+        imageBuilder: true
+        autoScaler: true
+        albIngress: true
+        cloudWatch: true
+
+# Enable OIDC
+iam:
+  withOIDC: true
+
+# CloudWatch logging
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["*"]

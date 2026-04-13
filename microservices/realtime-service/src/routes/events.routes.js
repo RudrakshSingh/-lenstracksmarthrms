@@ -8,6 +8,13 @@ const eventsController = require('../controllers/events.controller');
  */
 
 /**
+ * @route   POST /api/events/jts-in-app
+ * @desc    JTS in-app notification to tenant room (event: jts:in_app_notification)
+ * @access  Internal (Service-to-Service)
+ */
+router.post('/jts-in-app', eventsController.broadcastJtsInApp);
+
+/**
  * @route   POST /api/events/notification
  * @desc    Send notification to specific user
  * @access  Internal (Service-to-Service)

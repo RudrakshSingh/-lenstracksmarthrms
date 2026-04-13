@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hr-service
+  namespace: etelios-prod
+  labels:
+    app: hr-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hr-service
+  template:
+    metadata:
+      labels:
+        app: hr-service
+        version: v1
+    spec:
+      imagePullSecrets:
+        - name: ecr-registry-secret
+      containers:
+      - name: hr-service
+        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-hr-service:hrms-jts-proxy-202604110148
+        ports:
+        - containerPort: 3002
+          name: http
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3002"
+        - name: SERVICE_NAME
+          value: "hr-service"
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: MONGO_URI
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: MONGODB_URI
+        - name: MONGO_DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: MONGO_DB_NAME
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: DB_NAME
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_SECRET
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_REFRESH_SECRET
+        - name: REDIS_URL
+          value: "redis://redis:6379"
+        # AWS S3 Configuration for Onboarding Documents
+        - name: AWS_REGION
+          value: "ap-south-1"
+        - name: AWS_S3_BUCKET_NAME
+          value: "etelios-prod-storage"
+        # Note: IAM role will be used automatically in EKS for S3 access
+        # Rate Limiting Configuration
+        - name: RATE_LIMIT_MAX_REQUESTS
+          value: "10000"
+        - name: RATE_LIMIT_WINDOW_MS
+          value: "900000"
+        # CORS Configuration
+        - name: CORS_ORIGIN
+          value: "*"
+        - name: CORS_CREDENTIALS
+          value: "true"
+        # Server-to-server JTS (unified dashboard task widgets); same namespace ClusterIP
+        - name: JTS_SERVICE_URL
+          value: "http://jts-service:3018"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3002
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: docdb-ca-cert
+          mountPath: /etc/ssl/certs/ca-cert.pem
+          subPath: ca-cert.pem
+          readOnly: true
+      volumes:
+      - name: docdb-ca-cert
+        secret:
+          secretName: docdb-ca-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hr-service
+  namespace: etelios-prod
+  labels:
+    app: hr-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3002
+    targetPort: 3002
+    protocol: TCP
+    name: http
+  selector:
+    app: hr-service

@@ -13,6 +13,10 @@ const attendanceSchema = new mongoose.Schema({
     trim: true,
     uppercase: true
   },
+  employeeName: {
+    type: String,
+    trim: true
+  },
 
   // Store Information
   store: {
@@ -109,6 +113,31 @@ const attendanceSchema = new mongoose.Schema({
     min: 0,
     max: 8
   },
+
+  // Roster shift (from HR roster at clock-in / sync)
+  shift: {
+    type: String,
+    trim: true
+  },
+  shiftStart: {
+    type: String,
+    trim: true
+  },
+  shiftEnd: {
+    type: String,
+    trim: true
+  },
+  /** Scheduled shift length in hours (roster end − start); used for present/absent rules */
+  required_shift_hours: {
+    type: Number,
+    min: 0,
+    max: 24
+  },
+  /** Wall-clock time when system auto clock-out should align (roster shift end) */
+  expected_shift_end_at: {
+    type: Date
+  },
+
   overtime_hours: {
     type: Number,
     default: 0,
@@ -169,6 +198,15 @@ const attendanceSchema = new mongoose.Schema({
     type: String,
     enum: ['manual', 'auto_geofence', 'admin_action', 'system'],
     default: 'manual'
+  },
+  
+  // Geofence violation tracking (for 10-minute grace period)
+  geofence_violation_start: {
+    type: Date // When user first went outside geofence
+  },
+  geofence_grace_period_minutes: {
+    type: Number,
+    default: 10 // 10 minutes grace period before auto-logout
   },
 
   // Flags
@@ -246,9 +284,14 @@ attendanceSchema.pre('save', function(next) {
     const diffTime = Math.abs(this.check_out_time - this.check_in_time);
     this.total_hours = Math.round((diffTime / (1000 * 60 * 60)) * 100) / 100;
     
-    // Calculate overtime (assuming 8 hours is standard)
-    if (this.total_hours > 8) {
-      this.overtime_hours = this.total_hours - 8;
+    const standardHours =
+      this.required_shift_hours != null &&
+      Number.isFinite(this.required_shift_hours) &&
+      this.required_shift_hours > 0
+        ? this.required_shift_hours
+        : 8;
+    if (this.total_hours > standardHours) {
+      this.overtime_hours = Math.round((this.total_hours - standardHours) * 100) / 100;
     }
   }
   next();
@@ -394,3 +437,8 @@ attendanceSchema.methods.getSummary = function() {
 };
 
 module.exports = mongoose.model('Attendance', attendanceSchema);
+// Performance indexes for attendance queries
+attendanceSchema.index({ employee_id: 1, date: -1 }); // Fast employee date lookup
+attendanceSchema.index({ tenantId: 1, date: -1 }); // Tenant date queries
+attendanceSchema.index({ store: 1, date: -1, status: 1 }); // Store attendance
+attendanceSchema.index({ check_in_time: -1 }); // Recent check-ins

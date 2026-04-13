@@ -43,6 +43,30 @@ const JTS_ROSTER_2026_04_01 = {
   MD: ['Sumit', 'Madhuri', 'Shubham']
 };
 
+/** 02/04/26 roster (IST day 2026-04-02) — JTS sheet; part-time note on Shubham stored as name token only. */
+const JTS_ROSTER_2026_04_02 = {
+  Shk: ['Amit', 'Sheetal'],
+  RKC: ['Kishan', 'Abhishek', 'kaveri', 'Shubham'],
+  NRN: ['Anita', 'Mahima', 'Praveen'],
+  Pn: ['Mahendra', 'Pooja'],
+  Mowa: ['Ajeet', 'Shahrukh'],
+  BP: ['Rizwan', 'Madhu', 'Anchala'],
+  MD: ['Sumit', 'Madhuri', 'Golu']
+};
+
+/** Pick embedded table by ROSTER_DATE (YYYY-MM-DD). */
+function rosterTableForDate(dateStr) {
+  const map = {
+    '2026-04-01': JTS_ROSTER_2026_04_01,
+    '2026-04-02': JTS_ROSTER_2026_04_02
+  };
+  if (map[dateStr]) return map[dateStr];
+  console.warn(
+    `No embedded roster for ${dateStr}; using 2026-04-01 sheet. Add a mapping in rosterTableForDate() or pass ROSTER_DATE=2026-04-02.`
+  );
+  return JTS_ROSTER_2026_04_01;
+}
+
 /** Lenstrack tenant: JTS sheet labels -> HR store `code` (from store list). */
 const LENSTRACK_STORE_LABEL_TO_CODE = {
   Shk: 'LT-2',
@@ -325,7 +349,8 @@ async function main() {
   const entries = [];
   const errors = [];
 
-  for (const [label, names] of Object.entries(JTS_ROSTER_2026_04_01)) {
+  const rosterTable = rosterTableForDate(date);
+  for (const [label, names] of Object.entries(rosterTable)) {
     let store;
     try {
       store = resolveStore(label, stores, tenantId);

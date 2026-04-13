@@ -8,6 +8,16 @@
 #   TAG=v1.2.3 ./scripts/deploy-jts-aws.sh          # immutable tag + :latest
 #   SKIP_KUBECTL=1 ./scripts/deploy-jts-aws.sh      # only ECR push
 #   APPLY_INGRESS=0 ./scripts/deploy-jts-aws.sh     # image + deployment only (skip ALB ingress YAML)
+#   DOCKER_PLATFORM=linux/arm64 ./scripts/deploy-jts-aws.sh   # only if your nodes are ARM (rare on EKS)
+#
+# ImagePullBackOff on EKS after pushing from Mac:
+#   - "no match for platform in manifest" → build was arm64; default here is linux/amd64 for EKS.
+#   - "403 Forbidden" on ECR → refresh pull secret in the namespace, e.g.:
+#       kubectl -n etelios-prod delete secret ecr-registry-secret --ignore-not-found
+#       kubectl -n etelios-prod create secret docker-registry ecr-registry-secret \
+#         --docker-server=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com \
+#         --docker-username=AWS \
+#         --docker-password=$(aws ecr get-login-password --region ${AWS_REGION})
 #
 set -euo pipefail
 
@@ -38,8 +48,17 @@ aws sts get-caller-identity >/dev/null || { echo "AWS credentials failed (aws st
 echo "==> ECR login"
 aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
 
-echo "==> docker build"
-docker build -t "$IMAGE" -t "$IMAGE_LATEST" "$ROOT/microservices/jts-service"
+# EKS (x86) cannot run images built as linux/arm64 (Docker Desktop on Apple Silicon).
+DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
+export DOCKER_BUILDKIT=1
+
+echo "==> docker build (context=repo root, platform=${DOCKER_PLATFORM})"
+docker build \
+  --platform "$DOCKER_PLATFORM" \
+  -f "$ROOT/microservices/jts-service/Dockerfile" \
+  -t "$IMAGE" \
+  -t "$IMAGE_LATEST" \
+  "$ROOT"
 
 echo "==> docker push"
 docker push "$IMAGE"

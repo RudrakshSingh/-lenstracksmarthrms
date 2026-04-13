@@ -524,6 +524,22 @@ class RealtimeService {
   }
 
   /**
+   * JTS in-app notification: broadcast to tenant room. Clients should filter by
+   * recipient_id (JTS Employee _id) or recipient_email.
+   */
+  broadcastJtsInAppToTenant(tenantId, data) {
+    const room = `tenant:${tenantId}`;
+    this.io.to(room).emit('jts:in_app_notification', {
+      ...data,
+      timestamp: new Date().toISOString()
+    });
+    logger.info(`JTS in-app notification emitted to ${room}`, {
+      tenantId,
+      recipient_id: data.recipient_id
+    });
+  }
+
+  /**
    * Broadcast dashboard stats update
    * @param {string} tenantId - Tenant ID
    * @param {object} stats - Dashboard statistics

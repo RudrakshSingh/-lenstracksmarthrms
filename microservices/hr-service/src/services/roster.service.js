@@ -25,6 +25,7 @@ class RosterService {
         storeId,
         startDate,
         endDate,
+        date, // CRITICAL: Support single date parameter
         status,
         shift,
         tenantId = 'default'
@@ -32,32 +33,103 @@ class RosterService {
 
       const query = { tenantId };
 
-      if (employeeId) query.employeeId = employeeId;
+      if (employeeId) {
+        // Handle both MongoDB _id and employeeId string
+        if (mongoose.Types.ObjectId.isValid(employeeId)) {
+          query.$or = [
+            { employee: employeeId },
+            { employeeId: employeeId }
+          ];
+        } else {
+          query.employeeId = employeeId;
+        }
+      }
       if (storeId) query.storeId = storeId;
       if (status) query.status = status;
       if (shift) query.shift = shift;
 
-      if (startDate || endDate) {
+      // CRITICAL: Handle single date parameter (for today's roster lookup)
+      if (date) {
+        const targetDate = new Date(date);
+        targetDate.setHours(0, 0, 0, 0);
+        const nextDay = new Date(targetDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        query.date = {
+          $gte: targetDate,
+          $lt: nextDay
+        };
+      } else if (startDate || endDate) {
+        // Handle date range
         query.date = {};
-        if (startDate) query.date.$gte = new Date(startDate);
-        if (endDate) query.date.$lte = new Date(endDate);
+        if (startDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          query.date.$gte = start;
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          query.date.$lte = end;
+        }
       }
 
       const skip = (page - 1) * limit;
 
+      // Fetch rosters with populate (without strict tenantId match in populate to avoid filtering out valid rosters)
+      // The query already filters by tenantId at roster level, so populate should work
+      // OPTIMIZED: Reduce populate fields, add maxTimeMS, select only needed fields
       const [rosters, total] = await Promise.all([
         Roster.find(query)
-          .populate('employee', 'firstName lastName email phone employeeId')
-          .populate('store', 'name code address')
+          .select('employeeId employeeName storeId storeName date shift shiftStart shiftEnd status')
+          .populate({
+            path: 'employee',
+            select: 'firstName lastName employeeId',
+            // Don't use match here - roster already has tenantId filter
+          })
+          .populate({
+            path: 'store',
+            select: 'name code',
+            // Don't use match here - roster already has tenantId filter
+          })
           .sort({ date: 1 })
           .skip(skip)
           .limit(limit)
-          .lean(),
-        Roster.countDocuments(query)
+          .lean()
+          .maxTimeMS(2000), // Reduced timeout for faster response
+        Roster.countDocuments(query).maxTimeMS(2000)
       ]);
 
+      // Filter out rosters where employee or store populate returned null (only if they don't exist)
+      // But don't filter by tenantId since roster already has tenantId filter
+      const filteredRosters = rosters.filter(roster => 
+        roster.employee && roster.store
+      );
+
+      // Format roster entries to match frontend expected shape
+      // Frontend expects: id, employeeId, employeeName?, storeId, store_id (for Add Sales Entry modal), storeName?, date (YYYY-MM-DD), shift, shiftStart?, shiftEnd?, status?
+      // Use filteredRosters to ensure tenant isolation
+      const formattedRosters = filteredRosters.map(roster => ({
+        id: roster._id?.toString() || roster.id,
+        employeeId: roster.employeeId,
+        employeeName: roster.employeeName || 
+                      (roster.employee?.firstName && roster.employee?.lastName 
+                        ? `${roster.employee.firstName} ${roster.employee.lastName}`.trim()
+                        : roster.employee?.firstName || roster.employee?.lastName || null),
+        storeId: roster.storeId,
+        store_id: roster.storeId, // CRITICAL: Add store_id alias for frontend compatibility (Add Sales Entry modal)
+        storeName: roster.storeName || roster.store?.name || null,
+        date: roster.date ? (typeof roster.date === 'string' ? roster.date : new Date(roster.date).toISOString().split('T')[0]) : null,
+        shift: roster.shift,
+        shiftStart: roster.shiftStart || null,
+        shiftEnd: roster.shiftEnd || null,
+        status: roster.status || null
+      }));
+
+      // Format response to match frontend expectations
+      // Frontend accepts: direct array, or wrapped in data/roster/items/list/records
       return {
-        data: rosters,
+        data: formattedRosters, // Main array for frontend
+        roster: formattedRosters, // Alternative key for frontend compatibility
         total,
         page: parseInt(page),
         limit: parseInt(limit),
@@ -74,6 +146,70 @@ class RosterService {
    */
   async createRoster(rosterData, createdBy) {
     try {
+      // Wrap entire function to catch any 409 errors and handle as upsert
+      return await this._createRosterInternal(rosterData, createdBy);
+    } catch (error) {
+      // If we get a 409 overlap error, try to find and update existing roster
+      if (error.statusCode === 409 && error.message && error.message.includes('overlapping shift')) {
+        logger.warn('Got 409 overlap error, attempting upsert fallback', {
+          error: error.message,
+          employeeId: rosterData.employeeId,
+          date: rosterData.date
+        });
+
+        try {
+          // Extract employee info
+          const { employeeId, date } = rosterData;
+          const employee = await User.findOne({
+            $or: [
+              { _id: employeeId },
+              { employeeId: employeeId },
+              { employee_id: employeeId }
+            ]
+          });
+
+          if (!employee) {
+            throw error; // Re-throw if employee not found
+          }
+
+          const actualEmployeeIdString = employee.employeeId || employee.employee_id || employee._id.toString();
+          const dateObj = new Date(date);
+          const startOfDay = new Date(dateObj);
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(dateObj);
+          endOfDay.setHours(23, 59, 59, 999);
+
+          // Find existing roster (try all possible queries)
+          const existingRoster = await Roster.findOne({
+            $or: [
+              { employeeId: actualEmployeeIdString },
+              { employee: employee._id }
+            ],
+            date: {
+              $gte: startOfDay,
+              $lte: endOfDay
+            },
+            status: { $nin: ['CANCELLED'] }
+          });
+
+          if (existingRoster) {
+            logger.info('Found existing roster in fallback, updating', {
+              rosterId: existingRoster._id
+            });
+            // Use updateRoster to update it
+            return await this.updateRoster(existingRoster._id.toString(), rosterData, createdBy);
+          }
+        } catch (fallbackError) {
+          logger.error('Upsert fallback failed', { error: fallbackError.message });
+        }
+      }
+      // Re-throw original error if we couldn't handle it
+      throw error;
+    }
+  }
+
+  async _createRosterInternal(rosterData, createdBy) {
+    try {
       const {
         employeeId,
         storeId,
@@ -86,80 +222,478 @@ class RosterService {
         tenantId = 'default'
       } = rosterData;
 
-      // Validate employee exists
-      const employee = await User.findOne({ employeeId, tenantId });
+      // Normalize shift to uppercase enum value
+      const shiftMap = {
+        'morning': 'MORNING',
+        'evening': 'EVENING',
+        'night': 'NIGHT',
+        'full_day': 'FULL_DAY',
+        'fullday': 'FULL_DAY',
+        'full day': 'FULL_DAY',
+        'off': 'OFF'
+      };
+      const normalizedShift = shiftMap[shift?.toLowerCase()] || shift?.toUpperCase() || 'MORNING';
+      
+      // Default shift times if not provided (based on shift type)
+      let finalShiftStart = shiftStart;
+      let finalShiftEnd = shiftEnd;
+      
+      if (!finalShiftStart && normalizedShift !== 'OFF') {
+        const defaultTimes = {
+          'MORNING': { start: '09:00', end: '17:00' },
+          'EVENING': { start: '14:00', end: '22:00' },
+          'NIGHT': { start: '22:00', end: '06:00' },
+          'FULL_DAY': { start: '09:00', end: '18:00' }
+        };
+        const defaults = defaultTimes[normalizedShift] || defaultTimes['MORNING'];
+        finalShiftStart = defaults.start;
+        finalShiftEnd = defaults.end;
+      }
+
+      // Validate employee exists - try multiple lookup strategies
+      // CRITICAL: Frontend may send MongoDB _id, employeeId, or employee_id
+      let employee = null;
+      
+      // First, check if employeeId is a valid MongoDB ObjectId
+      if (mongoose.Types.ObjectId.isValid(employeeId)) {
+        // Try to find by MongoDB _id with tenantId
+        employee = await User.findOne({ 
+          _id: employeeId,
+          tenantId 
+        });
+        
+        // If not found with tenantId, try without (for backward compatibility)
+        if (!employee) {
+          employee = await User.findById(employeeId);
+        }
+      }
+      
+      // If not found by _id, try by employeeId/employee_id fields
+      if (!employee) {
+        employee = await User.findOne({ 
+          $or: [
+            { employeeId: employeeId },
+            { employee_id: employeeId },
+            { employeeId: employeeId.toUpperCase() },
+            { employee_id: employeeId.toUpperCase() }
+          ],
+          tenantId 
+        });
+      }
+      
+      // Try without tenantId for backward compatibility
+      if (!employee) {
+        employee = await User.findOne({ 
+          $or: [
+            { employeeId: employeeId },
+            { employee_id: employeeId },
+            { employeeId: employeeId.toUpperCase() },
+            { employee_id: employeeId.toUpperCase() }
+          ]
+        });
+      }
+      
       if (!employee) {
         const error = new Error('Employee not found');
         error.statusCode = 404;
         throw error;
       }
+      
+      // Get the actual employee's employeeId string (for roster.employeeId, checkOverlap, leave checks)
+      const actualEmployeeIdString = employee.employeeId || employee.employee_id || employee._id.toString();
 
-      // Validate store exists
-      const store = await Store.findOne({ code: storeId, tenantId });
+      // Validate store exists - handle both ObjectId and store code strings
+      // CRITICAL: Ensure we find the EXACT store that was requested
+      let store = null;
+      
+      // Try 1: By MongoDB _id with tenantId (most specific)
+      if (mongoose.Types.ObjectId.isValid(storeId)) {
+        store = await Store.findOne({ _id: storeId, tenantId });
+        if (store) {
+          logger.info('Store found by _id with tenantId', { 
+            requestedStoreId: storeId, 
+            foundStoreId: store._id.toString(), 
+            foundStoreCode: store.code,
+            foundStoreName: store.name,
+            tenantId 
+          });
+        }
+      }
+      
+      // Try 2: By store code with tenantId
       if (!store) {
-        const error = new Error('Store not found');
+        store = await Store.findOne({ code: storeId, tenantId });
+        if (store) {
+          logger.info('Store found by code with tenantId', { 
+            requestedStoreId: storeId, 
+            foundStoreId: store._id.toString(), 
+            foundStoreCode: store.code,
+            foundStoreName: store.name,
+            tenantId 
+          });
+        }
+      }
+      
+      // Try 3: By MongoDB _id without tenantId (backward compatibility)
+      if (!store && mongoose.Types.ObjectId.isValid(storeId)) {
+        store = await Store.findOne({ _id: storeId });
+        if (store) {
+          logger.warn('Store found by _id without tenantId (backward compatibility)', { 
+            requestedStoreId: storeId, 
+            foundStoreId: store._id.toString(), 
+            foundStoreCode: store.code,
+            foundStoreName: store.name,
+            storeTenantId: store.tenantId,
+            requestedTenantId: tenantId 
+          });
+        }
+      }
+      
+      // Try 4: By store code without tenantId (backward compatibility)
+      if (!store) {
+        store = await Store.findOne({ code: storeId });
+        if (store) {
+          logger.warn('Store found by code without tenantId (backward compatibility)', { 
+            requestedStoreId: storeId, 
+            foundStoreId: store._id.toString(), 
+            foundStoreCode: store.code,
+            foundStoreName: store.name,
+            storeTenantId: store.tenantId,
+            requestedTenantId: tenantId 
+          });
+        }
+      }
+      
+      // CRITICAL: If store not found, throw detailed error
+      if (!store) {
+        // Log all stores for debugging
+        const allStores = await Store.find({ tenantId }).select('_id code name tenantId').limit(10);
+        logger.error('Store not found for roster creation', {
+          requestedStoreId: storeId,
+          requestedTenantId: tenantId,
+          isObjectId: mongoose.Types.ObjectId.isValid(storeId),
+          availableStores: allStores.map(s => ({
+            _id: s._id.toString(),
+            code: s.code,
+            name: s.name,
+            tenantId: s.tenantId
+          }))
+        });
+        const error = new Error(`Store not found. Requested storeId: ${storeId}, tenantId: ${tenantId}. Please ensure the store exists in the database.`);
         error.statusCode = 404;
         throw error;
       }
-
-      // Check for overlapping shifts
-      const hasOverlap = await Roster.checkOverlap(employeeId, date, shiftStart, shiftEnd);
-      if (hasOverlap) {
-        const error = new Error('Employee already has an overlapping shift on this date');
-        error.statusCode = 409;
+      
+      // CRITICAL: Verify tenantId matches (if tenantId was provided)
+      if (tenantId && tenantId !== 'default' && store.tenantId && store.tenantId !== tenantId) {
+        logger.error('Store tenantId mismatch', {
+          requestedTenantId: tenantId,
+          storeTenantId: store.tenantId,
+          storeId: store._id.toString(),
+          storeCode: store.code,
+          storeName: store.name
+        });
+        const error = new Error(`Store belongs to different tenant. Requested: ${tenantId}, Store tenant: ${store.tenantId}`);
+        error.statusCode = 400;
         throw error;
       }
+      
+      logger.info('Store validated for roster', {
+        requestedStoreId: storeId,
+        foundStoreId: store._id.toString(),
+        foundStoreCode: store.code,
+        foundStoreName: store.name,
+        tenantId: store.tenantId || tenantId
+      });
 
-      // Check if employee is on leave
+      // UPSERT LOGIC: Check if roster already exists for this employee on this date
+      // Use date range to handle timezone issues
+      const dateObj = new Date(date);
+      const startOfDay = new Date(dateObj);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(dateObj);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Find existing roster by employeeId OR employee ObjectId (handle both formats)
+      // Try multiple queries to find existing roster - check ALL possible combinations
+      let existingRoster = null;
+      
+      // Try 1: By employeeId string with date range (NO tenantId filter - check all)
+      existingRoster = await Roster.findOne({
+        employeeId: actualEmployeeIdString,
+        date: {
+          $gte: startOfDay,
+          $lte: endOfDay
+        },
+        status: { $nin: ['CANCELLED'] }
+      }).lean(); // Use lean() for faster query
+
+      // Try 2: By employee ObjectId with date range (NO tenantId filter)
+      if (!existingRoster) {
+        existingRoster = await Roster.findOne({
+          employee: employee._id,
+          date: {
+            $gte: startOfDay,
+            $lte: endOfDay
+          },
+          status: { $nin: ['CANCELLED'] }
+        }).lean();
+      }
+
+      // Try 3: By employeeId OR employee ObjectId (combined query)
+      if (!existingRoster) {
+        existingRoster = await Roster.findOne({
+          $or: [
+            { employeeId: actualEmployeeIdString },
+            { employee: employee._id },
+            { employeeId: employee.employeeId },
+            { employeeId: employee.employee_id }
+          ],
+          date: {
+            $gte: startOfDay,
+            $lte: endOfDay
+          },
+          status: { $nin: ['CANCELLED'] }
+        });
+      }
+
+      // Try 4: Without date filter (just employee match) - in case date format is different
+      if (!existingRoster) {
+        const allRostersForEmployee = await Roster.find({
+          $or: [
+            { employeeId: actualEmployeeIdString },
+            { employee: employee._id }
+          ],
+          status: { $nin: ['CANCELLED'] }
+        }).sort({ date: -1 }).limit(5);
+
+        logger.info('Checking all rosters for employee (Try 4)', {
+          employeeId: actualEmployeeIdString,
+          employeeMongoId: employee._id.toString(),
+          foundRosters: allRostersForEmployee.length,
+          dateRange: { start: startOfDay, end: endOfDay }
+        });
+
+        // Check if any roster is for the same date (manual comparison)
+        for (const roster of allRostersForEmployee) {
+          const rosterDate = new Date(roster.date);
+          logger.debug('Comparing roster date', {
+            rosterId: roster._id,
+            rosterDate: rosterDate.toISOString(),
+            startOfDay: startOfDay.toISOString(),
+            endOfDay: endOfDay.toISOString(),
+            inRange: rosterDate >= startOfDay && rosterDate <= endOfDay
+          });
+          if (rosterDate >= startOfDay && rosterDate <= endOfDay) {
+            existingRoster = roster;
+            logger.info('Found existing roster in Try 4', { rosterId: roster._id });
+            break;
+          }
+        }
+      }
+
+      logger.info('Existing roster check result', {
+        found: !!existingRoster,
+        rosterId: existingRoster?._id?.toString(),
+        employeeId: actualEmployeeIdString,
+        date
+      });
+
+      // If found, UPDATE it (upsert behavior - no overlap check needed)
+      if (existingRoster) {
+        logger.info('Roster exists - UPDATING (upsert)', {
+          rosterId: existingRoster._id,
+          employeeId: actualEmployeeIdString,
+          date,
+          oldShift: existingRoster.shift,
+          newShift: normalizedShift
+        });
+
+        // If we used lean(), we need to fetch the full document to update it
+        const rosterToUpdate = await Roster.findById(existingRoster._id);
+        if (!rosterToUpdate) {
+          logger.error('Could not find roster to update', { rosterId: existingRoster._id });
+          throw new Error('Roster not found for update');
+        }
+
+        // CRITICAL: Update store assignment with the EXACT store that was found and validated
+        rosterToUpdate.tenantId = tenantId;
+        rosterToUpdate.store = store._id; // CRITICAL: Use the validated store's MongoDB _id
+        rosterToUpdate.storeId = store.code || store.store_id || store._id.toString(); // Use store code, fallback to _id
+        rosterToUpdate.storeName = store.name; // CRITICAL: Use the validated store's name
+        rosterToUpdate.shift = normalizedShift;
+        rosterToUpdate.shiftStart = finalShiftStart;
+        rosterToUpdate.shiftEnd = finalShiftEnd;
+        rosterToUpdate.breakDuration = breakDuration;
+        rosterToUpdate.notes = notes;
+        rosterToUpdate.status = 'SCHEDULED';
+        rosterToUpdate.updatedBy = createdBy;
+        rosterToUpdate.updatedAt = new Date();
+        
+        // Log the store update for debugging
+        logger.info('Updating roster store assignment', {
+          rosterId: rosterToUpdate._id.toString(),
+          employeeId: actualEmployeeIdString,
+          requestedStoreId: storeId,
+          oldStoreId: existingRoster.storeId,
+          oldStoreName: existingRoster.storeName,
+          newStoreId: store._id.toString(),
+          newStoreCode: store.code,
+          newStoreName: store.name,
+          date,
+          tenantId
+        });
+
+        await rosterToUpdate.save();
+
+        // Return UPDATED values, not old existingRoster values
+        return {
+          id: rosterToUpdate._id.toString(),
+          employeeId: rosterToUpdate.employeeId,
+          employeeName: rosterToUpdate.employeeName,
+          storeId: rosterToUpdate.storeId,
+          storeName: rosterToUpdate.storeName,
+          date: new Date(rosterToUpdate.date).toISOString().split('T')[0],
+          shift: rosterToUpdate.shift,
+          shiftStart: rosterToUpdate.shiftStart,
+          shiftEnd: rosterToUpdate.shiftEnd,
+          status: rosterToUpdate.status
+        };
+      }
+
+      // No existing roster found - proceed to CREATE
+
+      // Check if employee is on leave - if yes, allow roster creation but log warning
       const leaveOnDate = await LeaveRequest.findOne({
-        employee_code: employeeId,
+        employee_code: actualEmployeeIdString,
         from_date: { $lte: new Date(date) },
         to_date: { $gte: new Date(date) },
         status: { $in: ['approved', 'pending'] }
       });
 
       if (leaveOnDate) {
-        const error = new Error(`Employee is on leave on ${date}`);
-        error.statusCode = 409;
-        error.details = {
-          conflict: 'leave',
+        logger.warn('Creating roster for employee on leave', {
+          employeeId: actualEmployeeIdString,
+          date,
           leaveType: leaveOnDate.leave_type,
-          leaveFrom: leaveOnDate.from_date,
-          leaveTo: leaveOnDate.to_date,
           leaveStatus: leaveOnDate.status
-        };
-        throw error;
+        });
+        // Don't throw error - allow roster creation (frontend can handle warnings)
       }
 
       // Create roster entry
+      // CRITICAL: Use the EXACT store that was found and validated
       const roster = new Roster({
         tenantId,
         employee: employee._id,
-        employeeId: employee.employeeId,
-        employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
-        store: store._id,
-        storeId: store.code,
-        storeName: store.name,
+        employeeId: actualEmployeeIdString,
+        employeeName: employee.name || `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.fullName,
+        store: store._id, // CRITICAL: Use the validated store's MongoDB _id
+        storeId: store.code || store.store_id || store._id.toString(), // Use store code, fallback to _id
+        storeName: store.name, // CRITICAL: Use the validated store's name
         date: new Date(date),
-        shift,
-        shiftStart,
-        shiftEnd,
+        shift: normalizedShift,
+        shiftStart: finalShiftStart,
+        shiftEnd: finalShiftEnd,
         breakDuration,
         notes,
         status: 'SCHEDULED',
         createdBy
       });
+      
+      // Log the store assignment for debugging
+      logger.info('Creating roster with store assignment', {
+        employeeId: actualEmployeeIdString,
+        requestedStoreId: storeId,
+        assignedStoreId: store._id.toString(),
+        assignedStoreCode: store.code,
+        assignedStoreName: store.name,
+        date,
+        tenantId
+      });
 
-      await roster.save();
+      try {
+        await roster.save();
+      } catch (saveError) {
+        // If save fails due to duplicate/overlap, try to find and update existing roster
+        if (saveError.message && saveError.message.includes('overlapping')) {
+          logger.warn('Save failed with overlap error, attempting to find existing roster', {
+            error: saveError.message,
+            employeeId: actualEmployeeIdString,
+            date
+          });
+
+          // One more attempt to find existing roster (maybe it was created between our check and save)
+          const lastChanceRoster = await Roster.findOne({
+            $or: [
+              { employeeId: actualEmployeeIdString },
+              { employee: employee._id }
+            ],
+            date: {
+              $gte: startOfDay,
+              $lte: endOfDay
+            },
+            status: { $nin: ['CANCELLED'] }
+          });
+
+          if (lastChanceRoster) {
+            logger.info('Found existing roster after save error, updating', {
+              rosterId: lastChanceRoster._id
+            });
+            // Update and return
+            lastChanceRoster.tenantId = tenantId;
+            lastChanceRoster.store = store._id;
+            lastChanceRoster.storeId = store.code || store.store_id || store._id.toString();
+            lastChanceRoster.storeName = store.name;
+            lastChanceRoster.shift = normalizedShift;
+            lastChanceRoster.shiftStart = finalShiftStart;
+            lastChanceRoster.shiftEnd = finalShiftEnd;
+            lastChanceRoster.breakDuration = breakDuration;
+            lastChanceRoster.notes = notes;
+            lastChanceRoster.status = 'SCHEDULED';
+            lastChanceRoster.updatedBy = createdBy;
+            lastChanceRoster.updatedAt = new Date();
+            await lastChanceRoster.save();
+
+            return {
+              id: lastChanceRoster._id.toString(),
+              employeeId: lastChanceRoster.employeeId,
+              employeeName: lastChanceRoster.employeeName,
+              storeId: lastChanceRoster.storeId,
+              storeName: lastChanceRoster.storeName,
+              date: new Date(lastChanceRoster.date).toISOString().split('T')[0],
+              shift: lastChanceRoster.shift,
+              shiftStart: lastChanceRoster.shiftStart,
+              shiftEnd: lastChanceRoster.shiftEnd,
+              status: lastChanceRoster.status
+            };
+          }
+        }
+        // Re-throw if we couldn't handle it
+        throw saveError;
+      }
 
       logger.info('Roster created successfully', {
         rosterId: roster._id,
-        employeeId,
+        employeeId: actualEmployeeIdString,
+        employeeMongoId: employee._id.toString(),
         storeId,
         date
       });
 
-      return roster;
+      // Format response to match frontend expected shape
+      return {
+        id: roster._id.toString(),
+        employeeId: roster.employeeId,
+        employeeName: roster.employeeName,
+        storeId: roster.storeId,
+        storeName: roster.storeName,
+        date: new Date(roster.date).toISOString().split('T')[0],
+        shift: roster.shift,
+        shiftStart: roster.shiftStart,
+        shiftEnd: roster.shiftEnd,
+        status: roster.status
+      };
     } catch (error) {
       logger.error('Error in createRoster service', { error: error.message });
       throw error;
@@ -229,7 +763,19 @@ class RosterService {
 
       logger.info('Roster updated successfully', { rosterId: roster._id });
 
-      return roster;
+      // Format response to match frontend expected shape
+      return {
+        id: roster._id.toString(),
+        employeeId: roster.employeeId,
+        employeeName: roster.employeeName,
+        storeId: roster.storeId,
+        storeName: roster.storeName,
+        date: new Date(roster.date).toISOString().split('T')[0],
+        shift: roster.shift,
+        shiftStart: roster.shiftStart,
+        shiftEnd: roster.shiftEnd,
+        status: roster.status
+      };
     } catch (error) {
       logger.error('Error in updateRoster service', { error: error.message });
       throw error;
@@ -260,13 +806,43 @@ class RosterService {
   /**
    * Get weekly roster for a store
    */
-  async getWeeklyRoster(storeId, weekStartDate) {
+  async getWeeklyRoster(storeId, weekStartDate, tenantId = 'default') {
     try {
       const startDate = new Date(weekStartDate);
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + 6); // 7 days total
 
-      const rosters = await Roster.getStoreRoster(storeId, startDate, endDate);
+      // CRITICAL: Add tenantId filtering for tenant isolation
+      const rosters = await Roster.find({
+        $or: [
+          { store: mongoose.Types.ObjectId.isValid(storeId) ? storeId : null },
+          { storeId: storeId }
+        ],
+        date: {
+          $gte: startDate,
+          $lte: endDate
+        },
+        tenantId: tenantId // CRITICAL: Filter by tenantId
+      })
+        .populate({
+          path: 'employee',
+          select: 'firstName lastName email phone employeeId',
+          match: { tenantId: tenantId } // CRITICAL: Filter employees by tenantId
+        })
+        .populate({
+          path: 'store',
+          select: 'name code address',
+          match: { tenantId: tenantId } // CRITICAL: Filter stores by tenantId
+        })
+        .sort({ date: 1, shiftStart: 1 })
+        .lean();
+
+      // Filter out rosters where employee or store populate returned null (due to tenant mismatch)
+      const filteredRosters = rosters.filter(roster => 
+        roster.employee && roster.store && 
+        (roster.employee.tenantId === tenantId || !roster.employee.tenantId) &&
+        (roster.store.tenantId === tenantId || !roster.store.tenantId)
+      );
 
       // Group by date
       const weeklyRoster = {};
@@ -277,7 +853,8 @@ class RosterService {
         weeklyRoster[dateStr] = [];
       }
 
-      rosters.forEach(roster => {
+      // Use filteredRosters for tenant isolation
+      filteredRosters.forEach(roster => {
         const dateStr = new Date(roster.date).toISOString().split('T')[0];
         if (weeklyRoster[dateStr]) {
           weeklyRoster[dateStr].push({
@@ -355,15 +932,27 @@ class RosterService {
         }
       }
 
-      const settings = await RosterSettings.find(query)
-        .populate('store', 'name code address phone')
-        .lean();
+      // Only populate if query.store is a valid ObjectId (not a string code)
+      let settingsQuery = RosterSettings.find(query);
+      if (query.store && mongoose.Types.ObjectId.isValid(query.store)) {
+        settingsQuery = settingsQuery.populate({
+          path: 'store',
+          select: 'name code address phone',
+          match: { tenantId: tenantId } // CRITICAL: Filter stores by tenantId
+        });
+      }
+      const settings = await settingsQuery.lean();
 
       // If no settings found and storeId provided, return default settings
       if (settings.length === 0 && storeId) {
-        const store = await Store.findOne({ 
-          $or: [{ _id: storeId }, { code: storeId }] 
-        });
+        // Handle both ObjectId and store code strings
+        let store;
+        if (mongoose.Types.ObjectId.isValid(storeId)) {
+          store = await Store.findOne({ _id: storeId });
+        }
+        if (!store) {
+          store = await Store.findOne({ code: storeId });
+        }
         
         if (store) {
           // Return default settings structure
@@ -403,9 +992,14 @@ class RosterService {
    */
   async upsertRosterSettings(storeId, settingsData, userId) {
     try {
-      const store = await Store.findOne({ 
-        $or: [{ _id: storeId }, { code: storeId }] 
-      });
+      // Handle both ObjectId and store code strings to avoid CastError
+      let store;
+      if (mongoose.Types.ObjectId.isValid(storeId)) {
+        store = await Store.findOne({ _id: storeId });
+      }
+      if (!store) {
+        store = await Store.findOne({ code: storeId });
+      }
       
       if (!store) {
         const error = new Error('Store not found');
@@ -883,10 +1477,15 @@ class RosterService {
       const endDate = new Date(startDate);
       endDate.setDate(endDate.getDate() + 6);
 
-      // Get store details and settings
-      const store = await Store.findOne({ 
-        $or: [{ _id: storeId }, { code: storeId }] 
-      });
+      // Get store details and settings - handle both ObjectId and store code strings
+      // CRITICAL: Filter by tenantId for tenant isolation
+      let store;
+      if (mongoose.Types.ObjectId.isValid(storeId)) {
+        store = await Store.findOne({ _id: storeId, tenantId: tenantId });
+      }
+      if (!store) {
+        store = await Store.findOne({ code: storeId, tenantId: tenantId });
+      }
       
       if (!store) {
         const error = new Error('Store not found');
@@ -900,19 +1499,30 @@ class RosterService {
       const maxAllowed = storeSetting.maximumAllowed || 10;
       const optimal = storeSetting.optimalStaff || 7;
 
-      // Get roster entries
+      // Get roster entries with tenant isolation
       const rosters = await Roster.find({
         $or: [{ store: store._id }, { storeId: store.code }],
         date: {
           $gte: startDate,
           $lte: endDate
-        }
+        },
+        tenantId: tenantId // CRITICAL: Filter by tenantId
       })
-        .populate('employee', 'firstName lastName email phone employeeId')
+        .populate({
+          path: 'employee',
+          select: 'firstName lastName email phone employeeId',
+          match: { tenantId: tenantId } // CRITICAL: Filter employees by tenantId
+        })
         .sort({ date: 1, shiftStart: 1 })
         .lean();
 
-      // Group by date and calculate summary
+      // Filter out rosters where employee populate returned null (due to tenant mismatch)
+      const filteredRosters = rosters.filter(roster => 
+        roster.employee && 
+        (roster.employee.tenantId === tenantId || !roster.employee.tenantId)
+      );
+
+      // Group by date and calculate summary - use filteredRosters for tenant isolation
       const dailyRoster = {};
       const staffingSummary = {};
       const shiftDistribution = { MORNING: 0, EVENING: 0, NIGHT: 0, FULL_DAY: 0, OFF: 0 };
@@ -931,7 +1541,8 @@ class RosterService {
         };
       }
 
-      rosters.forEach(roster => {
+      // Use filteredRosters for tenant isolation
+      filteredRosters.forEach(roster => {
         const dateStr = new Date(roster.date).toISOString().split('T')[0];
         if (dailyRoster[dateStr]) {
           dailyRoster[dateStr].push({
@@ -979,6 +1590,169 @@ class RosterService {
       };
     } catch (error) {
       logger.error('Error in getEnhancedWeeklyRoster service', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Sync roster with attendance
+   * Creates/updates attendance records based on roster entries for a date
+   * @param {string} date - Date in YYYY-MM-DD format
+   * @param {string} employeeId - Optional employee ID to sync only that employee
+   * @param {string} tenantId - Tenant ID
+   * @param {string} userId - User ID who initiated the sync
+   * @returns {Promise<Object>} Sync results
+   */
+  async syncAttendance(date, employeeId = null, tenantId = 'default', userId = null) {
+    try {
+      // Validate date
+      const dateObj = new Date(date);
+      if (isNaN(dateObj.getTime())) {
+        throw new Error('Invalid date format. Use YYYY-MM-DD');
+      }
+
+      // Get roster for the date
+      const filters = {
+        startDate: date,
+        endDate: date,
+        employeeId: employeeId || undefined,
+        tenantId
+      };
+
+      const rosterResult = await this.getRoster(filters, 1, 1000); // Get all rosters for the date
+      const rosterEntries = rosterResult.data || rosterResult.roster || [];
+
+      if (rosterEntries.length === 0) {
+        const error = new Error('No roster found for the specified date');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      logger.info('Syncing attendance from roster', {
+        date,
+        employeeId,
+        tenantId,
+        rosterCount: rosterEntries.length
+      });
+
+      // Sync each roster entry with attendance
+      const results = [];
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const roster of rosterEntries) {
+        try {
+          // Skip OFF shifts
+          if (roster.shift === 'OFF') {
+            results.push({
+              employeeId: roster.employeeId,
+              employeeName: roster.employeeName,
+              status: 'skipped',
+              message: 'Shift is OFF, skipping attendance sync'
+            });
+            continue;
+          }
+
+          // Prepare attendance data from roster
+          const attendanceData = {
+            employeeId: roster.employeeId,
+            date: roster.date,
+            storeId: roster.storeId,
+            shift: roster.shift,
+            shiftStart: roster.shiftStart,
+            shiftEnd: roster.shiftEnd,
+            source: 'roster_sync',
+            rosterId: roster.id
+          };
+
+          // Call attendance service to create/update attendance
+          // Use internal service call (not HTTP) if possible, otherwise use HTTP
+          try {
+            const attendanceResponse = await axios.post(
+              `${ATTENDANCE_SERVICE_URL}/api/attendance`,
+              attendanceData,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-tenant-id': tenantId,
+                  ...(token ? { 'Authorization': token.startsWith('Bearer ') ? token : `Bearer ${token}` } : {})
+                },
+                timeout: 10000
+              }
+            );
+
+            if (attendanceResponse.data && attendanceResponse.data.success) {
+              successCount++;
+              results.push({
+                employeeId: roster.employeeId,
+                employeeName: roster.employeeName,
+                status: 'success',
+                message: 'Attendance synced successfully',
+                attendanceId: attendanceResponse.data.data?._id || attendanceResponse.data.data?.id
+              });
+            } else {
+              failCount++;
+              results.push({
+                employeeId: roster.employeeId,
+                employeeName: roster.employeeName,
+                status: 'failed',
+                message: attendanceResponse.data?.message || 'Failed to sync attendance',
+                error: attendanceResponse.data?.error
+              });
+            }
+          } catch (attendanceError) {
+            failCount++;
+            const errorMessage = attendanceError.response?.data?.message || 
+                                attendanceError.response?.data?.error || 
+                                attendanceError.message || 
+                                'Failed to sync attendance';
+            
+            results.push({
+              employeeId: roster.employeeId,
+              employeeName: roster.employeeName,
+              status: 'failed',
+              message: errorMessage,
+              error: attendanceError.response?.data?.error || errorMessage
+            });
+
+            logger.warn('Failed to sync attendance for roster entry', {
+              employeeId: roster.employeeId,
+              error: errorMessage
+            });
+          }
+        } catch (rosterError) {
+          failCount++;
+          results.push({
+            employeeId: roster.employeeId,
+            employeeName: roster.employeeName,
+            status: 'failed',
+            message: rosterError.message || 'Failed to process roster entry',
+            error: rosterError.message
+          });
+
+          logger.error('Error processing roster entry', {
+            employeeId: roster.employeeId,
+            error: rosterError.message
+          });
+        }
+      }
+
+      return {
+        success: true,
+        date,
+        total: rosterEntries.length,
+        successful: successCount,
+        failed: failCount,
+        skipped: rosterEntries.length - successCount - failCount,
+        results
+      };
+    } catch (error) {
+      logger.error('Error in syncAttendance service', { 
+        error: error.message,
+        date,
+        employeeId,
+        tenantId
+      });
       throw error;
     }
   }

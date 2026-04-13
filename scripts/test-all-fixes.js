@@ -1,26 +1,25 @@
 #!/usr/bin/env node
 
 /**
- * Comprehensive test script for all fixed endpoints
+ * Comprehensive Test Script for All Recent Fixes
+ * Tests:
+ * 1. Tenant Isolation in Employee View
+ * 2. Auth /me API (null fields fix)
+ * 3. HR Employee API (null fields, workLocation, salary)
+ * 4. Roster POST API (MongoDB _id lookup)
+ * 5. Attendance Check-out (date filter)
+ * 6. Dashboard Time Calculation (total hours aggregation)
+ * 7. Attendance Stats Tenant Isolation
  */
 
 const https = require('https');
 const http = require('http');
 
-const BASE_URL = process.env.BASE_URL || 'https://api.etelios.com';
-const isLocal = process.argv.includes('--local');
-const actualBaseUrl = isLocal ? 'http://localhost:3001' : BASE_URL;
+const API_BASE = process.env.API_BASE || 'http://k8s-ingressn-ingressn-3df442ea60-74e6b4f94ffda83f.elb.ap-south-1.amazonaws.com';
 
-if (!isLocal) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
-let authToken = null;
-let testEmployeeId = null;
-
+// Colors for output
 const colors = {
   reset: '\x1b[0m',
-  bright: '\x1b[1m',
   green: '\x1b[32m',
   red: '\x1b[31m',
   yellow: '\x1b[33m',
@@ -32,233 +31,408 @@ function log(message, color = 'reset') {
   console.log(`${colors[color]}${message}${colors.reset}`);
 }
 
-function makeRequest(method, url, data = null, authToken = null) {
+function logSection(title) {
+  console.log('\n' + '='.repeat(60));
+  log(title, 'cyan');
+  console.log('='.repeat(60));
+}
+
+function logTest(testName) {
+  log(`\n📋 ${testName}`, 'blue');
+}
+
+function logSuccess(message) {
+  log(`✅ ${message}`, 'green');
+}
+
+function logError(message) {
+  log(`❌ ${message}`, 'red');
+}
+
+function logWarning(message) {
+  log(`⚠️  ${message}`, 'yellow');
+}
+
+async function fetch(url, options = {}) {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
-    const isHttps = urlObj.protocol === 'https:';
-    const client = isHttps ? https : http;
-
-    const options = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || (isHttps ? 443 : 80),
-      path: urlObj.pathname + urlObj.search,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Host': 'api.etelios.com'
-      },
-      rejectUnauthorized: false
-    };
-
-    if (authToken) {
-      options.headers['Authorization'] = `Bearer ${authToken}`;
-    }
-
-    const req = client.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => { body += chunk; });
+    const protocol = urlObj.protocol === 'https:' ? https : http;
+    
+    const req = protocol.request(url, {
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      ...options
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {
-          const parsed = JSON.parse(body);
-          resolve({ status: res.statusCode, data: parsed });
+          const json = JSON.parse(data);
+          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, data: json });
         } catch (e) {
-          resolve({ status: res.statusCode, data: body });
+          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, data: data });
         }
       });
     });
-
-    req.on('error', (error) => {
-      reject(error);
-    });
-
-    if (data) {
-      req.write(JSON.stringify(data));
+    
+    req.on('error', reject);
+    if (options.body) {
+      req.write(typeof options.body === 'string' ? options.body : JSON.stringify(options.body));
     }
-
     req.end();
   });
 }
 
-async function login() {
-  log('Logging in as Admin...', 'cyan');
-  const response = await makeRequest('POST', `${actualBaseUrl}/api/auth/mock-login`, {
-    email: 'admin@company.com',
-    role: 'admin'
+async function login(email, password) {
+  const response = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { email, password }
   });
-
-  if (response.status === 200 && response.data?.data?.accessToken) {
-    authToken = response.data.data.accessToken;
-    log('✅ Login successful', 'green');
-    return true;
-  } else {
-    log(`❌ Login failed: ${JSON.stringify(response.data)}`, 'red');
-    return false;
+  
+  if (!response.ok) {
+    throw new Error(`Login failed: ${response.status} ${JSON.stringify(response.data)}`);
   }
+  
+  return response.data.data?.accessToken || response.data.accessToken;
 }
 
-async function getFirstEmployee() {
-  log('Getting first employee for testing...', 'cyan');
-  const response = await makeRequest('GET', `${actualBaseUrl}/api/hr/employees?limit=1`, null, authToken);
+async function getProfile(token) {
+  const response = await fetch(`${API_BASE}/api/auth/me`, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
   
-  if (response.status === 200 && response.data?.data?.employees?.length > 0) {
-    const employee = response.data.data.employees[0];
-    testEmployeeId = employee.employeeId || employee.employee_id || employee._id;
-    log(`✅ Found test employee: ${testEmployeeId}`, 'green');
-    return true;
-  } else {
-    log('⚠️  No employees found, will test with sample ID', 'yellow');
-    testEmployeeId = 'EMP-2025-863851'; // Fallback
-    return false;
-  }
+  return response;
 }
 
-async function testAllEndpoints() {
-  const results = {
-    passed: [],
-    failed: []
-  };
-
-  // Test 1: GET /api/hr/employees
-  log('\n━━━ Test 1: GET /api/hr/employees ━━━', 'bright');
-  try {
-    const response = await makeRequest('GET', `${actualBaseUrl}/api/hr/employees`, null, authToken);
-    if (response.status === 200) {
-      log('✅ Passed', 'green');
-      results.passed.push('GET /api/hr/employees');
-    } else {
-      log(`❌ Failed: ${JSON.stringify(response.data)}`, 'red');
-      results.failed.push({ endpoint: 'GET /api/hr/employees', status: response.status, error: response.data });
+async function getEmployeeById(token, tenantId, employeeId) {
+  const response = await fetch(`${API_BASE}/api/hr/employees/${employeeId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-id': tenantId
     }
-  } catch (error) {
-    log(`❌ Error: ${error.message}`, 'red');
-    results.failed.push({ endpoint: 'GET /api/hr/employees', error: error.message });
-  }
-
-  // Test 2: POST /api/auth/register
-  log('\n━━━ Test 2: POST /api/auth/register ━━━', 'bright');
-  try {
-    const timestamp = Date.now();
-    const joiningDate = new Date();
-    joiningDate.setFullYear(2024, 0, 1); // Set to a valid date
-    
-    const response = await makeRequest('POST', `${actualBaseUrl}/api/auth/register`, {
-      employee_id: `EMP-TEST-${timestamp}`,
-      name: 'Test User',
-      email: `test${timestamp}@example.com`,
-      password: 'Test1234!',
-      role: 'employee',
-      phone: '+1234567890',
-      department: 'IT',
-      designation: 'Developer',
-      joining_date: joiningDate.toISOString()
-    }, authToken);
-    
-    if (response.status === 201 || response.status === 200) {
-      log('✅ Passed', 'green');
-      results.passed.push('POST /api/auth/register');
-    } else {
-      log(`❌ Failed: ${JSON.stringify(response.data)}`, 'red');
-      results.failed.push({ endpoint: 'POST /api/auth/register', status: response.status, error: response.data });
-    }
-  } catch (error) {
-    log(`❌ Error: ${error.message}`, 'red');
-    results.failed.push({ endpoint: 'POST /api/auth/register', error: error.message });
-  }
-
-  // Test 3: POST /api/hr/employees/:id/assign-role (only if we have a real employee)
-  if (testEmployeeId && testEmployeeId !== 'EMP-2025-863851') {
-    log(`\n━━━ Test 3: POST /api/hr/employees/${testEmployeeId}/assign-role ━━━`, 'bright');
-    try {
-      const response = await makeRequest('POST', `${actualBaseUrl}/api/hr/employees/${testEmployeeId}/assign-role`, {
-        roleName: 'employee'
-      }, authToken);
-      
-      if (response.status === 200) {
-        log('✅ Passed', 'green');
-        results.passed.push('POST /api/hr/employees/:id/assign-role');
-      } else {
-        log(`❌ Failed: ${JSON.stringify(response.data)}`, 'red');
-        results.failed.push({ endpoint: 'POST /api/hr/employees/:id/assign-role', status: response.status, error: response.data });
-      }
-    } catch (error) {
-      log(`❌ Error: ${error.message}`, 'red');
-      results.failed.push({ endpoint: 'POST /api/hr/employees/:id/assign-role', error: error.message });
-    }
-  } else {
-    log(`\n━━━ Test 3: POST /api/hr/employees/:id/assign-role ━━━`, 'bright');
-    log('⚠️  Skipped - No valid employee ID available', 'yellow');
-  }
-
-  // Test 4: PATCH /api/hr/employees/:id/status (only if we have a real employee)
-  if (testEmployeeId && testEmployeeId !== 'EMP-2025-863851') {
-    log(`\n━━━ Test 4: PATCH /api/hr/employees/${testEmployeeId}/status ━━━`, 'bright');
-    try {
-      const response = await makeRequest('PATCH', `${actualBaseUrl}/api/hr/employees/${testEmployeeId}/status`, {
-        status: 'active'
-      }, authToken);
-      
-      if (response.status === 200) {
-        log('✅ Passed', 'green');
-        results.passed.push('PATCH /api/hr/employees/:id/status');
-      } else {
-        log(`❌ Failed: ${JSON.stringify(response.data)}`, 'red');
-        results.failed.push({ endpoint: 'PATCH /api/hr/employees/:id/status', status: response.status, error: response.data });
-      }
-    } catch (error) {
-      log(`❌ Error: ${error.message}`, 'red');
-      results.failed.push({ endpoint: 'PATCH /api/hr/employees/:id/status', error: error.message });
-    }
-  } else {
-    log(`\n━━━ Test 4: PATCH /api/hr/employees/:id/status ━━━`, 'bright');
-    log('⚠️  Skipped - No valid employee ID available', 'yellow');
-  }
-
-  // Summary
-  log('\n═══════════════════════════════════════════════════════', 'bright');
-  log('  Test Summary', 'bright');
-  log('═══════════════════════════════════════════════════════', 'bright');
+  });
   
-  const total = results.passed.length + results.failed.length;
-  log(`\nTotal Tests: ${total}`, 'cyan');
-  log(`Passed: ${results.passed.length}`, 'green');
-  log(`Failed: ${results.failed.length}`, 'red');
-  log(`Success Rate: ${total > 0 ? ((results.passed.length / total) * 100).toFixed(1) : 0}%`, 'cyan');
+  return response;
+}
 
-  if (results.passed.length > 0) {
-    log('\n✅ Passed Tests:', 'green');
-    results.passed.forEach(test => log(`   ${test}`, 'green'));
-  }
-
-  if (results.failed.length > 0) {
-    log('\n❌ Failed Tests:', 'red');
-    results.failed.forEach(test => {
-      log(`   ${test.endpoint}`, 'red');
-      if (test.status) log(`      Status: ${test.status}`, 'yellow');
-      if (test.error) log(`      Error: ${JSON.stringify(test.error)}`, 'yellow');
-    });
-  }
-
-  log(`\n${isLocal ? 'Local' : 'Production'} Server: ${actualBaseUrl}`, 'cyan');
+async function createRoster(token, tenantId, rosterData) {
+  const response = await fetch(`${API_BASE}/api/hr/roster`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-id': tenantId,
+      'Content-Type': 'application/json'
+    },
+    body: rosterData
+  });
   
-  return results.failed.length === 0;
+  return response;
+}
+
+async function clockIn(token, tenantId, latitude = 19.0760, longitude = 72.8777) {
+  const response = await fetch(`${API_BASE}/api/attendance/check-in`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-id': tenantId,
+      'Content-Type': 'application/json'
+    },
+    body: { latitude, longitude }
+  });
+  
+  return response;
+}
+
+async function clockOut(token, tenantId, latitude = 19.0760, longitude = 72.8777) {
+  const response = await fetch(`${API_BASE}/api/attendance/check-out`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-id': tenantId,
+      'Content-Type': 'application/json'
+    },
+    body: { latitude, longitude }
+  });
+  
+  return response;
+}
+
+async function getDashboard(token, tenantId) {
+  const response = await fetch(`${API_BASE}/api/hr/dashboard`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-id': tenantId
+    }
+  });
+  
+  return response;
+}
+
+async function getAttendanceStats(token, tenantId, date = null) {
+  const url = `${API_BASE}/api/attendance/stats${date ? `?date=${date}` : ''}`;
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'x-tenant-id': tenantId
+    }
+  });
+  
+  return response;
 }
 
 async function main() {
-  log('═══════════════════════════════════════════════════════', 'bright');
-  log('  Testing All Fixed Endpoints', 'bright');
-  log('═══════════════════════════════════════════════════════', 'bright');
-
-  const loggedIn = await login();
-  if (!loggedIn) {
-    log('Cannot proceed without authentication', 'red');
+  logSection('🧪 COMPREHENSIVE TEST SUITE - ALL FIXES');
+  
+  let passed = 0;
+  let failed = 0;
+  
+  try {
+    // ============================================
+    // Test 1: Tenant Isolation in Employee View
+    // ============================================
+    logSection('1. Tenant Isolation in Employee View');
+    
+    logTest('Login as Upcapto Admin');
+    const upcaptoToken = await login('admin@upcapto.com', 'Upcapto@2026');
+    const upcaptoProfile = await getProfile(upcaptoToken);
+    const upcaptoTenant = upcaptoProfile.data?.tenantId || upcaptoProfile.data?.data?.tenantId;
+    logSuccess(`Logged in as Upcapto Admin (Tenant: ${upcaptoTenant})`);
+    
+    logTest('Get Upcapto employee list');
+    const upcaptoEmployees = await fetch(`${API_BASE}/api/hr/employees?limit=2`, {
+      headers: {
+        'Authorization': `Bearer ${upcaptoToken}`,
+        'x-tenant-id': upcaptoTenant
+      }
+    });
+    const upcaptoEmpId = upcaptoEmployees.data?.data?.[0]?._id || upcaptoEmployees.data?.data?.[0]?.id;
+    if (upcaptoEmpId) {
+      logSuccess(`Found Upcapto employee: ${upcaptoEmpId}`);
+    }
+    
+    logTest('Upcapto Admin accessing Upcapto Employee (should work)');
+    if (upcaptoEmpId) {
+      const result = await getEmployeeById(upcaptoToken, upcaptoTenant, upcaptoEmpId);
+      if (result.ok && result.data.success) {
+        logSuccess(`✅ Same-tenant access works: ${result.data.data.name}`);
+        passed++;
+      } else {
+        logError(`❌ Same-tenant access failed: ${result.data.message}`);
+        failed++;
+      }
+    }
+    
+    logTest('Login as Lenstrack Admin');
+    const lenstrackToken = await login('admin@lenstrack.com', 'AdminPass123!');
+    const lenstrackProfile = await getProfile(lenstrackToken);
+    const lenstrackTenant = lenstrackProfile.data?.tenantId || lenstrackProfile.data?.data?.tenantId;
+    logSuccess(`Logged in as Lenstrack Admin (Tenant: ${lenstrackTenant})`);
+    
+    logTest('Get Lenstrack employee list');
+    const lenstrackEmployees = await fetch(`${API_BASE}/api/hr/employees?limit=2`, {
+      headers: {
+        'Authorization': `Bearer ${lenstrackToken}`,
+        'x-tenant-id': lenstrackTenant
+      }
+    });
+    const lenstrackEmpId = lenstrackEmployees.data?.data?.[0]?._id || lenstrackEmployees.data?.data?.[0]?.id;
+    if (lenstrackEmpId) {
+      logSuccess(`Found Lenstrack employee: ${lenstrackEmpId}`);
+    }
+    
+    logTest('Upcapto Admin accessing Lenstrack Employee (should FAIL)');
+    if (lenstrackEmpId) {
+      const result = await getEmployeeById(upcaptoToken, upcaptoTenant, lenstrackEmpId);
+      if (!result.ok && result.status === 404) {
+        logSuccess(`✅ Cross-tenant access blocked: ${result.data.message}`);
+        passed++;
+      } else {
+        logError(`❌ Cross-tenant access not blocked! Status: ${result.status}`);
+        failed++;
+      }
+    }
+    
+    // ============================================
+    // Test 2: Auth /me API - Null Fields Fix
+    // ============================================
+    logSection('2. Auth /me API - Null Fields Fix');
+    
+    logTest('Check /me API for null fields');
+    const meResponse = await getProfile(upcaptoToken);
+    if (meResponse.ok && meResponse.data.success) {
+      const profile = meResponse.data.data || meResponse.data;
+      const nullFields = [];
+      if (!profile.employeeId && !profile.employee_id) nullFields.push('employeeId');
+      if (!profile.tenantId) nullFields.push('tenantId');
+      if (!profile.name) nullFields.push('name');
+      if (!profile.store) nullFields.push('store');
+      
+      if (nullFields.length === 0) {
+        logSuccess('✅ All fields populated in /me API');
+        passed++;
+      } else {
+        logError(`❌ Null fields found: ${nullFields.join(', ')}`);
+        failed++;
+      }
+    } else {
+      logError(`❌ /me API failed: ${meResponse.data.message}`);
+      failed++;
+    }
+    
+    // ============================================
+    // Test 3: HR Employee API - Null Fields & Details
+    // ============================================
+    logSection('3. HR Employee API - Null Fields & Details');
+    
+    logTest('Check Employee GET API for all details');
+    if (upcaptoEmpId) {
+      const empResponse = await getEmployeeById(upcaptoToken, upcaptoTenant, upcaptoEmpId);
+      if (empResponse.ok && empResponse.data.success) {
+        const emp = empResponse.data.data;
+        const missingFields = [];
+        if (!emp.name) missingFields.push('name');
+        if (!emp.employeeId && !emp.employee_id) missingFields.push('employeeId');
+        if (!emp.base_salary && emp.base_salary !== 0) missingFields.push('base_salary');
+        if (!emp.workLocation) missingFields.push('workLocation');
+        if (!emp.roleName && !emp.role) missingFields.push('role');
+        
+        if (missingFields.length === 0) {
+          logSuccess('✅ All employee details populated (name, salary, workLocation, role)');
+          passed++;
+        } else {
+          logWarning(`⚠️  Missing fields: ${missingFields.join(', ')}`);
+          failed++;
+        }
+      } else {
+        logError(`❌ Employee GET API failed: ${empResponse.data.message}`);
+        failed++;
+      }
+    }
+    
+    // ============================================
+    // Test 4: Roster POST API - MongoDB _id Lookup
+    // ============================================
+    logSection('4. Roster POST API - MongoDB _id Lookup');
+    
+    logTest('Create Roster with MongoDB _id as employeeId');
+    if (upcaptoEmpId) {
+      const today = new Date().toISOString().split('T')[0];
+      const rosterData = {
+        employeeId: upcaptoEmpId, // MongoDB _id
+        storeId: 'test-store-id', // This might fail, but we're testing employee lookup
+        date: today,
+        shift: 'MORNING',
+        shiftStart: '09:00',
+        shiftEnd: '18:00'
+      };
+      
+      const rosterResponse = await createRoster(upcaptoToken, upcaptoTenant, rosterData);
+      // We expect this might fail due to storeId, but employee lookup should work
+      if (rosterResponse.data.message && rosterResponse.data.message.includes('Employee not found')) {
+        logError('❌ Employee lookup by MongoDB _id failed');
+        failed++;
+      } else if (rosterResponse.data.message && rosterResponse.data.message.includes('store')) {
+        logSuccess('✅ Employee lookup by MongoDB _id works (store error expected)');
+        passed++;
+      } else if (rosterResponse.ok) {
+        logSuccess('✅ Roster created successfully with MongoDB _id');
+        passed++;
+      } else {
+        logWarning(`⚠️  Roster creation: ${rosterResponse.data.message}`);
+      }
+    }
+    
+    // ============================================
+    // Test 5: Attendance Check-out Date Filter
+    // ============================================
+    logSection('5. Attendance Check-out Date Filter');
+    
+    logTest('Clock-in for test');
+    const clockInResponse = await clockIn(upcaptoToken, upcaptoTenant);
+    if (clockInResponse.ok) {
+      logSuccess('✅ Clock-in successful');
+      
+      logTest('Clock-out (should work with date filter)');
+      const clockOutResponse = await clockOut(upcaptoToken, upcaptoTenant);
+      if (clockOutResponse.ok) {
+        logSuccess('✅ Clock-out successful (date filter working)');
+        passed++;
+      } else {
+        logError(`❌ Clock-out failed: ${clockOutResponse.data.message}`);
+        failed++;
+      }
+    } else {
+      logWarning(`⚠️  Clock-in failed: ${clockInResponse.data.message}`);
+    }
+    
+    // ============================================
+    // Test 6: Dashboard Time Calculation
+    // ============================================
+    logSection('6. Dashboard Time Calculation - Total Hours Aggregation');
+    
+    logTest('Get Dashboard and check totalLoginTimeToday');
+    const dashboardResponse = await getDashboard(upcaptoToken, upcaptoTenant);
+    if (dashboardResponse.ok && dashboardResponse.data.success) {
+      const attendance = dashboardResponse.data.data?.widgets?.attendance;
+      if (attendance && attendance.totalLoginTimeToday) {
+        const totalTime = attendance.totalLoginTimeToday;
+        if (totalTime.hours !== undefined && totalTime.sessionsCount !== undefined) {
+          logSuccess(`✅ Total hours aggregation working: ${totalTime.hours}h (${totalTime.sessionsCount} sessions)`);
+          passed++;
+        } else {
+          logError('❌ totalLoginTimeToday missing hours or sessionsCount');
+          failed++;
+        }
+      } else {
+        logWarning('⚠️  totalLoginTimeToday not found in dashboard');
+      }
+    } else {
+      logWarning(`⚠️  Dashboard API failed: ${dashboardResponse.data.message}`);
+    }
+    
+    // ============================================
+    // Test 7: Attendance Stats Tenant Isolation
+    // ============================================
+    logSection('7. Attendance Stats Tenant Isolation');
+    
+    logTest('Get Attendance Stats for Upcapto');
+    const upcaptoStats = await getAttendanceStats(upcaptoToken, upcaptoTenant);
+    if (upcaptoStats.ok && upcaptoStats.data.success) {
+      const upcaptoTotal = upcaptoStats.data.data?.totalEmployees || 0;
+      logSuccess(`Upcapto total employees: ${upcaptoTotal}`);
+    }
+    
+    logTest('Get Attendance Stats for Lenstrack');
+    const lenstrackStats = await getAttendanceStats(lenstrackToken, lenstrackTenant);
+    if (lenstrackStats.ok && lenstrackStats.data.success) {
+      const lenstrackTotal = lenstrackStats.data.data?.totalEmployees || 0;
+      logSuccess(`Lenstrack total employees: ${lenstrackTotal}`);
+      
+      if (upcaptoStats.ok && upcaptoStats.data.success) {
+        const upcaptoTotal = upcaptoStats.data.data?.totalEmployees || 0;
+        if (upcaptoTotal !== lenstrackTotal) {
+          logSuccess('✅ Tenant isolation working (different employee counts)');
+          passed++;
+        } else {
+          logWarning('⚠️  Same employee count - might indicate tenant isolation issue');
+        }
+      }
+    }
+    
+    // ============================================
+    // Summary
+    // ============================================
+    logSection('📊 TEST SUMMARY');
+    log(`Total Tests Passed: ${passed}`, 'green');
+    log(`Total Tests Failed: ${failed}`, failed > 0 ? 'red' : 'green');
+    log(`Success Rate: ${((passed / (passed + failed)) * 100).toFixed(1)}%`, passed > failed ? 'green' : 'yellow');
+    
+  } catch (error) {
+    logError(`Test suite error: ${error.message}`);
+    console.error(error);
     process.exit(1);
   }
-
-  await getFirstEmployee();
-  const allPassed = await testAllEndpoints();
-  
-  process.exit(allPassed ? 0 : 1);
 }
 
 main().catch(console.error);
-

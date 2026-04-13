@@ -146,3 +146,17 @@ key.pem
 *.SELFIE*.md
 SELFIE_UPLOAD_COMPLETE.md
 ATTENDANCE_SELFIE_GUIDE.md
+
+# Generated cleanup artifacts
+artifacts/logs/
+artifacts/reports-json/
+artifacts/text-dumps/
+
+# Local DocumentDB secret material
+documentdb-password.txt
+documentdb-connection-info.txt
+
+# Local tooling / junk (never push)
+.docker-tmp/
+.npm-cache/
+.tmp_analytics*.txt

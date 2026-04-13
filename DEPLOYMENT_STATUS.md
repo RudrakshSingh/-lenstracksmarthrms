@@ -1,99 +1,70 @@
-# Deployment Status
+# 🚀 Deployment Status
 
-**Date**: 2026-01-02  
-**Action**: Login API Fix - Code Pushed to Azure DevOps
+## ✅ Completed Steps
 
----
-
-## ✅ Code Changes Pushed
-
-### Files Modified
-1. `microservices/auth-service/src/controllers/authController.js`
-   - Now accepts both `email` and `emailOrEmployeeId` fields
-
-2. `microservices/auth-service/src/routes/auth.routes.js`
-   - Updated login schema to validate both fields
-
-3. `LOGIN_API_FIX.md`
-   - Documentation of the fix
-
-4. `ACR_URL_FIX_STATUS.md`
-   - ACR URL fix verification
+1. ✅ **Fixed Syntax Error** - Removed duplicate `else` in `rbac.middleware.js`
+2. ✅ **Built Docker Image** - Image built successfully
+3. ✅ **Pushed to ECR** - Image pushed to AWS ECR
+4. ✅ **Restarted Deployment** - hr-service deployment restarted
 
 ---
 
-## 🔄 Next Steps
+## ⏳ Current Status
 
-### 1. Pipeline Execution
-- ⚠️ **Required**: Rerun Azure DevOps pipeline
-- ⚠️ **Service**: auth-service needs to be rebuilt and deployed
+**Deployment in progress...**
 
-### 2. Deployment Verification
-After pipeline completes:
+Rollout is happening. New pods are starting with the fixed code.
+
+---
+
+## ⏱️ Wait Time
+
+**Expected:** 2-5 minutes for:
+- Old pods to terminate
+- New pods to start
+- Routes to register
+- Health checks to pass
+
+---
+
+## 🧪 Test Commands (After 2-3 minutes)
+
 ```bash
-# Check auth-service pods
-kubectl get pods -n etelios-backend-prod | grep auth-service
-
-# Check auth-service logs
-kubectl logs -n etelios-backend-prod <auth-service-pod-name> --tail=50
-```
-
-### 3. Test Login API
-```bash
-# Test with 'email' field (frontend format)
-curl -k -X POST "https://98.70.245.87/api/auth/login" \
-  -H "Host: api.etelios.com" \
+# Get token
+TOKEN=$(curl -sk -X POST https://api.etelios.com/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@etelios.com",
-    "password": "Admin@123456"
-  }'
+  -d '{"email":"admin@lenstrack.com","password":"AdminPass123!"}' \
+  | jq -r '.token')
 
-# Test with 'emailOrEmployeeId' field (backend format)
-curl -k -X POST "https://98.70.245.87/api/auth/login" \
-  -H "Host: api.etelios.com" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "emailOrEmployeeId": "admin@etelios.com",
-    "password": "Admin@123456"
-  }'
+# Test APIs
+curl -sk https://api.etelios.com/api/hr/stores \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-tenant-id: lenstrack"
+
+curl -sk https://api.etelios.com/api/hr/employees \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-tenant-id: lenstrack"
+
+curl -sk https://api.etelios.com/api/hr/departments \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-tenant-id: lenstrack"
 ```
 
 ---
 
-## 📋 Admin Credentials
+## 📊 Check Status
 
-- **Email**: `admin@etelios.com`
-- **Password**: `Admin@123456`
-- **Employee ID**: `ADMIN-001`
-
----
-
-## ✅ Expected Results After Deployment
-
-1. ✅ Frontend login should work with `email` field
-2. ✅ Backend login should work with `emailOrEmployeeId` field
-3. ✅ Both formats should be accepted
-4. ✅ Password validation should work correctly
-
----
-
-## 🔍 Monitoring
-
-### Check Pipeline Status
-- Azure DevOps portal → Pipelines → Latest run
-
-### Check Deployment Status
 ```bash
-kubectl rollout status deployment/auth-service -n etelios-backend-prod
-```
+# Check pods
+kubectl get pods -n etelios-prod -l app=hr-service
 
-### Check Service Health
-```bash
-curl -k https://98.70.245.87/api/auth/health -H "Host: api.etelios.com"
+# Check logs for route loading
+kubectl logs -n etelios-prod -l app=hr-service --tail=50 | grep "hr.routes.js loaded"
+
+# Check for errors
+kubectl logs -n etelios-prod -l app=hr-service --tail=50 | grep -i error
 ```
 
 ---
 
-**Status**: ✅ **Code Pushed - Pipeline Rerun Required**
-
+**Deployment in progress! Wait 2-3 minutes, then test!**

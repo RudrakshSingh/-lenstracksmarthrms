@@ -38,7 +38,7 @@ const logger = require('./config/logger');
 // Load SSL utility for HTTPS support
 let createServer;
 try {
-  const sslUtils = require('../../shared/utils/ssl');
+  const sslUtils = require('@etelios/shared/utils/ssl');
   createServer = sslUtils.createServer;
 } catch (error) {
   logger.warn('SSL utility not available, using HTTP only', { error: error.message });
@@ -56,10 +56,11 @@ app.use(helmet());
 // CORS configuration - explicitly allow localhost origins for frontend development
 const corsOrigin = process.env.CORS_ORIGIN || '*';
 const allowedOrigins = [
-  'https://98.70.245.87', // Azure IP
   'http://localhost:3000', // Frontend dev server
   'http://localhost:3002', // Frontend dev server (if proxying)
-  'http://localhost:3001'  // Frontend dev server (if proxying)
+  'http://localhost:3001', // Frontend dev server (if proxying)
+  'http://localhost:5173', // Vite dev server
+  'http://localhost:8080'  // Alternative dev server
 ];
 
 app.use(cors({
@@ -88,21 +89,38 @@ app.use(cors({
   maxAge: 86400 // 24 hours for preflight caching
 }));
 
-// Rate limiting - optimized for performance
+// Rate limiting - Increased for testing and production
 const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // limit each IP to 1000 requests per windowMs
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 10000, // limit each IP to 10000 requests per windowMs (configurable via env)
   message: 'Too many requests from this IP',
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
-  // Skip rate limiting for health checks
+  // Skip rate limiting for health checks and authenticated admin users
   skip: (req) => {
-    return req.path === '/health' || req.path === '/api/auth/health' || req.path === '/api/auth/status';
+    // Skip for health checks
+    if (req.path === '/health' || req.path === '/api/auth/health' || req.path === '/api/auth/status') {
+      return true;
+    }
+    // Skip for authenticated admin users
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'hr')) {
+      return true;
+    }
+    return false;
   }
 });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Static permission matrix UI: off in production unless SERVE_PERMISSION_MATRIX_UI=1
+const pathMod = require('path');
+const servePermissionMatrixUi =
+  process.env.SERVE_PERMISSION_MATRIX_UI === '1' ||
+  (process.env.NODE_ENV !== 'production' && process.env.DISABLE_PERMISSION_MATRIX_UI !== '1');
+if (servePermissionMatrixUi) {
+  app.use(express.static(pathMod.join(__dirname, '../public')));
+}
 
 // Emergency Lock Middleware (applied globally)
 app.use(emergencyLockMiddleware);
@@ -120,7 +138,7 @@ const connectDB = async () => {
     // If not in environment, try Key Vault (only if enabled)
     if (!mongoUri && process.env.USE_KEY_VAULT === 'true') {
       try {
-        const keyVault = require('../../shared/utils/keyVault');
+        const keyVault = require('@etelios/shared/utils/keyVault');
         mongoUri = await keyVault.getSecret('MONGO_URI') || await keyVault.getSecret('MONGODB_URI');
       } catch (error) {
         logger.warn('Key Vault not available, falling back to default');
@@ -133,12 +151,13 @@ const connectDB = async () => {
       logger.warn('MONGODB_URI not set. Using local MongoDB. Set MONGODB_URI environment variable.');
     }
     
-    // Get target database name - use auth-db for auth service
-    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME || 'auth-db';
+    // Get target database name - use etelios (main database) where all users are stored
+    // Users are in the main etelios database, not in auth-db
+    let targetDbName = process.env.DB_NAME || process.env.MONGO_DB_NAME || 'etelios';
     
     // Ensure we're not using test database
     if (targetDbName.toLowerCase().includes('test')) {
-      targetDbName = 'auth-db';
+      targetDbName = 'etelios';
       logger.error('ERROR: DB_NAME contains "test"! Using main production database instead.', {
         provided: process.env.DB_NAME || process.env.MONGO_DB_NAME,
         using: targetDbName
@@ -153,29 +172,34 @@ const connectDB = async () => {
       uriSource: process.env.MONGODB_URI ? 'MONGODB_URI' : (process.env.MONGO_URI ? 'MONGO_URI' : 'fallback')
     });
     
-    // Determine if this is Cosmos DB (connection string contains cosmos.azure.com or documents.azure.com)
-    const isCosmosDB = mongoUri.includes('cosmos.azure.com') || mongoUri.includes('documents.azure.com');
+    // AWS MongoDB connection options (optimized for AWS DocumentDB or regular MongoDB)
+    // Check if this is AWS DocumentDB (connection string contains docdb.amazonaws.com)
+    const isDocumentDB = mongoUri.includes('docdb.amazonaws.com');
     
     const connectionOptions = {
-      serverSelectionTimeoutMS: 30000, // Increased to 30s for Azure
-      socketTimeoutMS: 60000, // Increased to 60s
-      connectTimeoutMS: 30000, // Explicit connect timeout
-      maxPoolSize: 10, // Maximum number of connections in pool
-      minPoolSize: 2, // Minimum number of connections in pool
+      serverSelectionTimeoutMS: 15000, // 15s for AWS
+      socketTimeoutMS: 45000, // 45s socket timeout for AWS
+      connectTimeoutMS: 15000, // 15s connection timeout for AWS
+      maxPoolSize: 50, // Increased for AWS (was 10)
+      minPoolSize: 10, // Increased for AWS (was 2)
       maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
-      retryWrites: false, // Cosmos DB does NOT support retryable writes
+      retryWrites: false, // DocumentDB doesn't support retryable writes
       retryReads: true,
-      dbName: targetDbName, // Explicitly set the database name
+      heartbeatFrequencyMS: 10000, // Detect dead connections faster
+      // Don't set dbName - use the database from the connection string (etelios)
+      // The connection string already specifies the database name
     };
     
-    // Azure Cosmos DB specific options (only if Cosmos DB)
-    if (isCosmosDB) {
-      // Use tls options instead of deprecated sslValidate for Node.js 22
+    // AWS DocumentDB specific options (only if DocumentDB)
+    if (isDocumentDB) {
+      // DocumentDB requires TLS
       connectionOptions.tls = true;
       connectionOptions.tlsInsecure = false; // Validate certificates
-      // Cosmos DB does NOT support retryable writes
-      connectionOptions.retryWrites = false;
-      logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
+      connectionOptions.tlsCAFile = process.env.DOCDB_TLS_CA_FILE || '/etc/ssl/certs/ca-cert.pem';
+      connectionOptions.retryWrites = false; // DocumentDB doesn't support retryable writes
+      logger.info('Connecting to AWS DocumentDB');
+    } else {
+      logger.info('Connecting to MongoDB on AWS');
     }
     
     await mongoose.connect(mongoUri, connectionOptions);
@@ -394,9 +418,58 @@ const startServer = async () => {
         businessLogic: 'active'
       });
     });
+
+    // GET /api route - API discovery endpoint
+    app.get('/api', (req, res) => {
+      res.json({
+        success: true,
+        service: 'auth-service',
+        message: 'API endpoint - use /api/auth/* for authentication endpoints',
+        timestamp: new Date().toISOString(),
+        endpoints: {
+          auth: {
+            login: 'POST /api/auth/login',
+            register: 'POST /api/auth/register',
+            logout: 'POST /api/auth/logout',
+            refresh: 'POST /api/auth/refresh-token',
+            profile: 'GET /api/auth/profile',
+            me: 'GET /api/auth/me',
+            status: 'GET /api/auth/status',
+            health: 'GET /api/auth/health'
+          }
+        },
+        note: 'For other services, use /api/hr/*, /api/attendance/*, etc.'
+      });
+    });
     
     // 404 handler for unmatched routes (MUST be after all routes are registered)
-    app.use((req, res) => {
+    // CRITICAL: Skip routes that should go to other services (let ingress handle them)
+    app.use((req, res, next) => {
+      // Special handling for /api/tenant/company - proxy to tenant-registry-service
+      if (req.path === '/api/tenant/company' && req.method === 'GET') {
+        // This route should be handled by tenant-registry-service via ingress
+        // But if it reaches here, let it pass through to ingress
+        return next();
+      }
+      
+      // Skip routes that should be handled by other services
+      const otherServiceRoutes = [
+        '/api/tenant',
+        '/api/tenants',
+        '/api/hr',
+        '/api/attendance',
+        '/api/payroll',
+        '/api/salary'
+      ];
+      
+      const shouldSkip = otherServiceRoutes.some(route => req.path.startsWith(route));
+      
+      if (shouldSkip) {
+        // Let ingress route this to the correct service
+        // Don't return 404 from auth-service
+        return next(); // This will eventually hit a 404, but it's better than auth-service catching it
+      }
+      
       res.status(404).json({
         success: false,
         message: `Route not found: ${req.method} ${req.path}`,

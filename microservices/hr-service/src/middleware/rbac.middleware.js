@@ -30,6 +30,7 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
         const normalizedAllowedRoles = allowedRoles.map(r => r.toLowerCase().replace(/-/g, ''));
         
         // SuperAdmin and Admin bypass all role checks
+        // HR bypasses role checks but still needs permission checks
         if (userRole === 'superadmin' || userRole === 'admin') {
           return next();
         }
@@ -37,8 +38,9 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
         // Check if user has required role
         const hasRole = normalizedAllowedRoles.some(role => 
           userRole === role || 
-          // Also check for HR variations
-          (role === 'hr' && userRole === 'hr') ||
+          // Also check for HR variations (case-insensitive)
+          (role === 'hr' && (userRole === 'hr' || userRole === 'HR')) ||
+          (role === 'HR' && (userRole === 'hr' || userRole === 'HR')) ||
           (role === 'manager' && userRole === 'manager')
         );
 
@@ -58,13 +60,21 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
         const userRole = (user.role || '').toLowerCase();
         const userPermissions = user.permissions || [];
         
-        // SuperAdmin and Admin have all permissions - skip permission check
-        if (userRole === 'superadmin' || userRole === 'admin') {
-          // Allow access for superadmin/admin
+        // SuperAdmin, Admin, and HR have all permissions - skip permission check
+        if (userRole === 'superadmin' || userRole === 'admin' || userRole === 'hr') {
+          // Allow access for superadmin/admin/hr
+          return next();
         } else {
+          // HR role has department, store, and employee management permissions by default
+          const hrDefaultPermissions = [
+            'department:create', 'department:update', 'department:delete', 'department:read',
+            'store:create', 'store:update', 'store:delete', 'store:read',
+            'user:create', 'user:update', 'user:read', 'role:assign'
+          ];
           const hasPermission = allowedPermissions.some(permission =>
             userPermissions.includes(permission) ||
-            userPermissions.includes('*') // Wildcard permission
+            userPermissions.includes('*') || // Wildcard permission
+            hrDefaultPermissions.includes(permission) // HR default permissions
           );
 
           if (!hasPermission) {
@@ -72,7 +82,8 @@ const requireRole = (allowedRoles = [], allowedPermissions = []) => {
               userId: user.id,
               role: user.role,
               required: allowedPermissions,
-              has: userPermissions
+              has: userPermissions,
+              hrDefaultPermissions
             });
             return res.status(403).json({
               success: false,
@@ -115,15 +126,28 @@ const requirePermission = (permission) => {
         });
       }
 
+      const userRole = (user.role || '').toLowerCase();
       const userPermissions = user.permissions || [];
+      
+      // SuperAdmin and Admin bypass all permission checks
+      if (userRole === 'superadmin' || userRole === 'admin') {
+        return next();
+      }
+      
       const hasPermission = userPermissions.includes(permission) || 
-                           userPermissions.includes('*') ||
-                           (user.role && (user.role.toLowerCase() === 'admin' || user.role.toLowerCase() === 'superadmin'));
+                           userPermissions.includes('*');
 
       if (!hasPermission) {
+        logger.warn('Permission denied', {
+          userId: user.id,
+          role: user.role,
+          required: permission,
+          has: userPermissions
+        });
         return res.status(403).json({
           success: false,
-          message: `Access denied. Required permission: ${permission}`
+          message: `Access denied. Required permission: ${permission}`,
+          code: 'INSUFFICIENT_PERMISSION'
         });
       }
 

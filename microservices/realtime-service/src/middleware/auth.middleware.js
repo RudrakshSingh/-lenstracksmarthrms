@@ -21,8 +21,8 @@ const authenticateSocket = (socket, next) => {
     const jwtSecret = process.env.JWT_SECRET || 'your-secret-key-change-this';
     const decoded = jwt.verify(token, jwtSecret);
 
-    // Attach user info to socket
-    socket.userId = decoded.userId || decoded._id || decoded.id;
+    // Attach user info to socket (align with jts-service JWT: sub = employee id)
+    socket.userId = decoded.userId || decoded.sub || decoded._id || decoded.id;
     socket.userEmail = decoded.email;
     socket.userRole = decoded.role;
     socket.tenantId = socket.handshake.auth.tenantId || decoded.tenantId || 'default';

@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
+  namespace: etelios-prod
   labels:
     app: redis
 spec:
@@ -31,13 +32,13 @@ spec:
           mountPath: /data
       volumes:
       - name: redis-storage
-        persistentVolumeClaim:
-          claimName: redis-pvc
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: redis
+  namespace: etelios-prod
   labels:
     app: redis
 spec:
@@ -47,14 +48,3 @@ spec:
   - port: 6379
     targetPort: 6379
   type: ClusterIP
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: redis-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi

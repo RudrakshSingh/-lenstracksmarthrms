@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const responseTime = require('response-time');
 const logger = require('./config/logger');
+const { getMonthlyPayrollSummary } = require('./utils/payrollServiceClient');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -181,6 +182,27 @@ app.get('/api/analytics/metrics', (req, res) => {
   });
 });
 
+// Analytics -> Payroll live summary integration endpoint
+app.get('/api/analytics/payroll/summary', async (req, res) => {
+  try {
+    const now = new Date();
+    const month = Number(req.query.month) || (now.getMonth() + 1);
+    const year = Number(req.query.year) || now.getFullYear();
+    const authorization = req.headers.authorization || req.headers.Authorization;
+    const tenantId = req.headers['x-tenant-id'] || req.headers['X-Tenant-Id'] || req.user?.tenantId;
+    const requestId = req.headers['x-request-id'] || req.headers['X-Request-ID'];
+    const payload = await getMonthlyPayrollSummary({ month, year, authorization, tenantId, requestId });
+    return res.status(200).json({
+      success: true,
+      message: payload ? 'Payroll summary fetched' : 'Payroll summary unavailable',
+      data: payload?.data || null
+    });
+  } catch (error) {
+    logger.error('Analytics payroll summary integration failed', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Analytics payroll summary integration failed' });
+  }
+});
+
 
 // Enhanced 404 handler with route information
 app.use((req, res) => {
@@ -231,6 +253,16 @@ const startServer = async () => {
   try {
     await connectDB();
     loadRoutes();
+    if (process.env.ENABLE_KAFKA_CONSUMERS === 'true') {
+      try {
+        // Lazy-load consumer so missing Kafka deps never crash service startup.
+        // eslint-disable-next-line global-require
+        const { startPayrollConsumers } = require('./consumers/payroll.consumer');
+        await startPayrollConsumers();
+      } catch (consumerError) {
+        logger.warn('Skipping payroll consumers startup', { error: consumerError.message });
+      }
+    }
     
     const PORT = process.env.PORT || 3014;
     

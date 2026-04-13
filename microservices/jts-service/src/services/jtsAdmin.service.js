@@ -178,9 +178,12 @@ class JtsAdminService {
   }
 
   /**
-   * Caller JWT: set auth_user_id on the employee row whose code matches JWT employee_id (normalized).
+   * Caller JWT: ensure catalog Employee row exists and set auth_user_id.
+   * 1) Match Employee.code to normalized JWT employee_id.
+   * 2) If missing and caller sent Authorization + HR_SERVICE_URL reachable, fetch HR profile
+   *    and create catalog row (needs at least one OrgNode for tenant).
    */
-  async bindEmployeeFromJwt(tenantId, user) {
+  async bindEmployeeFromJwt(tenantId, user, options = {}) {
     const uid = user?.id;
     if (!uid || !mongoose.Types.ObjectId.isValid(String(uid))) {
       throw new Error('JTS_AUTH_USER_ID_INVALID');
@@ -189,7 +192,51 @@ class JtsAdminService {
     const code = normalizeAuthEmployeeCode(user.employee_id || user.employeeId);
     if (!code) throw new Error('JTS_AUTH_EMPLOYEE_ID_MISSING');
 
-    const emp = await Employee.findOne({ tenant_id: tenantId, code });
+    let emp = await Employee.findOne({ tenant_id: tenantId, code });
+
+    if (!emp) {
+      const hrRow = await this._fetchHrEmployeeRowForBind(code, options);
+      if (hrRow) {
+        const fromHr = normalizeAuthEmployeeCode(hrRow.employeeId || hrRow.employee_id || hrRow.code);
+        if (fromHr && fromHr !== code) {
+          throw new Error('JTS_EMPLOYEE_CODE_AUTH_MISMATCH');
+        }
+        const org = await OrgNode.findOne({ tenant_id: tenantId }).sort({ created_at: 1 }).select('_id');
+        if (!org?._id) throw new Error('ORG_NODE_001_NOT_FOUND');
+
+        const email = String(hrRow.email || user.email || '')
+          .trim()
+          .toLowerCase();
+        if (!email) throw new Error('VALIDATION_ERROR');
+
+        const name =
+          String(hrRow.fullName || hrRow.name || hrRow.full_name || email.split('@')[0] || code).trim() || code;
+        const roleKey = String(hrRow.roleName || hrRow.role_key || user.role || 'EMPLOYEE').toUpperCase();
+
+        try {
+          emp = await Employee.create({
+            tenant_id: tenantId,
+            org_node_id: org._id,
+            code,
+            name,
+            email,
+            role_key: roleKey,
+            status: 'ACTIVE',
+            auth_user_id: authOid
+          });
+        } catch (e) {
+          if (e && e.code === 11000) {
+            emp = await Employee.findOne({
+              tenant_id: tenantId,
+              $or: [{ code }, { auth_user_id: authOid }, { email }]
+            });
+          } else {
+            throw e;
+          }
+        }
+      }
+    }
+
     if (!emp) throw new Error('EMPLOYEE_001_NOT_FOUND');
 
     const conflict = await Employee.findOne({
@@ -202,6 +249,34 @@ class JtsAdminService {
     emp.auth_user_id = authOid;
     await emp.save();
     return emp;
+  }
+
+  /** @private */
+  async _fetchHrEmployeeRowForBind(code, options) {
+    const auth = options.authorization;
+    if (!auth || !String(auth).startsWith('Bearer ')) return null;
+
+    const tid = options.tenantHeader != null ? String(options.tenantHeader).trim() : '';
+    if (!tid) return null;
+
+    const base = String(process.env.HR_SERVICE_URL || 'http://hr-service:3002').replace(/\/$/, '');
+    const url = `${base}/api/hr/employees?employeeId=${encodeURIComponent(code)}&page=1&limit=5`;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: auth,
+          Accept: 'application/json',
+          'X-Tenant-Id': tid
+        }
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return null;
+      const data = body.data;
+      const arr = Array.isArray(data) ? data : [];
+      return arr[0] || null;
+    } catch {
+      return null;
+    }
   }
 
   /** Admin: force Employee.code to match auth employee_id string (e.g. HR employee_id). */
@@ -309,6 +384,12 @@ class JtsAdminService {
   /* ---------- SLA rules ---------- */
   async listSlaRules(tenantId) {
     return TaskTypeSlaRule.find({ tenant_id: tenantId });
+  }
+
+  async getSlaRule(tenantId, id) {
+    const r = await TaskTypeSlaRule.findOne({ _id: id, tenant_id: tenantId });
+    if (!r) throw new Error('SLA_001_RULE_NOT_FOUND');
+    return r;
   }
 
   async upsertSlaRule(tenantId, body) {

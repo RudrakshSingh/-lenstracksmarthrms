@@ -1,76 +1,133 @@
 /**
- * Response caching middleware
- * Caches GET request responses for specified TTL
+ * Simple in-memory cache middleware for API responses
+ * Optimizes latency by caching frequently accessed endpoints
  */
 
-const cache = require('../utils/cache');
 const logger = require('../config/logger');
 
+// Simple in-memory cache (can be replaced with Redis later)
+const cache = new Map();
+const CACHE_TTL = 30 * 1000; // 30 seconds cache
+const MAX_CACHE_SIZE = 1000; // Max 1000 entries
+
 /**
- * Cache middleware factory
- * @param {number} ttl - Time to live in seconds
- * @param {Function} keyGenerator - Optional function to generate cache key
+ * Generate cache key from request
  */
-const cacheMiddleware = (ttl = 300, keyGenerator = null) => {
-  return async (req, res, next) => {
+const getCacheKey = (req) => {
+  const path = req.path;
+  const query = JSON.stringify(req.query);
+  const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || 'default';
+  return `${path}:${tenantId}:${query}`;
+};
+
+/**
+ * Clean expired cache entries
+ */
+const cleanExpiredCache = () => {
+  const now = Date.now();
+  let cleaned = 0;
+  
+  for (const [key, value] of cache.entries()) {
+    if (value.expiresAt < now) {
+      cache.delete(key);
+      cleaned++;
+    }
+  }
+  
+  // If cache is too large, remove oldest entries
+  if (cache.size > MAX_CACHE_SIZE) {
+    const entries = Array.from(cache.entries())
+      .sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+    
+    const toRemove = cache.size - MAX_CACHE_SIZE;
+    for (let i = 0; i < toRemove; i++) {
+      cache.delete(entries[i][0]);
+    }
+    cleaned += toRemove;
+  }
+  
+  if (cleaned > 0) {
+    logger.debug(`Cleaned ${cleaned} cache entries`);
+  }
+};
+
+// Clean cache every 60 seconds
+setInterval(cleanExpiredCache, 60000);
+
+/**
+ * Cache middleware - caches GET requests for specified duration
+ * @param {number} ttl - Time to live in milliseconds (default: 30 seconds)
+ */
+const cacheMiddleware = (ttl = CACHE_TTL) => {
+  return (req, res, next) => {
     // Only cache GET requests
     if (req.method !== 'GET') {
       return next();
     }
 
-    // Skip caching for authenticated user-specific endpoints
-    if (req.path.includes('/profile') || req.path.includes('/me')) {
-      return next();
+    const cacheKey = getCacheKey(req);
+    const cached = cache.get(cacheKey);
+
+    // Check if cache is valid
+    if (cached && cached.expiresAt > Date.now()) {
+      logger.debug(`Cache hit: ${cacheKey}`);
+      return res.status(cached.status).json(cached.data);
     }
 
-    try {
-      // Generate cache key
-      const cacheKey = keyGenerator 
-        ? keyGenerator(req)
-        : `cache:${req.method}:${req.originalUrl}:${req.user?.id || 'anonymous'}`;
+    // Store original json method
+    const originalJson = res.json.bind(res);
 
-      // Try to get from cache
-      const cached = await cache.get(cacheKey);
-      if (cached !== null) {
-        logger.debug(`Cache hit: ${cacheKey}`);
-        return res.status(200).json(cached);
+    // Override json method to cache response
+    res.json = function(data) {
+      // Cache successful responses only
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        cache.set(cacheKey, {
+          data,
+          status: res.statusCode,
+          expiresAt: Date.now() + ttl
+        });
+        logger.debug(`Cached: ${cacheKey} (TTL: ${ttl}ms)`);
       }
+      
+      return originalJson(data);
+    };
 
-      // Store original json method
-      const originalJson = res.json.bind(res);
-
-      // Override json method to cache response
-      res.json = function(data) {
-        // Cache successful responses
-        if (res.statusCode === 200 && data) {
-          cache.set(cacheKey, data, ttl).catch(err => {
-            logger.warn('Cache set failed:', err);
-          });
-        }
-        return originalJson(data);
-      };
-
-      next();
-    } catch (error) {
-      logger.error('Cache middleware error:', error);
-      next(); // Continue even if cache fails
-    }
+    next();
   };
 };
 
 /**
- * Invalidate cache by pattern
+ * Clear cache for specific pattern
  */
-const invalidateCache = async (pattern) => {
-  try {
-    await cache.invalidatePattern(pattern);
-  } catch (error) {
-    logger.error('Cache invalidation error:', error);
+const clearCache = (pattern) => {
+  let cleared = 0;
+  for (const key of cache.keys()) {
+    if (key.includes(pattern)) {
+      cache.delete(key);
+      cleared++;
+    }
   }
+  logger.info(`Cleared ${cleared} cache entries matching pattern: ${pattern}`);
+  return cleared;
+};
+
+/**
+ * Clear all cache
+ */
+const clearAllCache = () => {
+  const size = cache.size;
+  cache.clear();
+  logger.info(`Cleared all cache (${size} entries)`);
+  return size;
 };
 
 module.exports = {
   cacheMiddleware,
-  invalidateCache
+  clearCache,
+  clearAllCache,
+  getCacheStats: () => ({
+    size: cache.size,
+    maxSize: MAX_CACHE_SIZE,
+    ttl: CACHE_TTL
+  })
 };
-

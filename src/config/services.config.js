@@ -166,6 +166,21 @@ const servicesConfig = {
       defaultUrl: process.env.MONITORING_SERVICE_URL || 'http://localhost:3016',
       envVar: 'MONITORING_SERVICE_URL'
     },
+    /** JTS: two mounts match jts-service (same as ALB / ingress split) */
+    'jts': {
+      name: 'jts-service',
+      port: 3018,
+      basePath: '/api/jts',
+      defaultUrl: process.env.JTS_SERVICE_URL || getServiceUrl('jts-service', 3018),
+      envVar: 'JTS_SERVICE_URL'
+    },
+    'jts-root': {
+      name: 'jts-service',
+      port: 3018,
+      basePath: '/jts',
+      defaultUrl: process.env.JTS_SERVICE_URL || getServiceUrl('jts-service', 3018),
+      envVar: 'JTS_SERVICE_URL'
+    },
     'tenant-registry': {
       name: 'tenant-registry-service',
       port: 3020,

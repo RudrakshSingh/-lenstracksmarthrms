@@ -7,6 +7,7 @@ const TaskReview = require('../models/TaskReview.model');
 const taskActivityService = require('./taskActivity.service');
 const taskStatusService = require('./taskStatus.service');
 const attachmentPresign = require('./attachmentPresign.service');
+const logger = require('../config/logger');
 
 function isPrivileged(role) {
   const r = (role || '').toUpperCase();
@@ -238,10 +239,16 @@ class TaskCollaborationService {
     approval.reason = reason || approval.reason;
     approval.decided_at = new Date();
     await approval.save();
+
+    if (status === 'APPROVED') {
+      await this.applyApprovedApprovalSideEffects(tenantId, approval, approverEmployeeId);
+    }
+
     try {
+      const taskRef = approval.task_id?._id ?? approval.task_id;
       await taskActivityService.record(
         tenantId,
-        approval.task_id,
+        taskRef,
         approverEmployeeId,
         status === 'APPROVED' ? 'APPROVED' : 'REJECTED',
         {
@@ -253,6 +260,69 @@ class TaskCollaborationService {
       /* non-fatal */
     }
     return approval;
+  }
+
+  /**
+   * Apply domain effects when an approval is granted (e.g. extend task due date).
+   * Previously only the approval row was updated — UI saw "approved" but task.due_at never changed.
+   */
+  async applyApprovedApprovalSideEffects(tenantId, approval, actorEmployeeId) {
+    if (approval.approval_type !== 'EXTENSION_APPROVAL') return;
+
+    const taskRef = approval.task_id?._id ?? approval.task_id;
+    if (!taskRef) return;
+
+    const task = await Task.findOne({
+      _id: taskRef,
+      tenant_id: tenantId,
+      is_deleted: { $ne: true }
+    });
+    if (!task) {
+      logger.warn('EXTENSION_APPROVAL: task not found for side effect', {
+        taskId: String(taskRef),
+        approvalId: String(approval._id)
+      });
+      return;
+    }
+
+    const p = approval.payload && typeof approval.payload === 'object' ? approval.payload : {};
+    let newDue = null;
+    if (p.newDueAt != null) newDue = new Date(p.newDueAt);
+    else if (p.dueAt != null) newDue = new Date(p.dueAt);
+    else if (p.due_at != null) newDue = new Date(p.due_at);
+    else if (p.extensionMinutes != null || p.extendMinutes != null) {
+      const mins = Number(p.extensionMinutes ?? p.extendMinutes);
+      if (Number.isFinite(mins) && mins !== 0) {
+        newDue = new Date(task.due_at);
+        newDue.setMinutes(newDue.getMinutes() + mins);
+      }
+    }
+
+    if (!newDue || Number.isNaN(newDue.getTime())) {
+      logger.warn('EXTENSION_APPROVAL approved but payload has no valid new due (expected newDueAt, dueAt, due_at, or extensionMinutes)', {
+        approvalId: String(approval._id),
+        taskId: String(task._id),
+        payloadKeys: Object.keys(p)
+      });
+      return;
+    }
+
+    const prevDue = task.due_at;
+    task.due_at = newDue;
+    task.extension_count = (task.extension_count || 0) + 1;
+    task.last_activity_at = new Date();
+    await task.save();
+
+    try {
+      await taskActivityService.record(tenantId, task._id, actorEmployeeId, 'STATUS_CHANGED', {
+        event: 'EXTENSION_GRANTED',
+        approvalId: String(approval._id),
+        previousDueAt: prevDue ? new Date(prevDue).toISOString() : null,
+        newDueAt: newDue.toISOString()
+      });
+    } catch (e) {
+      /* non-fatal */
+    }
   }
 
   async listTaskReviews(tenantId, taskId, viewerEmployeeId, role) {

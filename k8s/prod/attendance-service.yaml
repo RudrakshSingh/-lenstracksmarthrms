@@ -44,6 +44,14 @@ spec:
           value: "attendance-service"
         - name: K8S_ENV
           value: "true"
+        - name: JTS_SERVICE_URL
+          value: "http://jts-service:3018"
+        - name: ATTENDANCE_OPTIONAL_GPS_ROLES
+          value: "MANAGER"
+        - name: NO_GEOFENCE_DEFAULT_LAT
+          value: "0"
+        - name: NO_GEOFENCE_DEFAULT_LNG
+          value: "0"
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:

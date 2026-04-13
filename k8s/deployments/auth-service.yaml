@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: auth-service
-  namespace: etelios-backend-prod
+  namespace: etelios-prod
   labels:
     app: auth-service
 spec:
@@ -17,10 +17,10 @@ spec:
         app: auth-service
     spec:
       imagePullSecrets:
-      - name: acr-secret
+      - name: ecr-registry-secret
       containers:
       - name: auth-service
-        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/auth-service:latest
+        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-auth-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3001
@@ -36,19 +36,30 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
-        - name: MONGODB_URI
+          value: "api-gateway"
+        - name: DB_NAME
+          value: "etelios"
+        - name: DOCDB_TLS_CA_FILE
           valueFrom:
             secretKeyRef:
-              name: etelios-secrets
-              key: AUTH_SERVICE_DB_URI
-        - name: DB_NAME
-          value: "auth_db"
+              name: docdb-credentials
+              key: DOCDB_TLS_CA_FILE
+        # Overrides JWT from etelios-config — single source of truth with all verifying services
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_SECRET
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_REFRESH_SECRET
         envFrom:
         - configMapRef:
-            name: etelios-config-prod
+            name: etelios-config
         - secretRef:
-            name: etelios-secrets
+            name: docdb-credentials
         resources:
           requests:
             memory: "256Mi"
@@ -80,12 +91,21 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: docdb-ca-cert
+          mountPath: /etc/ssl/certs/ca-cert.pem
+          subPath: ca-cert.pem
+          readOnly: true
+      volumes:
+      - name: docdb-ca-cert
+        secret:
+          secretName: docdb-ca-cert
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: auth-service
-  namespace: etelios-backend-prod
+  namespace: etelios-prod
   labels:
     app: auth-service
 spec:

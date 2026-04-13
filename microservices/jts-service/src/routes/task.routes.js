@@ -199,6 +199,39 @@ const rateTaskBodySchema = Joi.object({
   comments: Joi.string().max(2000).allow('', null).optional()
 });
 
+const bulkTasksBodySchema = Joi.object({
+  action: Joi.string()
+    .valid('complete', 'force_complete', 'accept', 'reject', 'start', 'cancel')
+    .required(),
+  taskIds: Joi.array().items(objectIdSchema).min(1).max(50).required(),
+  payload: Joi.object({
+    notes: Joi.string().max(5000).allow('', null).optional(),
+    reason: Joi.string().max(500).allow('', null).optional()
+  }).optional()
+});
+
+const extensionRequestBodySchema = Joi.object({
+  approverEmployeeId: employeeRefSchema.optional(),
+  approver_employee_id: employeeRefSchema.optional(),
+  approverId: employeeRefSchema.optional(),
+  newDueAt: Joi.alternatives().try(Joi.date(), Joi.string()).optional(),
+  new_due_at: Joi.alternatives().try(Joi.date(), Joi.string()).optional(),
+  dueAt: Joi.alternatives().try(Joi.date(), Joi.string()).optional(),
+  due_at: Joi.alternatives().try(Joi.date(), Joi.string()).optional(),
+  extensionMinutes: Joi.number().optional(),
+  extendMinutes: Joi.number().optional(),
+  extension_minutes: Joi.number().optional(),
+  reason: Joi.string().max(500).allow('', null).optional()
+}).or(
+  'newDueAt',
+  'new_due_at',
+  'dueAt',
+  'due_at',
+  'extensionMinutes',
+  'extendMinutes',
+  'extension_minutes'
+);
+
 /** Same contract as POST /api/jts/self-tasks — any authenticated employee may create own self-task (approval flow in service). */
 const createSelfTaskSchema = Joi.object({
   title: Joi.string().trim().min(3).max(200).required(),
@@ -234,6 +267,12 @@ router.get(
   '/',
   validate({ query: listTaskQuerySchema }),
   (req, res) => taskController.getTasks(req, res)
+);
+
+router.post(
+  '/bulk',
+  validate({ body: bulkTasksBodySchema }),
+  (req, res) => taskController.bulkTasks(req, res)
 );
 
 router.get(
@@ -387,7 +426,6 @@ router.put(
 
 router.delete(
   '/:id',
-  requireRole(['MANAGER', 'STORE_MANAGER', 'CLUSTER_MANAGER', 'COUNTRY_OPS', 'TENANT_ADMIN', 'HOD']),
   validate({ params: taskIdParamSchema }),
   (req, res) => taskController.deleteTask(req, res)
 );
@@ -396,6 +434,28 @@ router.post(
   '/:id/complete',
   validate({ params: taskIdParamSchema, body: completeTaskBodySchema }),
   (req, res) => taskController.completeTask(req, res)
+);
+
+router.post(
+  '/:id/force-complete',
+  requireRole([
+    'MANAGER',
+    'STORE_MANAGER',
+    'CLUSTER_MANAGER',
+    'COUNTRY_OPS',
+    'TENANT_ADMIN',
+    'HOD',
+    'SUPERADMIN',
+    'ADMIN'
+  ]),
+  validate({ params: taskIdParamSchema, body: completeTaskBodySchema }),
+  (req, res) => taskController.forceCompleteTask(req, res)
+);
+
+router.post(
+  '/:id/extension-requests',
+  validate({ params: taskIdParamSchema, body: extensionRequestBodySchema }),
+  (req, res) => taskController.createExtensionRequest(req, res)
 );
 
 router.post(

@@ -3,8 +3,8 @@
  * Example implementation for consuming events from other services
  */
 
-const { getKafkaService } = require('../../shared/services/kafka.service');
-const { KAFKA_TOPICS, getConsumerGroup } = require('../../shared/config/kafka.config');
+const { getKafkaService } = require('@etelios/shared/services/kafka.service');
+const { KAFKA_TOPICS, getConsumerGroup } = require('@etelios/shared/config/kafka.config');
 const logger = require('../config/logger');
 
 let kafkaConsumers = [];

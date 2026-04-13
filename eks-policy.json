@@ -1,0 +1,51 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "eks:*",
+                "ec2:DescribeInstances",
+                "ec2:DescribeImages",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeVpcs",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeKeyPairs",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:CreateNetworkInterface",
+                "ec2:DeleteNetworkInterface",
+                "ec2:DescribeRouteTables",
+                "ec2:DescribeInternetGateways",
+                "ec2:DescribeNatGateways",
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeAccountAttributes",
+                "ec2:DescribeNetworkAcls",
+                "ec2:DescribeTags",
+                "ec2:DescribeVolumes",
+                "ec2:DescribeVolumeAttribute",
+                "ec2:DescribeVolumeStatus",
+                "ec2:DescribeSnapshots",
+                "ec2:CreateTags",
+                "ec2:DeleteTags",
+                "iam:GetRole",
+                "iam:ListRoles",
+                "iam:PassRole",
+                "iam:CreateServiceLinkedRole",
+                "iam:AttachRolePolicy",
+                "iam:PutRolePolicy",
+                "cloudformation:CreateStack",
+                "cloudformation:DescribeStacks",
+                "cloudformation:DescribeStackEvents",
+                "cloudformation:DescribeStackResource",
+                "cloudformation:DescribeStackResources",
+                "cloudformation:DeleteStack",
+                "cloudformation:GetTemplate",
+                "cloudformation:ValidateTemplate",
+                "logs:CreateLogGroup",
+                "logs:DescribeLogGroups",
+                "logs:PutRetentionPolicy"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

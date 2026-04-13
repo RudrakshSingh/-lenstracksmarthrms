@@ -1,0 +1,84 @@
+{
+  "apiVersion": "apps/v1",
+  "kind": "Deployment",
+  "metadata": {
+    "annotations": {},
+    "labels": {
+      "app": "redis"
+    },
+    "name": "redis",
+    "namespace": "etelios-prod"
+  },
+  "spec": {
+    "progressDeadlineSeconds": 600,
+    "replicas": 1,
+    "revisionHistoryLimit": 10,
+    "selector": {
+      "matchLabels": {
+        "app": "redis"
+      }
+    },
+    "strategy": {
+      "rollingUpdate": {
+        "maxSurge": "25%",
+        "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+    },
+    "template": {
+      "metadata": {
+        "annotations": {
+          "kubectl.kubernetes.io/restartedAt": "2026-03-17T12:36:31+05:30"
+        },
+        "creationTimestamp": null,
+        "labels": {
+          "app": "redis"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "image": "redis:7.2-alpine",
+            "imagePullPolicy": "IfNotPresent",
+            "name": "redis",
+            "ports": [
+              {
+                "containerPort": 6379,
+                "protocol": "TCP"
+              }
+            ],
+            "resources": {
+              "limits": {
+                "cpu": "200m",
+                "memory": "256Mi"
+              },
+              "requests": {
+                "cpu": "50m",
+                "memory": "128Mi"
+              }
+            },
+            "terminationMessagePath": "/dev/termination-log",
+            "terminationMessagePolicy": "File",
+            "volumeMounts": [
+              {
+                "mountPath": "/data",
+                "name": "redis-storage"
+              }
+            ]
+          }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "terminationGracePeriodSeconds": 30,
+        "volumes": [
+          {
+            "emptyDir": {},
+            "name": "redis-storage"
+          }
+        ]
+      }
+    }
+  }
+}

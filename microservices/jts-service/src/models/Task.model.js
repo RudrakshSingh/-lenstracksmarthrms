@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
+/**
+ * Core JTS task document — human `code`, category, extended `source`, SLA timestamps, assign/review/approve,
+ * checklist, dependencies, recurrence, tags, soft-delete (`is_deleted`), and activity counters. API DTOs use
+ * camelCase via `taskFrontend.mapper`.
+ */
 const TaskSchema = new Schema(
   {
     tenant_id: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },

@@ -4,9 +4,9 @@ const logger = require('../config/logger');
  * SECURITY MIDDLEWARE: Validate tenant context
  * 
  * This middleware ensures:
- * 1. X-Tenant-Id header is present
- * 2. X-Tenant-Id matches JWT token's tenantId claim
- * 3. Tenant cannot be spoofed via header manipulation
+ * 1. JWT carries tenantId (non–super-admin), or super-admin rules apply
+ * 2. X-Tenant-Id is optional; if missing, tenant comes from the JWT
+ * 3. If header and JWT disagree, JWT wins (warn). Set STRICT_TENANT_HEADER=true to reject.
  * 
  * Must be applied AFTER authentication middleware
  * 
@@ -65,24 +65,9 @@ function validateTenantMiddleware(options = {}) {
       req.headers['X-Tenant-Id'] ||
       req.headers['X-TENANT-ID'];
 
-    // CRITICAL: Header must be present
-    if (!headerTenantId) {
-      logger.warn('TENANT_REQUIRED: X-Tenant-Id header missing', {
-        method: req.method,
-        path: req.path,
-        userId: req.user?.id,
-        email: req.user?.email,
-        ip: req.ip,
-        userAgent: req.headers['user-agent']
-      });
-
-      return res.status(400).json({
-        success: false,
-        error: 'TENANT_REQUIRED',
-        message: 'X-Tenant-Id header is required for this endpoint',
-        hint: 'This is a security requirement. Frontend should always send this header.',
-      });
-    }
+    const normalizedTokenTenantId = tokenTenantId
+      ? String(tokenTenantId).toLowerCase().trim()
+      : null;
 
     // CRITICAL: Token must have tenantId claim (for non-super-admin)
     if (!tokenTenantId && !isSuperAdmin) {
@@ -101,44 +86,77 @@ function validateTenantMiddleware(options = {}) {
       });
     }
 
-    // SECURITY: Validate header matches token
-    const normalizedHeaderTenantId = headerTenantId.toLowerCase().trim();
-    const normalizedTokenTenantId = tokenTenantId ? tokenTenantId.toLowerCase().trim() : null;
+    const strictHeader =
+      process.env.STRICT_TENANT_HEADER === 'true' ||
+      process.env.STRICT_TENANT_HEADER === '1';
 
-    if (normalizedHeaderTenantId !== normalizedTokenTenantId && !isSuperAdmin) {
-      // SECURITY ALERT: Log this as potential attack
-      logger.error('🚨 SECURITY ALERT: Tenant mismatch detected', {
-        userId: req.user?.id,
-        email: req.user?.email,
-        role: req.user?.role,
-        tokenTenantId: normalizedTokenTenantId,
-        headerTenantId: normalizedHeaderTenantId,
-        ip: req.ip,
-        userAgent: req.headers['user-agent'],
+    const headerTrimmed = headerTenantId != null ? String(headerTenantId).trim() : '';
+    const normalizedHeaderTenantId = headerTrimmed ? headerTrimmed.toLowerCase() : null;
+
+    if (!normalizedHeaderTenantId) {
+      logger.debug('X-Tenant-Id missing; using tenant from access token', {
+        method: req.method,
         path: req.path,
-        method: req.method
-      });
-
-      return res.status(403).json({
-        success: false,
-        error: 'TENANT_MISMATCH',
-        message: 'X-Tenant-Id header does not match JWT token',
-        hint: 'Possible security violation. Logout and login again.',
+        userId: req.user?.id,
+        tenantId: normalizedTokenTenantId
       });
     }
 
-    // SUCCESS: Store validated tenantId in request
-    req.tenantId = normalizedHeaderTenantId;
+    logger.debug('Tenant validation comparison', {
+      tokenTenantId: tokenTenantId,
+      normalizedTokenTenantId: normalizedTokenTenantId,
+      headerTenantId: headerTenantId,
+      normalizedHeaderTenantId: normalizedHeaderTenantId,
+      match: normalizedHeaderTenantId === normalizedTokenTenantId,
+      reqUserTenantId: req.user?.tenantId
+    });
+
+    if (
+      normalizedHeaderTenantId &&
+      normalizedTokenTenantId &&
+      normalizedHeaderTenantId !== normalizedTokenTenantId &&
+      !isSuperAdmin
+    ) {
+      if (strictHeader) {
+        logger.error('Tenant mismatch (STRICT_TENANT_HEADER)', {
+          userId: req.user?.id,
+          email: req.user?.email,
+          role: req.user?.role,
+          tokenTenant: normalizedTokenTenantId,
+          headerTenant: normalizedHeaderTenantId,
+          path: req.path
+        });
+
+        return res.status(403).json({
+          success: false,
+          error: 'TENANT_MISMATCH',
+          message: 'X-Tenant-Id header does not match JWT token',
+          hint: 'Send the same tenantId as in your JWT, or omit X-Tenant-Id. Logout and login again if unsure.',
+        });
+      }
+
+      logger.warn('TENANT_HEADER_IGNORED: X-Tenant-Id did not match JWT; using token tenant', {
+        userId: req.user?.id,
+        email: req.user?.email,
+        headerTenant: normalizedHeaderTenantId,
+        tokenTenant: normalizedTokenTenantId,
+        path: req.path
+      });
+    }
+
+    // Super-admin JWT may omit tenant; optional header can select context
+    req.tenantId =
+      normalizedTokenTenantId ||
+      (isSuperAdmin ? normalizedHeaderTenantId : null);
     req.userId = req.user?.id;
     req.isSuperAdmin = isSuperAdmin;
 
-    // Log successful validation (only in development or for debugging)
     if (process.env.NODE_ENV !== 'production' || process.env.LOG_TENANT_VALIDATION === 'true') {
       logger.debug('✅ Tenant validated', {
         userId: req.user?.id,
         email: req.user?.email,
-        tenantId: normalizedHeaderTenantId,
-        endpoint: req.path,
+        tenantId: req.tenantId,
+        endpoint: req.path
       });
     }
 

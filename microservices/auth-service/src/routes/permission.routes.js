@@ -1,32 +1,83 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
+
 const router = express.Router();
+
+const permissionWriteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: parseInt(process.env.PERMISSION_WRITE_RATE_MAX, 10) || 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many permission writes, slow down' }
+});
 const {
+  getPermissionCatalog,
   getAllPermissions,
   getDepartmentPermissions,
   getUserPermissions,
+  patchUserPermissionOverrides,
   updateUserPermissions,
   getAllUsersWithPermissions,
-  resetUserPermissions
+  resetUserPermissions,
+  previewUserPermissionEscalation,
+  getPermissionMetrics
 } = require('../controllers/permissionController');
 const { authenticate } = require('../middleware/auth.middleware');
-const { requireRole, requirePermission } = require('../middleware/rbac.middleware');
+const { requireRole } = require('../middleware/rbac.middleware');
 
-// Get all available permissions
-router.get('/permissions', authenticate, requireRole(['superadmin', 'admin']), getAllPermissions);
+const TENANT_MANAGERS = ['superadmin', 'admin', 'hr'];
 
-// Get department-specific default permissions
-router.get('/permissions/department/:department', authenticate, requireRole(['superadmin', 'admin']), getDepartmentPermissions);
+router.get('/catalog', authenticate, requireRole(TENANT_MANAGERS), getPermissionCatalog);
 
-// Get user's current permissions
-router.get('/user/:userId', authenticate, requireRole(['superadmin', 'admin']), getUserPermissions);
+router.get('/permissions', authenticate, requireRole(TENANT_MANAGERS), getAllPermissions);
 
-// Update user permissions (Admin only)
-router.put('/user/:userId', authenticate, requireRole(['superadmin', 'admin']), updateUserPermissions);
+router.get(
+  '/permissions/department/:department',
+  authenticate,
+  requireRole(TENANT_MANAGERS),
+  getDepartmentPermissions
+);
 
-// Get all users with their permissions (Admin only)
-router.get('/users', authenticate, requireRole(['superadmin', 'admin']), getAllUsersWithPermissions);
+router.get(
+  '/internal/metrics',
+  authenticate,
+  requireRole(['superadmin']),
+  getPermissionMetrics
+);
 
-// Reset user permissions to department default
-router.post('/user/:userId/reset', authenticate, requireRole(['superadmin', 'admin']), resetUserPermissions);
+router.get('/users', authenticate, requireRole(TENANT_MANAGERS), getAllUsersWithPermissions);
+
+router.get('/user/:userId', authenticate, requireRole(TENANT_MANAGERS), getUserPermissions);
+
+router.patch(
+  '/user/:userId/overrides',
+  authenticate,
+  requireRole(TENANT_MANAGERS),
+  permissionWriteLimiter,
+  patchUserPermissionOverrides
+);
+
+router.post(
+  '/user/:userId/escalation-preview',
+  authenticate,
+  requireRole(TENANT_MANAGERS),
+  previewUserPermissionEscalation
+);
+
+router.put(
+  '/user/:userId',
+  authenticate,
+  requireRole(TENANT_MANAGERS),
+  permissionWriteLimiter,
+  updateUserPermissions
+);
+
+router.post(
+  '/user/:userId/reset',
+  authenticate,
+  requireRole(TENANT_MANAGERS),
+  permissionWriteLimiter,
+  resetUserPermissions
+);
 
 module.exports = router;

@@ -105,7 +105,8 @@ const authenticate = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role || decoded.role,
-        status: user.status
+        status: user.status,
+        permissions: Array.isArray(decoded.permissions) ? decoded.permissions : []
       };
     } catch (dbError) {
       // If User model doesn't exist or DB lookup fails, use token data
@@ -113,9 +114,14 @@ const authenticate = async (req, res, next) => {
         id: decoded.userId || decoded.id || 'unknown',
         userId: decoded.userId || decoded.id,
         role: decoded.role || 'user',
-        email: decoded.email || 'unknown@example.com'
+        email: decoded.email || 'unknown@example.com',
+        permissions: Array.isArray(decoded.permissions) ? decoded.permissions : []
       };
     }
+
+    const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
+    const { connectRedis } = require('../config/redis');
+    await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => connectRedis(), logger);
 
     next();
   } catch (error) {

@@ -1,0 +1,405 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: etelios-ingress
+  namespace: etelios-prod
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "false"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Advanced Load Balancing
+    nginx.ingress.kubernetes.io/upstream-fail-timeout: "10"
+    nginx.ingress.kubernetes.io/upstream-max-fails: "3"
+    nginx.ingress.kubernetes.io/upstream-max-conns: "0"
+
+    # Session Affinity (Sticky Sessions)
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "sticky"
+    nginx.ingress.kubernetes.io/cookie-name: "etelios_session"
+    nginx.ingress.kubernetes.io/cookie-expires: "86400"
+    nginx.ingress.kubernetes.io/cookie-max-age: "86400"
+
+    # Rate Limiting
+    nginx.ingress.kubernetes.io/rate-limit: "10000"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/rate-limit-burst: "500"
+    nginx.ingress.kubernetes.io/rate-limit-status-code: "429"
+
+    # Request/Response Limits
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-timeout: "30"
+
+    # Load Balancing Algorithm
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$request_uri"
+
+    # Health Checks
+    nginx.ingress.kubernetes.io/healthcheck-path: "/health"
+    nginx.ingress.kubernetes.io/healthcheck-status: "200"
+
+    # Connection Handling
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "4k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "8"
+    nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "8k"
+    
+    # WebSocket Support
+    nginx.ingress.kubernetes.io/websocket-services: "realtime-service"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    
+    # CORS Configuration for Frontend Access
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://etelios.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,X-Tenant-Id"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-max-age: "86400"
+spec:
+  tls:
+  - hosts:
+    - etelios.com
+    - api.etelios.com
+    secretName: etelios-tls
+  rules:
+  # ============================================
+  # FRONTEND - Root Domain (etelios.com)
+  # ============================================
+  - host: etelios.com
+    http:
+      paths:
+      # Frontend - Serve all routes
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+
+  # ============================================
+  # BACKEND - API Subdomain (api.etelios.com)
+  # ============================================
+  - host: api.etelios.com
+    http:
+      paths:
+      # Health check endpoint
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      
+      # Root path - redirect to health or return API info
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+
+      # Auth Service
+      - path: /api/auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /api/permission
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+      - path: /api/user
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 3001
+
+      # HR Service
+      - path: /api/hr
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+      - path: /api/transfers
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+      - path: /api/hr-letter
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+
+      # Attendance Service
+      - path: /api/attendance
+        pathType: Prefix
+        backend:
+          service:
+            name: attendance-service
+            port:
+              number: 3003
+
+      # Tenant Registry Service
+      - path: /api/tenant
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/tenants
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+
+      # Admin MFE compatibility endpoints
+      - path: /api/platform
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/system
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/admin
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/activities
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/users
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/roles
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/branches
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+      - path: /api/organizations
+        pathType: Prefix
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+
+      # Geofencing
+      - path: /api/geofencing
+        pathType: Prefix
+        backend:
+          service:
+            name: attendance-service
+            port:
+              number: 3003
+
+      # Document Service
+      - path: /api/documents
+        pathType: Prefix
+        backend:
+          service:
+            name: hr-service
+            port:
+              number: 3002
+
+      # Payroll Service
+      - path: /api/payroll
+        pathType: Prefix
+        backend:
+          service:
+            name: payroll-service
+            port:
+              number: 3004
+
+      # CRM Service
+      - path: /api/crm
+        pathType: Prefix
+        backend:
+          service:
+            name: crm-service
+            port:
+              number: 3005
+
+      # Inventory Service
+      - path: /api/inventory
+        pathType: Prefix
+        backend:
+          service:
+            name: inventory-service
+            port:
+              number: 3006
+
+      # Sales Service
+      - path: /api/sales
+        pathType: Prefix
+        backend:
+          service:
+            name: sales-service
+            port:
+              number: 3007
+
+      # Purchase Service
+      - path: /api/purchase
+        pathType: Prefix
+        backend:
+          service:
+            name: purchase-service
+            port:
+              number: 3008
+
+      # Financial Service
+      - path: /api/financial
+        pathType: Prefix
+        backend:
+          service:
+            name: financial-service
+            port:
+              number: 3009
+
+      # Document Service (separate)
+      - path: /api/documents
+        pathType: Prefix
+        backend:
+          service:
+            name: document-service
+            port:
+              number: 3010
+
+      # Service Management
+      - path: /api/service
+        pathType: Prefix
+        backend:
+          service:
+            name: service-management
+            port:
+              number: 3011
+
+      # CPP Service
+      - path: /api/cpp
+        pathType: Prefix
+        backend:
+          service:
+            name: cpp-service
+            port:
+              number: 3012
+
+      # Prescription Service
+      - path: /api/prescription
+        pathType: Prefix
+        backend:
+          service:
+            name: prescription-service
+            port:
+              number: 3013
+
+      # Analytics Service
+      - path: /api/analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port:
+              number: 3014
+
+      # Dashboard routes
+      - path: /api/dashboard
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port:
+              number: 3014
+
+      # Notification Service
+      - path: /api/notification
+        pathType: Prefix
+        backend:
+          service:
+            name: notification-service
+            port:
+              number: 3015
+
+      # Monitoring Service
+      - path: /api/monitoring
+        pathType: Prefix
+        backend:
+          service:
+            name: monitoring-service
+            port:
+              number: 3016
+
+      # Tenant Registry Health Check
+      - path: /tenant-registry/health
+        pathType: Exact
+        backend:
+          service:
+            name: tenant-registry-service
+            port:
+              number: 3020
+
+      # WebSocket Service (Realtime) - Socket.IO
+      - path: /socket.io
+        pathType: Prefix
+        backend:
+          service:
+            name: realtime-service
+            port:
+              number: 3021
+
+      # WebSocket Service (Realtime) - General WebSocket
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: realtime-service
+            port:
+              number: 3021

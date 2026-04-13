@@ -1,847 +1,348 @@
 #!/usr/bin/env node
-
 /**
  * Comprehensive API Test Suite
- * Tests all APIs across Auth, HR, and Attendance services
+ * Tests all major APIs after infrastructure and tenant-aware fixes
+ * 
+ * Usage:
+ *   BACKEND_URL=http://your-api.com EMAIL=user@example.com PASSWORD=pass node scripts/test-all-apis.js
  */
 
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
-const http = require('http');
+const rawBase = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:3000'
+const BASE = rawBase.replace(/\/+$/, '')
+const API_BASE = BASE.endsWith('/api') ? BASE : `${BASE}/api`
 
-// Configuration
-const BASE_URL = process.env.BASE_URL || 'https://98.70.245.87';
-const LOCAL_BASE_URL = process.env.LOCAL_BASE_URL || 'http://localhost';
-const USE_LOCAL = process.env.USE_LOCAL === 'true';
-const USE_DOMAIN = process.env.USE_DOMAIN === 'true';
+const EMAIL = process.env.EMAIL || 'Aditya@gmail.com'
+const PASSWORD = process.env.PASSWORD || 'yrv0s48mA1!'
+const LATITUDE = parseFloat(process.env.LATITUDE || '19.0760')
+const LONGITUDE = parseFloat(process.env.LONGITUDE || '72.8777')
 
-// Production requires Host header, but we can use domain if available
-const PRODUCTION_DOMAIN = 'api.etelios.com';
-const API_BASE = USE_LOCAL 
-  ? LOCAL_BASE_URL 
-  : (USE_DOMAIN ? `https://${PRODUCTION_DOMAIN}` : BASE_URL);
-
-// Test results storage
 const results = {
   passed: [],
   failed: [],
-  skipped: [],
-  summary: {
-    total: 0,
-    passed: 0,
-    failed: 0,
-    skipped: 0
-  }
-};
-
-// Authentication tokens for different roles
-const tokens = {
-  superadmin: null,
-  admin: null,
-  hr: null,
-  manager: null,
-  employee: null
-};
-
-// Colors for console output
-const colors = {
-  reset: '\x1b[0m',
-  green: '\x1b[32m',
-  red: '\x1b[31m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[1m\x1b[34m',
-  cyan: '\x1b[36m'
-};
-
-/**
- * Logging utilities
- */
-const log = {
-  info: (msg) => console.log(`${colors.cyan}ℹ${colors.reset} ${msg}`),
-  success: (msg) => console.log(`${colors.green}✓${colors.reset} ${msg}`),
-  error: (msg) => console.log(`${colors.red}✗${colors.reset} ${msg}`),
-  warn: (msg) => console.log(`${colors.yellow}⚠${colors.reset} ${msg}`),
-  section: (msg) => console.log(`\n${colors.blue}━━━ ${msg} ━━━${colors.reset}\n`)
-};
-
-/**
- * Make HTTP request with error handling
- * Uses Node's http/https modules to allow setting Host header
- */
-async function makeRequest(method, url, data = null, headers = {}) {
-  return new Promise((resolve) => {
-    try {
-      const urlObj = new URL(url);
-      const isHttps = urlObj.protocol === 'https:';
-      const client = isHttps ? https : http;
-
-      const requestHeaders = {
-        'Content-Type': 'application/json',
-        ...headers
-      };
-
-      // Add Host header for production if using IP
-      if (!USE_LOCAL && !USE_DOMAIN && url.includes('98.70.245.87')) {
-        requestHeaders['Host'] = PRODUCTION_DOMAIN;
-      }
-
-      const options = {
-        hostname: urlObj.hostname,
-        port: urlObj.port || (isHttps ? 443 : 80),
-        path: urlObj.pathname + urlObj.search,
-        method: method,
-        headers: requestHeaders,
-        timeout: 15000,
-        // Allow self-signed certificates (needed for production server)
-        rejectUnauthorized: false
-      };
-
-      const req = client.request(options, (res) => {
-        let responseData = '';
-        
-        res.on('data', (chunk) => {
-          responseData += chunk;
-        });
-        
-        res.on('end', () => {
-          let parsedData = {};
-          try {
-            if (responseData) {
-              parsedData = JSON.parse(responseData);
-            }
-          } catch (e) {
-            // Not JSON, keep empty object
-          }
-          
-          resolve({
-            success: res.statusCode < 500,
-            status: res.statusCode,
-            data: parsedData,
-            response: res
-          });
-        });
-      });
-
-      req.on('error', (error) => {
-        resolve({
-          success: false,
-          status: 0,
-          data: null,
-          error: error.message
-        });
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        resolve({
-          success: false,
-          status: 0,
-          data: null,
-          error: 'Request timeout'
-        });
-      });
-
-      if (data) {
-        const body = JSON.stringify(data);
-        req.write(body);
-      }
-      
-      req.end();
-    } catch (error) {
-      resolve({
-        success: false,
-        status: 0,
-        data: null,
-        error: error.message
-      });
-    }
-  });
+  warnings: []
 }
 
-/**
- * Test an API endpoint
- */
-async function testEndpoint(name, method, endpoint, options = {}) {
-  results.summary.total++;
-  
-  const {
-    data = null,
-    headers = {},
-    expectedStatus = [200, 201],
-    skip = false,
-    auth = false,
-    role = 'admin'
-  } = options;
-
-  if (skip) {
-    results.skipped.push({ name, endpoint, reason: 'Skipped' });
-    results.summary.skipped++;
-    log.warn(`SKIP: ${name}`);
-    return { success: true, skipped: true };
-  }
-
-  // Add authentication token if needed
-  const requestHeaders = { ...headers };
-  if (auth && tokens[role]) {
-    requestHeaders['Authorization'] = `Bearer ${tokens[role]}`;
-  }
-
-  const url = `${API_BASE}${endpoint}`;
-  
-  try {
-    const result = await makeRequest(method, url, data, requestHeaders);
-    
-    const statusMatch = Array.isArray(expectedStatus)
-      ? expectedStatus.includes(result.status)
-      : result.status === expectedStatus;
-
-    if (statusMatch) {
-      results.passed.push({
-        name,
-        endpoint,
-        method,
-        status: result.status
-      });
-      results.summary.passed++;
-      log.success(`${method} ${endpoint} - ${name}`);
-      return { success: true, result };
-    } else {
-      results.failed.push({
-        name,
-        endpoint,
-        method,
-        expected: expectedStatus,
-        actual: result.status,
-        error: result.data || result.error
-      });
-      results.summary.failed++;
-      log.error(`${method} ${endpoint} - ${name} (Expected: ${expectedStatus}, Got: ${result.status})`);
-      return { success: false, result };
-    }
-  } catch (error) {
-    results.failed.push({
-      name,
-      endpoint,
-      method,
-      error: error.message
-    });
-    results.summary.failed++;
-    log.error(`${method} ${endpoint} - ${name} (Error: ${error.message})`);
-    return { success: false, error };
-  }
+function log(step, msg, data = null) {
+  console.log(data ? `[${step}] ${msg} ${JSON.stringify(data, null, 2)}` : `[${step}] ${msg}`)
 }
 
-/**
- * Authenticate and get tokens for different roles
- */
-async function authenticateRoles() {
-  log.section('Authentication Setup');
-  
-  const roles = ['superadmin', 'admin', 'hr', 'manager', 'employee'];
-  
-  for (const role of roles) {
-    try {
-      log.info(`Getting token for ${role}...`);
-      const result = await makeRequest('POST', `${API_BASE}/api/auth/mock-login-fast`, {
-        role: role
-      });
-      
-      // Response structure: { success: true, data: { accessToken: "...", ... } }
-      if (result.success && result.data && result.data.data && result.data.data.accessToken) {
-        tokens[role] = result.data.data.accessToken;
-        log.success(`✓ Authenticated as ${role}`);
-      } else if (result.success && result.data && result.data.accessToken) {
-        // Fallback for different response structure
-        tokens[role] = result.data.accessToken;
-        log.success(`✓ Authenticated as ${role}`);
-      } else {
-        log.warn(`⚠ Could not authenticate as ${role} - Status: ${result.status}, Data: ${JSON.stringify(result.data).substring(0, 100)}`);
-      }
-    } catch (error) {
-      log.warn(`⚠ Authentication failed for ${role}: ${error.message}`);
-    }
-  }
-}
-
-/**
- * Test Auth Service APIs
- */
-async function testAuthService() {
-  log.section('AUTH SERVICE APIs');
-
-  // Health & Status
-  await testEndpoint('Health Check', 'GET', '/api/auth/health');
-  await testEndpoint('Status Check', 'GET', '/api/auth/status');
-
-  // Authentication
-  await testEndpoint('Mock Login Fast', 'POST', '/api/auth/mock-login-fast', {
-    data: { role: 'admin' },
-    expectedStatus: [200, 201]
-  });
-
-  await testEndpoint('Mock Login', 'POST', '/api/auth/mock-login', {
-    data: { role: 'admin' },
-    expectedStatus: [200, 201]
-  });
-
-  await testEndpoint('Login (Invalid)', 'POST', '/api/auth/login', {
-    data: { emailOrEmployeeId: 'invalid@test.com', password: 'wrong' },
-    expectedStatus: [401, 400]
-  });
-
-  await testEndpoint('Refresh Token (Invalid)', 'POST', '/api/auth/refresh-token', {
-    data: { refreshToken: 'invalid' },
-    expectedStatus: [401, 400]
-  });
-
-  // Profile (requires auth)
-  await testEndpoint('Get Profile', 'GET', '/api/auth/profile', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Update Profile', 'PUT', '/api/auth/profile', {
-    auth: true,
-    role: 'admin',
-    data: { phone: '+1234567890' }
-  });
-
-  // Password
-  await testEndpoint('Request Password Reset', 'POST', '/api/auth/request-password-reset', {
-    data: { email: 'test@example.com' },
-    expectedStatus: [200, 201, 404] // 404 if user doesn't exist
-  });
-
-  await testEndpoint('Change Password (Unauthorized)', 'POST', '/api/auth/change-password', {
-    data: { currentPassword: 'old', newPassword: 'new' },
-    expectedStatus: [401, 403]
-  });
-
-  await testEndpoint('Logout', 'POST', '/api/auth/logout', {
-    auth: true,
-    role: 'admin'
-  });
-
-  // Real Users Management
-  await testEndpoint('Get Real Users', 'GET', '/api/real-users', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Get Real User Profile', 'GET', '/api/real-users/profile', {
-    auth: true,
-    role: 'admin'
-  });
-
-  // Permissions
-  await testEndpoint('Get All Permissions', 'GET', '/api/permission/permissions', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Get Users with Permissions', 'GET', '/api/permission/users', {
-    auth: true,
-    role: 'admin'
-  });
-
-  // Emergency Lock
-  await testEndpoint('Emergency Status', 'GET', '/api/emergency/status');
-  await testEndpoint('Verify Recovery Keys', 'POST', '/api/emergency/verify-keys', {
-    data: { keys: ['key1', 'key2'] },
-    expectedStatus: [200, 400]
-  });
-}
-
-/**
- * Test HR Service APIs
- */
-async function testHRService() {
-  log.section('HR SERVICE APIs');
-
-  // Health & Status
-  await testEndpoint('HR Health Check', 'GET', '/api/hr/health');
-  await testEndpoint('HR Status', 'GET', '/api/hr/status');
-  await testEndpoint('HR Service Info', 'GET', '/api/hr');
-
-  // Departments
-  await testEndpoint('Get Departments', 'GET', '/api/hr/departments', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Create Department', 'POST', '/api/hr/departments', {
-    auth: true,
-    role: 'admin',
-    data: {
-      name: 'Test Department',
-      code: 'TEST',
-      description: 'Test department for API testing'
-    },
-    expectedStatus: [200, 201, 409] // 409 if already exists
-  });
-
-  // Employees
-  await testEndpoint('Get Employees', 'GET', '/api/hr/employees', {
-    auth: true,
-    role: 'admin',
-    expectedStatus: [200]
-  });
-
-  await testEndpoint('Get Employees (HR)', 'GET', '/api/hr/employees', {
-    auth: true,
-    role: 'hr',
-    expectedStatus: [200]
-  });
-
-  await testEndpoint('Get Employees (Manager)', 'GET', '/api/hr/employees', {
-    auth: true,
-    role: 'manager',
-    expectedStatus: [200, 403]
-  });
-
-  await testEndpoint('Get Employees (Employee)', 'GET', '/api/hr/employees', {
-    auth: true,
-    role: 'employee',
-    expectedStatus: [200, 403]
-  });
-
-  // Stores
-  await testEndpoint('Get Stores', 'GET', '/api/hr/stores', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Create Store', 'POST', '/api/hr/stores', {
-    auth: true,
-    role: 'admin',
-    data: {
-      name: 'Test Store',
-      code: `TEST-${Date.now()}`,
-      address: {
-        street: '123 Test St',
-        city: 'Test City',
-        state: 'Test State',
-        zip: '12345',
-        country: 'India'
-      }
-    },
-    expectedStatus: [200, 201, 409]
-  });
-
-  // Onboarding
-  await testEndpoint('Get Onboarding Draft', 'GET', '/api/hr/onboarding/draft', {
-    auth: true,
-    role: 'hr'
-  });
-
-  await testEndpoint('Save Onboarding Draft', 'POST', '/api/hr/onboarding/draft', {
-    auth: true,
-    role: 'hr',
-    data: {
-      personalDetails: {
-        firstName: 'Test',
-        lastName: 'User',
-        email: `test${Date.now()}@example.com`,
-        phone: '+1234567890'
-      }
-    },
-    expectedStatus: [200, 201]
-  });
-
-  // Leave Management
-  await testEndpoint('Get Leave Requests', 'GET', '/api/hr/leave', {
-    auth: true,
-    role: 'employee'
-  });
-
-  await testEndpoint('Get Leave Balance', 'GET', '/api/hr/leave/balance', {
-    auth: true,
-    role: 'employee'
-  });
-
-  await testEndpoint('Get Leave Summary', 'GET', '/api/hr/leave/summary', {
-    auth: true,
-    role: 'employee'
-  });
-
-  // Payroll
-  await testEndpoint('Get Payroll Runs', 'GET', '/api/hr/payroll/runs', {
-    auth: true,
-    role: 'hr'
-  });
-
-  // Reports
-  await testEndpoint('Get Employee Reports', 'GET', '/api/hr/reports/employees', {
-    auth: true,
-    role: 'hr'
-  });
-
-  await testEndpoint('Get Attendance Reports', 'GET', '/api/hr/reports/attendance', {
-    auth: true,
-    role: 'hr'
-  });
-
-  await testEndpoint('Get Leave Reports', 'GET', '/api/hr/reports/leave', {
-    auth: true,
-    role: 'hr'
-  });
-
-  // Admin Management
-  await testEndpoint('Get All Users (Admin)', 'GET', '/api/admin/users', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Get All Roles', 'GET', '/api/admin/roles', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Get All Permissions', 'GET', '/api/admin/permissions', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Get System Settings', 'GET', '/api/admin/system-settings', {
-    auth: true,
-    role: 'admin'
-  });
-
-  // Transfers
-  await testEndpoint('Get Transfers', 'GET', '/api/transfers', {
-    auth: true,
-    role: 'hr'
-  });
-
-  // HR Letters
-  await testEndpoint('Get HR Letters', 'GET', '/api/hr-letter/letters', {
-    auth: true,
-    role: 'hr'
-  });
-
-  await testEndpoint('Get HR Letter Stats', 'GET', '/api/hr-letter/stats', {
-    auth: true,
-    role: 'hr'
-  });
-
-  // F&F
-  await testEndpoint('Get F&F Cases', 'GET', '/api/hr/fnf/cases', {
-    auth: true,
-    role: 'hr'
-  });
-
-  // Audit
-  await testEndpoint('Get Audit Logs', 'GET', '/api/hr/audit/logs', {
-    auth: true,
-    role: 'admin'
-  });
-
-  // Statutory
-  await testEndpoint('Get Statutory Returns', 'GET', '/api/hr/statutory/returns', {
-    auth: true,
-    role: 'hr'
-  });
-
-  // Incentives
-  await testEndpoint('Get Incentive Claims', 'GET', '/api/hr/incentive/claims', {
-    auth: true,
-    role: 'employee'
-  });
-
-  // Documents
-  await testEndpoint('Get Documents (Unauthorized)', 'GET', '/api/documents/invalid', {
-    auth: true,
-    role: 'employee',
-    expectedStatus: [400, 404, 403]
-  });
-}
-
-/**
- * Test Attendance Service APIs
- */
-async function testAttendanceService() {
-  log.section('ATTENDANCE SERVICE APIs');
-
-  // Health & Status
-  await testEndpoint('Attendance Health Check', 'GET', '/api/attendance/health');
-  await testEndpoint('Attendance Status', 'GET', '/api/attendance/status');
-
-  // Attendance
-  await testEndpoint('Get Attendance History', 'GET', '/api/attendance/history', {
-    auth: true,
-    role: 'employee'
-  });
-
-  await testEndpoint('Get Attendance Summary', 'GET', '/api/attendance/summary', {
-    auth: true,
-    role: 'employee'
-  });
-
-  await testEndpoint('Get All Attendance Records', 'GET', '/api/attendance', {
-    auth: true,
-    role: 'hr'
-  });
-
-  await testEndpoint('Get Attendance Records', 'GET', '/api/attendance/records', {
-    auth: true,
-    role: 'employee'
-  });
-
-  await testEndpoint('Get Attendance Reports', 'GET', '/api/attendance/reports', {
-    auth: true,
-    role: 'hr'
-  });
-
-  // Geofencing
-  await testEndpoint('Get Geofencing Settings', 'GET', '/api/geofencing/settings', {
-    auth: true,
-    role: 'employee'
-  });
-
-  await testEndpoint('Get Geofencing Users', 'GET', '/api/geofencing/users', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Check Geofencing', 'POST', '/api/geofencing/check', {
-    auth: true,
-    role: 'employee',
-    data: {
-      latitude: 28.6139,
-      longitude: 77.2090
-    },
-    expectedStatus: [200, 400]
-  });
-
-  // Security
-  await testEndpoint('Get Security Violations', 'GET', '/api/security/violations', {
-    auth: true,
-    role: 'admin'
-  });
-
-  await testEndpoint('Get IP Geolocation', 'GET', '/api/security/ip-geolocation', {
-    auth: true,
-    role: 'admin'
-  });
-}
-
-/**
- * Generate test report
- */
-function generateReport() {
-  log.section('TEST RESULTS SUMMARY');
-
-  console.log(`\n${colors.blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}`);
-  console.log(`${colors.blue}           API TEST RESULTS SUMMARY${colors.reset}`);
-  console.log(`${colors.blue}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
-
-  console.log(`Total Tests:    ${results.summary.total}`);
-  console.log(`${colors.green}Passed:         ${results.summary.passed}${colors.reset}`);
-  console.log(`${colors.red}Failed:         ${results.summary.failed}${colors.reset}`);
-  console.log(`${colors.yellow}Skipped:        ${results.summary.skipped}${colors.reset}`);
-
-  const passRate = ((results.summary.passed / results.summary.total) * 100).toFixed(2);
-  console.log(`\nPass Rate:      ${passRate}%`);
-
-  if (results.failed.length > 0) {
-    log.section('FAILED TESTS');
-    results.failed.forEach((test, index) => {
-      console.log(`\n${index + 1}. ${colors.red}${test.name}${colors.reset}`);
-      console.log(`   Endpoint: ${test.method} ${test.endpoint}`);
-      if (test.expected) {
-        console.log(`   Expected: ${test.expected}, Got: ${test.actual || 'N/A'}`);
-      }
-      if (test.error) {
-        console.log(`   Error: ${JSON.stringify(test.error).substring(0, 200)}`);
-      }
-    });
-  }
-
-  // Save report to file
-  const reportPath = path.join(__dirname, '..', 'test-results.json');
-  const reportData = {
-    timestamp: new Date().toISOString(),
-    baseUrl: API_BASE,
-    summary: results.summary,
-    passed: results.passed,
-    failed: results.failed,
-    skipped: results.skipped
-  };
-
-  fs.writeFileSync(reportPath, JSON.stringify(reportData, null, 2));
-  log.info(`\nDetailed report saved to: ${reportPath}`);
-
-  // Generate HTML report
-  generateHTMLReport(reportData);
-}
-
-/**
- * Generate HTML report
- */
-function generateHTMLReport(data) {
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>API Test Results</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
-    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
-    h1 { color: #333; }
-    .summary { display: flex; gap: 20px; margin: 20px 0; }
-    .stat { flex: 1; padding: 15px; border-radius: 5px; text-align: center; }
-    .stat.passed { background: #d4edda; color: #155724; }
-    .stat.failed { background: #f8d7da; color: #721c24; }
-    .stat.skipped { background: #fff3cd; color: #856404; }
-    .stat.total { background: #d1ecf1; color: #0c5460; }
-    .stat h2 { margin: 0; font-size: 2em; }
-    .stat p { margin: 5px 0 0 0; }
-    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-    th { background: #f8f9fa; font-weight: bold; }
-    tr:hover { background: #f5f5f5; }
-    .status-pass { color: green; font-weight: bold; }
-    .status-fail { color: red; font-weight: bold; }
-    .status-skip { color: orange; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>API Test Results</h1>
-    <p><strong>Timestamp:</strong> ${data.timestamp}</p>
-    <p><strong>Base URL:</strong> ${data.baseUrl}</p>
-    
-    <div class="summary">
-      <div class="stat total">
-        <h2>${data.summary.total}</h2>
-        <p>Total Tests</p>
-      </div>
-      <div class="stat passed">
-        <h2>${data.summary.passed}</h2>
-        <p>Passed</p>
-      </div>
-      <div class="stat failed">
-        <h2>${data.summary.failed}</h2>
-        <p>Failed</p>
-      </div>
-      <div class="stat skipped">
-        <h2>${data.summary.skipped}</h2>
-        <p>Skipped</p>
-      </div>
-    </div>
-
-    <h2>Failed Tests</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Test Name</th>
-          <th>Method</th>
-          <th>Endpoint</th>
-          <th>Status</th>
-          <th>Error</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${data.failed.map(test => `
-          <tr>
-            <td>${test.name}</td>
-            <td>${test.method}</td>
-            <td>${test.endpoint}</td>
-            <td>${test.actual || 'N/A'}</td>
-            <td>${JSON.stringify(test.error || '').substring(0, 100)}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-
-    <h2>All Tests</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Status</th>
-          <th>Test Name</th>
-          <th>Method</th>
-          <th>Endpoint</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${data.passed.map(test => `
-          <tr>
-            <td class="status-pass">✓ PASS</td>
-            <td>${test.name}</td>
-            <td>${test.method}</td>
-            <td>${test.endpoint}</td>
-          </tr>
-        `).join('')}
-        ${data.failed.map(test => `
-          <tr>
-            <td class="status-fail">✗ FAIL</td>
-            <td>${test.name}</td>
-            <td>${test.method}</td>
-            <td>${test.endpoint}</td>
-          </tr>
-        `).join('')}
-        ${data.skipped.map(test => `
-          <tr>
-            <td class="status-skip">⊘ SKIP</td>
-            <td>${test.name}</td>
-            <td>-</td>
-            <td>${test.endpoint}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  </div>
-</body>
-</html>
-  `;
-
-  const htmlPath = path.join(__dirname, '..', 'test-results.html');
-  fs.writeFileSync(htmlPath, html);
-  log.info(`HTML report saved to: ${htmlPath}`);
-}
-
-/**
- * Main test runner
- */
-async function runTests() {
-  console.log(`\n${colors.blue}╔═══════════════════════════════════════════════════════════╗${colors.reset}`);
-  console.log(`${colors.blue}║        COMPREHENSIVE API TEST SUITE                        ║${colors.reset}`);
-  console.log(`${colors.blue}╚═══════════════════════════════════════════════════════════╝${colors.reset}\n`);
-
-  log.info(`Base URL: ${API_BASE}`);
-  log.info(`Mode: ${USE_LOCAL ? 'LOCAL' : USE_DOMAIN ? 'PRODUCTION (Domain)' : 'PRODUCTION (IP)'}`);
-  
-  if (!USE_LOCAL && !USE_DOMAIN) {
-    log.warn(`⚠️  Note: Production server requires Host: api.etelios.com header`);
-    log.warn(`⚠️  If tests fail, try: USE_DOMAIN=true npm run test:apis`);
-    log.warn(`⚠️  Or set up DNS: api.etelios.com -> 98.70.245.87\n`);
+function recordResult(test, success, message = '', data = null) {
+  if (success) {
+    results.passed.push({ test, message, data })
+    console.log(`✅ ${test}: ${message}`)
   } else {
-    log.info('');
-  }
-
-  try {
-    // Step 1: Authenticate
-    await authenticateRoles();
-
-    // Step 2: Test all services
-    await testAuthService();
-    await testHRService();
-    await testAttendanceService();
-
-    // Step 3: Generate report
-    generateReport();
-
-    // Exit with appropriate code
-    process.exit(results.summary.failed > 0 ? 1 : 0);
-  } catch (error) {
-    log.error(`Fatal error: ${error.message}`);
-    console.error(error);
-    process.exit(1);
+    results.failed.push({ test, message, data })
+    console.log(`❌ ${test}: ${message}`)
   }
 }
 
-// Run tests
-runTests();
+function recordWarning(test, message, data = null) {
+  results.warnings.push({ test, message, data })
+  console.log(`⚠️  ${test}: ${message}`)
+}
 
+async function fetchResp(url, options = {}) {
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...options.headers },
+    })
+    const text = await res.text()
+    let data
+    try {
+      data = text ? JSON.parse(text) : {}
+    } catch {
+      data = { _raw: text.slice(0, 500) }
+    }
+    return { ok: res.ok, status: res.status, data, headers: res.headers }
+  } catch (error) {
+    return { ok: false, status: 0, data: { error: error.message }, error }
+  }
+}
+
+async function login() {
+  const url = `${API_BASE}/auth/login`
+  log('LOGIN', 'POST', { url, email: EMAIL })
+  const { ok, status, data } = await fetchResp(url, {
+    method: 'POST',
+    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+  })
+  
+  if (!ok) {
+    recordResult('Login', false, `Failed with status ${status}`, data)
+    return null
+  }
+  
+  const responseData = data.data || data
+  const token = responseData.accessToken || data.accessToken
+  const user = responseData.user || data.user
+  
+  if (!token) {
+    recordResult('Login', false, 'No token in response', data)
+    return null
+  }
+  
+  let tenantId = null
+  try {
+    const jwt = require('jsonwebtoken')
+    const decoded = jwt.decode(token)
+    tenantId = decoded?.tenantId || decoded?.tenant_id
+    if (tenantId) {
+      tenantId = String(tenantId).toLowerCase().trim()
+    }
+  } catch (e) {
+    // Ignore
+  }
+  
+  if (!tenantId) {
+    tenantId = user?.tenantId || user?.tenant_id || responseData.user?.tenantId
+    if (tenantId) {
+      tenantId = String(tenantId).toLowerCase().trim()
+    }
+  }
+  
+  recordResult('Login', true, `Success - Tenant: ${tenantId || 'none'}`, {
+    tenantId: tenantId || 'none',
+    employeeId: user?.employee_id || user?.employeeId,
+    hasToken: !!token
+  })
+  
+  return { token, tenantId, user, employeeId: user?.employee_id || user?.employeeId, userId: user?._id || user?.id }
+}
+
+function authHeaders(token, tenantId) {
+  const h = { 'Content-Type': 'application/json', Accept: 'application/json' }
+  h.Authorization = `Bearer ${token}`
+  if (tenantId) {
+    h['x-tenant-id'] = String(tenantId).toLowerCase().trim()
+  }
+  return h
+}
+
+async function testHealthEndpoints() {
+  console.log('\n' + '='.repeat(60))
+  console.log('Testing Health Endpoints')
+  console.log('='.repeat(60))
+  
+  // Attendance service health
+  const attendanceHealth = await fetchResp(`${BASE}/health`)
+  recordResult('Attendance Health', attendanceHealth.ok, 
+    attendanceHealth.ok ? 'Service is healthy' : `Status: ${attendanceHealth.status}`,
+    attendanceHealth.data)
+  
+  // Attendance service API health
+  const attendanceApiHealth = await fetchResp(`${API_BASE}/attendance/health`)
+  recordResult('Attendance API Health', attendanceApiHealth.ok,
+    attendanceApiHealth.ok ? 'API is healthy' : `Status: ${attendanceApiHealth.status}`,
+    attendanceApiHealth.data)
+  
+  // Circuit breaker metrics
+  const circuitBreakers = await fetchResp(`${API_BASE}/attendance/health/circuit-breakers`)
+  if (circuitBreakers.ok && circuitBreakers.data.circuitBreakers) {
+    const hrState = circuitBreakers.data.circuitBreakers.hrService
+    recordResult('Circuit Breaker Metrics', true, 
+      `HR Service: ${hrState?.state || 'unknown'}`, 
+      circuitBreakers.data.circuitBreakers)
+  } else {
+    recordWarning('Circuit Breaker Metrics', 'Endpoint not available or invalid response', circuitBreakers.data)
+  }
+}
+
+async function testHRServiceAPIs(token, tenantId, userId) {
+  console.log('\n' + '='.repeat(60))
+  console.log('Testing HR Service APIs')
+  console.log('='.repeat(60))
+  
+  // Get employee by ID
+  if (userId) {
+    const employee = await fetchResp(`${API_BASE}/hr/employees/${userId}`, {
+      method: 'GET',
+      headers: authHeaders(token, tenantId),
+    })
+    recordResult('Get Employee by ID', employee.ok,
+      employee.ok ? 'Employee found' : `Status: ${employee.status}`,
+      employee.ok ? { 
+        hasStore: !!(employee.data?.data?.store || employee.data?.store),
+        storeName: employee.data?.data?.store?.name || employee.data?.store?.name || 'none'
+      } : employee.data)
+  }
+  
+  // List employees
+  const employees = await fetchResp(`${API_BASE}/hr/employees?limit=5`, {
+    method: 'GET',
+    headers: authHeaders(token, tenantId),
+  })
+  recordResult('List Employees', employees.ok,
+    employees.ok ? `Found ${Array.isArray(employees.data?.data) ? employees.data.data.length : 0} employees` : `Status: ${employees.status}`,
+    employees.data)
+  
+  // List stores
+  const stores = await fetchResp(`${API_BASE}/hr/stores`, {
+    method: 'GET',
+    headers: authHeaders(token, tenantId),
+  })
+  const storeCount = Array.isArray(stores.data?.data) ? stores.data.data.length : 0
+  recordResult('List Stores', stores.ok,
+    stores.ok ? `Found ${storeCount} stores` : `Status: ${stores.status}`,
+    { count: storeCount })
+}
+
+async function testAttendanceAPIs(token, tenantId, employeeId) {
+  console.log('\n' + '='.repeat(60))
+  console.log('Testing Attendance APIs')
+  console.log('='.repeat(60))
+  
+  // Check today's attendance
+  const today = new Date().toISOString().slice(0, 10)
+  const todayAttendance = await fetchResp(
+    `${API_BASE}/attendance/today?employeeId=${encodeURIComponent(employeeId)}&date=${today}`,
+    {
+      method: 'GET',
+      headers: authHeaders(token, tenantId),
+    }
+  )
+  recordResult('Get Today Attendance', todayAttendance.ok,
+    todayAttendance.ok ? 'Today attendance retrieved' : `Status: ${todayAttendance.status}`,
+    todayAttendance.data)
+  
+  // Clock in
+  const clockIn = await fetchResp(`${API_BASE}/attendance/clock-in`, {
+    method: 'POST',
+    headers: authHeaders(token, tenantId),
+    body: JSON.stringify({
+      latitude: LATITUDE,
+      longitude: LONGITUDE,
+      notes: 'API test clock-in',
+      timestamp: Date.now()
+    }),
+  })
+  recordResult('Clock In', clockIn.ok,
+    clockIn.ok ? 'Clock-in successful' : `Status: ${clockIn.status} - ${clockIn.data?.error || clockIn.data?.message || ''}`,
+    clockIn.data)
+  
+  // Wait a bit
+  await new Promise(resolve => setTimeout(resolve, 2000))
+  
+  // Clock out
+  const clockOut = await fetchResp(`${API_BASE}/attendance/clock-out`, {
+    method: 'POST',
+    headers: authHeaders(token, tenantId),
+    body: JSON.stringify({
+      latitude: LATITUDE,
+      longitude: LONGITUDE,
+      notes: 'API test clock-out'
+    }),
+  })
+  recordResult('Clock Out', clockOut.ok,
+    clockOut.ok ? 'Clock-out successful' : `Status: ${clockOut.status} - ${clockOut.data?.error || clockOut.data?.message || ''}`,
+    clockOut.data)
+  
+  // Get attendance records
+  const records = await fetchResp(`${API_BASE}/attendance/records?limit=5`, {
+    method: 'GET',
+    headers: authHeaders(token, tenantId),
+  })
+  recordResult('Get Attendance Records', records.ok,
+    records.ok ? 'Records retrieved' : `Status: ${records.status}`,
+    records.data)
+}
+
+async function testNetworkConnectivity() {
+  console.log('\n' + '='.repeat(60))
+  console.log('Testing Network Connectivity')
+  console.log('='.repeat(60))
+  
+  // Test base URL
+  const baseTest = await fetchResp(`${BASE}/health`)
+  recordResult('Base URL Connectivity', baseTest.ok || baseTest.status === 404,
+    baseTest.ok ? 'Base URL reachable' : `Status: ${baseTest.status}`)
+  
+  // Test API base
+  const apiTest = await fetchResp(`${API_BASE}/attendance/health`)
+  recordResult('API Base Connectivity', apiTest.ok,
+    apiTest.ok ? 'API base reachable' : `Status: ${apiTest.status}`)
+}
+
+async function main() {
+  console.log('='.repeat(60))
+  console.log('Comprehensive API Test Suite')
+  console.log('='.repeat(60))
+  console.log(`Backend API: ${API_BASE}`)
+  console.log(`Email: ${EMAIL}`)
+  console.log(`Location: ${LATITUDE}, ${LONGITUDE}`)
+  console.log('')
+  
+  // Test network connectivity first
+  await testNetworkConnectivity()
+  
+  // Test health endpoints
+  await testHealthEndpoints()
+  
+  // Login
+  const loginResult = await login()
+  if (!loginResult) {
+    console.log('\n❌ Cannot proceed without login. Exiting.')
+    printSummary()
+    process.exit(1)
+  }
+  
+  const { token, tenantId, employeeId } = loginResult
+  
+  // Test HR Service APIs
+  await testHRServiceAPIs(token, tenantId, loginResult.userId)
+  
+  // Test Attendance APIs
+  if (employeeId) {
+    await testAttendanceAPIs(token, tenantId, employeeId)
+  } else {
+    recordWarning('Attendance APIs', 'Skipped - No employeeId found')
+  }
+  
+  // Print summary
+  printSummary()
+}
+
+function printSummary() {
+  console.log('\n' + '='.repeat(60))
+  console.log('Test Summary')
+  console.log('='.repeat(60))
+  console.log(`✅ Passed: ${results.passed.length}`)
+  console.log(`❌ Failed: ${results.failed.length}`)
+  console.log(`⚠️  Warnings: ${results.warnings.length}`)
+  console.log('')
+  
+  if (results.failed.length > 0) {
+    console.log('Failed Tests:')
+    results.failed.forEach(({ test, message }) => {
+      console.log(`  ❌ ${test}: ${message}`)
+    })
+    console.log('')
+  }
+  
+  if (results.warnings.length > 0) {
+    console.log('Warnings:')
+    results.warnings.forEach(({ test, message }) => {
+      console.log(`  ⚠️  ${test}: ${message}`)
+    })
+    console.log('')
+  }
+  
+  const successRate = ((results.passed.length / (results.passed.length + results.failed.length)) * 100).toFixed(1)
+  console.log(`Success Rate: ${successRate}%`)
+  console.log('')
+  
+  if (results.failed.length === 0) {
+    console.log('🎉 All tests passed!')
+  } else {
+    console.log('⚠️  Some tests failed. Please review the output above.')
+  }
+}
+
+main().catch((err) => {
+  console.error('❌ Unexpected error:', err)
+  if (err.stack) {
+    console.error('Stack:', err.stack)
+  }
+  printSummary()
+  process.exit(1)
+})

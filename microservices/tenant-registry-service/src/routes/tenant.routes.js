@@ -8,6 +8,11 @@ const { authenticate, requireRole } = require('../middleware/auth.middleware');
 router.use(tenantRateLimit(1000, 60000)); // 1000 requests per minute
 
 // Tenant routes
+// Get current user's company (frontend endpoint) - MUST be before /:tenantId
+router.get('/company', authenticate, tenantController.getCurrentCompany);
+// Also support /api/tenants/company (plural) for consistency
+// List tenants - requires superadmin (MUST be before /:tenantId)
+router.get('/', authenticate, requireRole(['superadmin', 'super-admin', 'admin']), tenantController.listTenants);
 // Create tenant - requires superadmin
 router.post('/', authenticate, requireRole(['superadmin', 'super-admin', 'admin']), tenantController.createTenant);
 

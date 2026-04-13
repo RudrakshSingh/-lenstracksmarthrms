@@ -335,11 +335,19 @@ class AuthService {
         throw new Error('Current password is incorrect');
       }
 
-      // Update password
-      user.password = newPassword;
-      await user.save();
+      const hashed = await hashPassword(newPassword);
+      await User.updateOne(
+        { _id: userId },
+        {
+          $set: {
+            password: hashed,
+            mustChangePassword: false,
+            passwordTemporary: false,
+            passwordChangedAt: new Date()
+          }
+        }
+      );
 
-      // Remove all refresh tokens to force re-login
       await this.removeRefreshToken(userId);
 
       logger.info('Password changed successfully', { userId });
@@ -549,38 +557,6 @@ class AuthService {
    */
   async updateUser(userId, updateData) {
     return this.updateUserProfile(userId, updateData);
-  }
-
-  /**
-   * Change user password
-   * @param {string} userId - User ID
-   * @param {string} currentPassword - Current password
-   * @param {string} newPassword - New password
-   * @returns {Promise<void>}
-   */
-  async changePassword(userId, currentPassword, newPassword) {
-    try {
-      const user = await User.findById(userId);
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      // Verify current password
-      const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-      if (!isCurrentPasswordValid) {
-        throw new Error('Current password is incorrect');
-      }
-
-      // Update password
-      user.password = newPassword;
-      await user.save();
-
-      logger.info('Password changed successfully', { userId });
-
-    } catch (error) {
-      logger.error('Failed to change password', { error: error.message, userId });
-      throw error;
-    }
   }
 }
 

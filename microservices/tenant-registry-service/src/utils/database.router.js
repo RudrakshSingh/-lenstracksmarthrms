@@ -104,10 +104,10 @@ class DatabaseRouter {
         }
       }
       
-      // Determine if this is Cosmos DB
-      const isCosmosDB = registryUrl.includes('cosmos.azure.com') || registryUrl.includes('documents.azure.com');
+      // Determine target DB flavor to set safe driver options.
+      const isDocumentDB = registryUrl.includes('docdb.amazonaws.com');
       
-      // Set connection options optimized for Azure Cosmos DB
+      // Set connection options optimized for Mongo-compatible databases
       const connectionOptions = {
         useNewUrlParser: true,
         useUnifiedTopology: true,
@@ -115,17 +115,17 @@ class DatabaseRouter {
         serverSelectionTimeoutMS: 30000,
         socketTimeoutMS: 60000,
         connectTimeoutMS: 30000,
-        retryWrites: true,
+        retryWrites: false,
         retryReads: true,
         dbName: targetDbName, // Explicitly set the database name
       };
       
-      // Azure Cosmos DB specific options
-      if (isCosmosDB) {
+      if (isDocumentDB) {
         connectionOptions.tls = true;
         connectionOptions.tlsInsecure = false;
-        connectionOptions.retryWrites = true;
-        logger.info('Connecting to Azure Cosmos DB (MongoDB API)');
+        connectionOptions.tlsCAFile = process.env.DOCDB_TLS_CA_FILE || '/etc/ssl/certs/ca-cert.pem';
+        connectionOptions.retryWrites = false;
+        logger.info('Connecting to AWS DocumentDB');
       }
       
       // IMPORTANT:
@@ -186,15 +186,15 @@ class DatabaseRouter {
         }
       }
 
-      // Create new connection - use ONE shared tenant database in Cosmos/Mongo.
-      // Production requirement: we may only have ONE Cosmos connection string + a DB name in env.
+      // Create new connection - use ONE shared tenant database.
+      // Production requirement: we may only have ONE connection string + a DB name in env.
       const databaseName =
         process.env.TENANT_DB_NAME ||
         process.env.DB_NAME ||
         process.env.MONGO_DB_NAME ||
         'tenant-db';
 
-      // Prefer explicit tenant DB URL, otherwise fall back to the same Mongo/Cosmos URL used for registry.
+      // Prefer explicit tenant DB URL, otherwise fall back to the same URL used for registry.
       let tenantUrl =
         process.env.TENANT_DATABASE_URL ||
         process.env.REGISTRY_DATABASE_URL ||
@@ -202,7 +202,7 @@ class DatabaseRouter {
         process.env.MONGODB_URI ||
         `mongodb://localhost:27017/${databaseName}`;
 
-      // Ensure URL includes the database name (Cosmos often provides a URL without /dbName)
+      // Ensure URL includes the database name.
       try {
         const url = new URL(tenantUrl);
         url.pathname = `/${databaseName}`;
@@ -218,7 +218,7 @@ class DatabaseRouter {
         }
       }
 
-      const isCosmosDB = tenantUrl.includes('cosmos.azure.com') || tenantUrl.includes('documents.azure.com');
+      const isDocumentDB = tenantUrl.includes('docdb.amazonaws.com');
       const connectionOptions = {
         useNewUrlParser: true,
         useUnifiedTopology: true,
@@ -226,15 +226,16 @@ class DatabaseRouter {
         serverSelectionTimeoutMS: 30000,
         socketTimeoutMS: 60000,
         connectTimeoutMS: 30000,
-        retryWrites: true,
+        retryWrites: false,
         retryReads: true,
         dbName: databaseName
       };
 
-      if (isCosmosDB) {
+      if (isDocumentDB) {
         connectionOptions.tls = true;
         connectionOptions.tlsInsecure = false;
-        connectionOptions.retryWrites = true;
+        connectionOptions.tlsCAFile = process.env.DOCDB_TLS_CA_FILE || '/etc/ssl/certs/ca-cert.pem';
+        connectionOptions.retryWrites = false;
       }
 
       // mongoose.createConnection returns immediately; wait for it to actually connect so `connection.db` exists.

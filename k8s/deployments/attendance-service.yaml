@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: attendance-service
-  namespace: etelios-backend-prod
+  namespace: etelios-prod
   labels:
     app: attendance-service
 spec:
@@ -17,10 +17,10 @@ spec:
         app: attendance-service
     spec:
       imagePullSecrets:
-      - name: acr-secret
+      - name: ecr-registry-secret
       containers:
       - name: attendance-service
-        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/attendance-service:latest
+        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-attendance-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3003
@@ -33,22 +33,75 @@ spec:
           value: "3003"
         - name: SERVICE_NAME
           value: "attendance-service"
+        - name: MONGO_URI
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: MONGO_URI
         - name: K8S_ENV
           value: "true"
+        - name: HR_LOOKUP_REQUEST_TIMEOUT_MS
+          value: "2500"
+        - name: HR_LOOKUP_TOTAL_TIMEOUT_MS
+          value: "8000"
+        - name: ENABLE_CROSS_TENANT_LOOKUP
+          value: "false"
+        - name: ENABLE_ANY_EMPLOYEE_FALLBACK
+          value: "false"
+        # Relaxed clock-in for listed roles (comma-separated); default lat/lng when GPS omitted
+        - name: ATTENDANCE_OPTIONAL_GPS_ROLES
+          value: "MANAGER"
+        - name: NO_GEOFENCE_DEFAULT_LAT
+          value: "0"
+        - name: NO_GEOFENCE_DEFAULT_LNG
+          value: "0"
         - name: API_GATEWAY_HOST
-          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
+          value: "api-gateway"
+        - name: JTS_SERVICE_URL
+          value: "http://jts-service:3018"
+        - name: ROSTER_ENFORCEMENT_ENABLED
+          value: "true"
         - name: MONGODB_URI
           valueFrom:
             secretKeyRef:
-              name: etelios-secrets
-              key: ATTENDANCE_SERVICE_DB_URI
+              name: docdb-credentials
+              key: MONGODB_URI
+        - name: MONGO_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: DOCDB_USERNAME
+        - name: MONGO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: DOCDB_PASSWORD
+        - name: MONGO_DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: MONGO_DB_NAME
+        - name: DOCDB_TLS_CA_FILE
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: DOCDB_TLS_CA_FILE
+        # MUST match auth-service signing key (same K8s secret as auth/hr/jts) — never hardcode a different string
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_SECRET
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_REFRESH_SECRET
         - name: DB_NAME
-          value: "attendance_db"
-        envFrom:
-        - configMapRef:
-            name: etelios-config-prod
-        - secretRef:
-            name: etelios-secrets
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: DB_NAME
         resources:
           requests:
             memory: "256Mi"
@@ -80,12 +133,21 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: docdb-ca-cert
+          mountPath: /etc/ssl/certs/ca-cert.pem
+          subPath: ca-cert.pem
+          readOnly: true
+      volumes:
+      - name: docdb-ca-cert
+        secret:
+          secretName: docdb-ca-cert
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: attendance-service
-  namespace: etelios-backend-prod
+  namespace: etelios-prod
   labels:
     app: attendance-service
 spec:
@@ -97,3 +159,7 @@ spec:
     targetPort: 3003
     protocol: TCP
     name: http
+  - port: 80
+    targetPort: 3003
+    protocol: TCP
+    name: ingress

@@ -208,6 +208,15 @@ const startServer = async () => {
   try {
     await connectDB();
     loadRoutes();
+    if (process.env.ENABLE_KAFKA_CONSUMERS === 'true') {
+      try {
+        // eslint-disable-next-line global-require
+        const { startPayrollNotificationConsumers } = require('./consumers/payroll.consumer');
+        await startPayrollNotificationConsumers();
+      } catch (consumerError) {
+        logger.warn('Skipping payroll notification consumers startup', { error: consumerError.message });
+      }
+    }
     
     const PORT = process.env.PORT || 3015;
     

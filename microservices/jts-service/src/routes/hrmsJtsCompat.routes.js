@@ -6,7 +6,19 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/hrmsJtsCompat.controller');
 const { authenticate } = require('../middleware/auth.middleware');
+const { requireRole } = require('../middleware/rbac.middleware');
 const { validate, Joi } = require('../middleware/validate.middleware');
+
+const readRoles = [
+  'MANAGER',
+  'STORE_MANAGER',
+  'CLUSTER_MANAGER',
+  'COUNTRY_OPS',
+  'TENANT_ADMIN',
+  'HOD',
+  'SUPERADMIN',
+  'ADMIN'
+];
 
 const objectIdSchema = Joi.string().length(24).hex();
 
@@ -96,16 +108,57 @@ router.post(
   (req, res) => ctrl.rejectApproval(req, res)
 );
 
+const analyticsQuerySchema = Joi.object({
+  timeRange: Joi.string().valid('3months', '6months', '1year').optional(),
+  department: Joi.string().optional(),
+  teamId: objectIdSchema.optional()
+});
+
+/** Register specific paths before `/analytics` so Express does not treat `overview` as a param. */
+router.get('/analytics/overview', validate({ query: analyticsQuerySchema }), (req, res) =>
+  ctrl.getAnalyticsOverview(req, res)
+);
+
+router.get('/analytics/by-employee', validate({ query: analyticsQuerySchema }), (req, res) =>
+  ctrl.getAnalyticsByEmployee(req, res)
+);
+
+router.get('/analytics/by-team', validate({ query: analyticsQuerySchema }), (req, res) =>
+  ctrl.getAnalyticsByTeam(req, res)
+);
+
+router.get('/analytics/by-task-type', validate({ query: analyticsQuerySchema }), (req, res) =>
+  ctrl.getAnalyticsByTaskType(req, res)
+);
+
+router.get('/analytics', validate({ query: analyticsQuerySchema }), (req, res) =>
+  ctrl.getAnalytics(req, res)
+);
+
 router.get(
-  '/analytics',
+  '/reviews/queue',
+  requireRole(readRoles),
   validate({
     query: Joi.object({
-      timeRange: Joi.string().valid('3months', '6months', '1year').optional(),
-      department: Joi.string().optional(),
-      teamId: objectIdSchema.optional()
+      limit: Joi.number().integer().min(1).max(200).optional(),
+      status: Joi.string().optional(),
+      employeeId: objectIdSchema.optional()
     })
   }),
-  (req, res) => ctrl.getAnalytics(req, res)
+  (req, res) => ctrl.getUnifiedReviewQueue(req, res)
+);
+
+router.get('/sla-policies', requireRole(readRoles), (req, res) => ctrl.listSlaPoliciesPublic(req, res));
+
+router.get(
+  '/sla-policies/:id',
+  requireRole(readRoles),
+  validate({ params: Joi.object({ id: objectIdSchema.required() }) }),
+  (req, res) => ctrl.getSlaPolicyByIdPublic(req, res)
+);
+
+router.get('/escalations/console', requireRole(readRoles), (req, res) =>
+  ctrl.getEscalationConsole(req, res)
 );
 
 router.get(

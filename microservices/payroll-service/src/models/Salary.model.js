@@ -202,3 +202,7 @@ salarySchema.statics.getSalaryHistory = function(employeeId, limit = 12) {
 };
 
 module.exports = mongoose.model('Salary', salarySchema);
+
+// Performance indexes
+salarySchema.index({ employee_id: 1, month: -1, year: -1 }); // Fast salary lookup
+salarySchema.index({ tenantId: 1, month: -1, year: -1 }); // Tenant payroll

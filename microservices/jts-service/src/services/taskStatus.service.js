@@ -63,18 +63,27 @@ class TaskStatusService {
       }
 
       const fromStatus = task.status;
+      const bypass = context.bypassWorkflowGuards === true;
 
       if (!this.isValidTransition(fromStatus, toStatus)) {
         throw new Error('TASK_002_INVALID_STATUS_TRANSITION');
       }
 
-      assertChecklistIfNeeded(task, toStatus);
+      if (!bypass) {
+        assertChecklistIfNeeded(task, toStatus);
+      }
 
-      if (toStatus === 'IN_PROGRESS' && ['ACCEPTED', 'COMPLETED', 'REOPENED'].includes(fromStatus)) {
+      if (
+        !bypass &&
+        toStatus === 'IN_PROGRESS' &&
+        ['ACCEPTED', 'COMPLETED', 'REOPENED'].includes(fromStatus)
+      ) {
         await assertDependenciesSatisfied(tenantId, task);
       }
 
-      await assertTimerProofIfNeeded(task, toStatus);
+      if (!bypass) {
+        await assertTimerProofIfNeeded(task, toStatus);
+      }
 
       await this.applySideEffects(task, fromStatus, toStatus, context);
 

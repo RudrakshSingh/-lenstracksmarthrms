@@ -1,5 +1,6 @@
 const Role = require('../models/Role.model');
 const logger = require('../config/logger');
+const permissionMetrics = require('../utils/permissionMetrics');
 
 // Check if user has required role
 function requireRole(roles) {
@@ -14,29 +15,22 @@ function requireRole(roles) {
 
       const userRole = req.user.role;
       const allowedRoles = Array.isArray(roles) ? roles : [roles];
-      
-      // Map lowercase roles to capitalized roles for compatibility
-      const roleMapping = {
-        'superadmin': 'SuperAdmin',
-        'admin': 'Admin',
-        'hr': 'HR', 
-        'manager': 'Manager',
-        'employee': 'Employee'
-      };
-      
-      const mappedUserRole = roleMapping[userRole] || userRole;
+      const allowedLower = new Set(
+        allowedRoles.map((r) => String(r).toLowerCase())
+      );
+      const userRoleLower = String(userRole || '').toLowerCase();
 
       // Admin and superadmin have access to all roles
-      if (userRole === 'admin' || userRole === 'superadmin') {
+      if (userRoleLower === 'admin' || userRoleLower === 'superadmin') {
         next();
         return;
       }
 
-      if (!allowedRoles.includes(mappedUserRole) && !allowedRoles.includes(userRole)) {
+      if (!allowedLower.has(userRoleLower)) {
         logger.warn('Access denied - insufficient role', {
           userId: req.user.id,
           userRole,
-          requiredRoles: allowedRoles,
+          requiredRoles: [...allowedLower],
           path: req.originalUrl
         });
 
@@ -74,7 +68,7 @@ function requirePermission(permissions) {
         });
       }
 
-      const userRole = req.user.role;
+      const userRole = String(req.user.role || '').toLowerCase();
       const requiredPermissions = Array.isArray(permissions) ? permissions : [permissions];
 
       // Admin and superadmin have all permissions
@@ -84,8 +78,9 @@ function requirePermission(permissions) {
       }
 
       // Check user's direct permissions first
+      permissionMetrics.inc('rbacPermissionChecks');
       const userPermissions = req.user.permissions || [];
-      const hasUserPermission = requiredPermissions.every(permission => 
+      const hasUserPermission = requiredPermissions.every((permission) =>
         userPermissions.includes(permission)
       );
 
@@ -97,23 +92,26 @@ function requirePermission(permissions) {
       // Fallback to role permissions from database
       const role = await Role.findOne({ name: userRole });
       if (!role) {
+        permissionMetrics.inc('rbacPermissionDenied');
         return res.status(403).json({
           success: false,
           message: 'Role not found'
         });
       }
 
-      const hasPermission = requiredPermissions.every(permission => 
+      const hasPermission = requiredPermissions.every((permission) =>
         role.permissions.includes(permission)
       );
 
       if (!hasPermission) {
+        permissionMetrics.inc('rbacPermissionDenied');
         logger.warn('Access denied - insufficient permissions', {
           userId: req.user.id,
           userRole,
           requiredPermissions,
           userPermissions: role.permissions,
-          path: req.originalUrl
+          path: req.originalUrl,
+          metrics: permissionMetrics.snapshot()
         });
 
         return res.status(403).json({

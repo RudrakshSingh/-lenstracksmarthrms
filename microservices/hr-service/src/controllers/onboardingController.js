@@ -190,12 +190,28 @@ const saveDraft = async (req, res, next) => {
 const getDraft = async (req, res, next) => {
   try {
     const { employee_id } = req.query;
+    const userId = req.user?.id || req.user?._id;
 
-    if (!employee_id) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'employee_id is required');
+    // If employee_id not provided, try to get from user's employeeId
+    let draftEmployeeId = employee_id;
+    if (!draftEmployeeId && req.user) {
+      draftEmployeeId = req.user.employeeId || req.user.employee_id;
     }
 
-    const result = await onboardingService.getDraft(employee_id);
+    // If still no employee_id, return empty draft structure
+    if (!draftEmployeeId) {
+      return res.status(200).json({
+        success: true,
+        message: 'No draft found (employee_id not provided)',
+        data: {
+          employee_id: null,
+          steps: {},
+          lastUpdated: null
+        }
+      });
+    }
+
+    const result = await onboardingService.getDraft(draftEmployeeId);
 
     res.status(200).json({
       success: true,
@@ -295,80 +311,76 @@ const uploadOnboardingDocument = async (req, res, next) => {
       );
     }
 
-    // Upload to Azure Blob Storage.
-    // Primary: shared SAS-based uploader (used by document upload).
-    // Fallback: connection string / account+key credentials if provided.
-    let blobUrl = null;
-    try {
-      const azureBlobStorage = require('../../../shared/utils/azureBlobStorage');
-      if (azureBlobStorage.isConfigured()) {
-        // (SAS URL/token mode)
-        // We'll upload later once filename is built.
-      }
-    } catch (e) {
-      // Ignore: fallback handled below
-    }
+    // Upload document to AWS S3
+    // S3 URL should be attached by uploadToS3Storage middleware
+    let blobUrl = req.file?.s3Url || null;
+    let storageProvider = 'aws-s3';
 
-    const safeExt = path.extname(req.file.originalname || '').toLowerCase() || '';
-    const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}${safeExt}`;
-    const filename = `${employee_id.toUpperCase()}-${document_type}-${safeName}`;
-
-    // 1) Try shared SAS uploader
-    try {
-      const azureBlobStorage = require('../../../shared/utils/azureBlobStorage');
-      if (azureBlobStorage.isConfigured()) {
-        const uploadResult = await azureBlobStorage.uploadFile(req.file.buffer, filename, {
-          mimeType: req.file.mimetype,
-          folder: 'onboarding',
-          originalName: req.file.originalname,
-          metadata: {
-            'employee-id': employee_id.toUpperCase(),
-            'document-type': document_type
-          }
-        });
-        blobUrl = uploadResult.url;
-      }
-    } catch (e) {
-      logger.warn('SAS-based Azure upload failed, will try connection-string credentials', { error: e.message });
-    }
-
-    // 2) Fallback: connection string / account key credentials
+    // If S3 upload failed in middleware, try direct upload using local S3 config
     if (!blobUrl) {
-      const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
-      const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
-      const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY;
-      const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME || 'hrms-images';
+      logger.warn('S3 URL not found in req.file, attempting direct upload', {
+        employee_id,
+        document_type,
+        hasFile: !!req.file,
+        uploadError: req.file?.uploadError
+      });
 
-      if (!connectionString && !(accountName && accountKey)) {
-        throw new ApiError(
-          httpStatus.SERVICE_UNAVAILABLE,
-          'AZURE_BLOB_NOT_CONFIGURED',
-          'Azure Blob Storage is not configured. Set AZURE_STORAGE_SAS_URL/SAS_TOKEN or AZURE_STORAGE_CONNECTION_STRING or AZURE_STORAGE_ACCOUNT_NAME+AZURE_STORAGE_ACCOUNT_KEY'
-        );
-      }
+      // Try using local S3 config as fallback
+      try {
+        const { uploadToS3, isS3StorageReady } = require('../config/s3Storage');
+        
+        if (isS3StorageReady() && req.file && req.file.buffer) {
+          const safeExt = path.extname(req.file.originalname || '').toLowerCase() || '';
+          const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}${safeExt}`;
+          const filename = `${employee_id.toUpperCase()}-${document_type}-${safeName}`;
 
-      const blobServiceClient = connectionString
-        ? BlobServiceClient.fromConnectionString(connectionString)
-        : new BlobServiceClient(
-            `https://${accountName}.blob.core.windows.net`,
-            new StorageSharedKeyCredential(accountName, accountKey)
+          const uploadResult = await uploadToS3(
+            req.file.buffer,
+            filename,
+            req.file.mimetype || 'application/pdf',
+            'onboarding'
           );
 
-      const containerClient = blobServiceClient.getContainerClient(containerName);
-      await containerClient.createIfNotExists();
-      const blobName = `onboarding/${filename}`;
-      const blockBlobClient = containerClient.getBlockBlobClient(blobName);
-      await blockBlobClient.upload(req.file.buffer, req.file.buffer.length, {
-        blobHTTPHeaders: {
-          blobContentType: req.file.mimetype
-        },
-        metadata: {
-          'employee-id': employee_id.toUpperCase(),
-          'document-type': document_type,
-          'original-name': req.file.originalname
+          if (uploadResult && uploadResult.url) {
+            blobUrl = uploadResult.url;
+            storageProvider = 'aws-s3';
+            logger.info('Document uploaded to AWS S3 (direct method)', {
+              employee_id,
+              document_type,
+              url: blobUrl,
+              key: uploadResult.key
+            });
+          }
+        } else {
+          logger.warn('S3 storage not ready or file buffer missing', {
+            isS3Ready: isS3StorageReady(),
+            hasFileBuffer: !!req.file?.buffer
+          });
         }
+      } catch (s3Error) {
+        logger.error('AWS S3 upload failed (direct method)', {
+          error: s3Error.message,
+          employee_id,
+          document_type,
+          stack: s3Error.stack
+        });
+      }
+    } else {
+      logger.info('Document uploaded to AWS S3 (via middleware)', {
+        employee_id,
+        document_type,
+        url: blobUrl,
+        key: req.file?.s3Key
       });
-      blobUrl = blockBlobClient.url;
+    }
+
+    // If upload failed, throw error
+    if (!blobUrl) {
+      throw new ApiError(
+        httpStatus.SERVICE_UNAVAILABLE,
+        'STORAGE_UPLOAD_FAILED',
+        'Failed to upload document to AWS S3. Please ensure AWS_S3_BUCKET_NAME is configured and IAM permissions are set.'
+      );
     }
 
     const uploadedBy = req.user?.id || req.user?._id;
@@ -396,7 +408,7 @@ const uploadOnboardingDocument = async (req, res, next) => {
         mime_type: req.file.mimetype,
         file_size: req.file.size,
         url: blobUrl,
-        storage_provider: 'azure',
+        storage_provider: storageProvider,
         onboarding: saveResult
       }
     });

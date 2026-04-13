@@ -1,61 +1,55 @@
-# Quick Status Check - Production Services
+# ✅ Quick Status Check Commands
 
-**Date:** $(date +"%Y-%m-%d %H:%M:%S")
+## 🔍 Check Ingress Configuration
 
-## ✅ WORKING SERVICES (All Deployments Healthy)
+```bash
+# Check if annotations are applied correctly
+kubectl get ingress etelios-ingress -n etelios-prod -o yaml | grep -A 1 "certificate-arn\|listen-ports\|ssl-redirect"
+```
 
-All services have healthy replicas running:
+**Expected output:**
+```yaml
+alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:383234048604:certificate/f28621bc-c8c2-431f-80cd-ca34a2f82b8b
+alb.ingress.kubernetes.io/ssl-redirect: '443'
+```
 
-| Service | Status | Replicas |
-|---------|--------|----------|
-| analytics-service | ✅ Running | 2/2 |
-| attendance-service | ✅ Running | 2/2 |
-| auth-service | ✅ Running | 2/2 |
-| cpp-service | ✅ Running | 2/2 |
-| crm-service | ✅ Running | 2/2 |
-| document-service | ✅ Running | 2/2 |
-| financial-service | ✅ Running | 2/2 |
-| hr-service | ✅ Running | 2/2 |
-| inventory-service | ✅ Running | 2/2 |
-| monitoring-service | ✅ Running | 2/2 |
-| notification-service | ✅ Running | 2/2 |
-| payroll-service | ✅ Running | 2/2 |
-| prescription-service | ✅ Running | 2/2 |
-| purchase-service | ✅ Running | 2/2 |
-| realtime-service | ✅ Running | 2/2 |
-| redis-service | ✅ Running | 1/1 |
-| sales-service | ✅ Running | 2/2 |
-| service-management | ✅ Running | 2/2 |
-| tenant-registry-service | ✅ Running | 2/2 |
+## ⏱️ Check Ingress Status (Wait 5-10 minutes)
 
-**Total: 19 services, all healthy**
+```bash
+# Check if HTTPS port (443) appears
+kubectl get ingress etelios-ingress -n etelios-prod
+```
 
-## ⚠️ OLD PODS (Non-Critical)
+**Currently shows:** `PORTS  80`  
+**Will show:** `PORTS  80, 443` (after ALB updates)
 
-There are 3 old pods in Error status, but they don't affect service availability:
-- `cpp-service-59d68655f5-jbt2t` (Error) - Old pod, service has 2/2 healthy replicas
-- `monitoring-service-5f6bbdd77c-r787z` (Error) - Old pod, service has 2/2 healthy replicas
-- `notification-service-fdc4695bc-n6r8d` (Error) - Old pod, service has 2/2 healthy replicas
+## 🌐 Test HTTPS Connection
 
-These can be cleaned up but don't impact functionality.
+```bash
+# Test HTTPS (use curl, not url)
+curl -I https://api.etelios.com/health
 
-## 🔧 RECENT FIXES
+# Test HTTP redirect
+curl -I http://api.etelios.com/health
+```
 
-1. **Auth Service - Password Change Fix**
-   - ✅ Fixed duplicate `changePassword` function
-   - ✅ Now correctly clears `mustChangePassword` and `passwordTemporary` flags after password change
-   - ✅ Code updated, ready to deploy
+## 📊 Check ALB Listeners (AWS Console)
 
-## 📊 SUMMARY
+1. Go to **AWS Console → EC2 → Load Balancers**
+2. Find: `k8s-eteliosp-eteliosi-f5ad4f50f3-842295189`
+3. Click **Listeners** tab
+4. Should show:
+   - **Port 80** (HTTP)
+   - **Port 443** (HTTPS) with certificate
 
-- **Total Services:** 19
-- **Healthy Services:** 19 (100%)
-- **Services with Issues:** 0 (only old pods, not affecting availability)
-- **Overall Status:** 🟢 **ALL SYSTEMS OPERATIONAL**
+---
 
-## 🚀 NEXT STEPS
+## ⏰ Timeline
 
-1. Commit and push the auth-service fix
-2. Run pipeline to deploy updated auth-service
-3. Test password change flow in production
-4. (Optional) Clean up old Error pods
+- **Now:** Ingress configured ✅
+- **2-5 minutes:** ALB Ingress Controller processing
+- **5-10 minutes:** HTTPS listener created, certificate attached
+- **10+ minutes:** Fully operational
+
+**Wait 5-10 minutes, then re-check!**

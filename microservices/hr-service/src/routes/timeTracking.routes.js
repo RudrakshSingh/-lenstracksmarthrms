@@ -79,15 +79,13 @@ router.get(
 // Generic routes come AFTER specific routes
 router.get(
   '/',
-  requireRole(['hr', 'admin', 'manager', 'employee']),
-  requirePermission('hr.timetracking.read'),
+  requireRole(['hr', 'admin', 'manager', 'employee'], []), // Make permission optional
   asyncHandler(getTimeTracking)
 );
 
 router.get(
   '/time-tracking',
-  requireRole(['hr', 'admin', 'manager', 'employee']),
-  requirePermission('hr.timetracking.read'),
+  requireRole(['hr', 'admin', 'manager', 'employee'], []), // Make permission optional
   asyncHandler(getTimeTracking)
 );
 

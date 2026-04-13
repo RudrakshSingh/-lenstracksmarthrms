@@ -1,8 +1,15 @@
 const unifiedPayrollService = require('../services/unifiedPayroll.service');
 const EmployeeMaster = require('../models/EmployeeMaster.model');
-const AttendanceRecord = require('../models/AttendanceRecord.model');
+// AttendanceRecord model is optional - only needed if attendance integration is required
+let AttendanceRecord = null;
+try {
+  AttendanceRecord = require('../models/AttendanceRecord.model');
+} catch (err) {
+  // AttendanceRecord model not available - unified payroll will use defaults
+}
 const PayrollRecord = require('../models/PayrollRecord.model');
 const logger = require('../config/logger');
+const { publishPayrollProcessed, publishPayrollApproved } = require('../utils/payrollEvents');
 
 /**
  * @desc Process payroll for a single employee
@@ -33,6 +40,15 @@ const processEmployeePayroll = async (req, res, next) => {
       success: true,
       message: 'Employee payroll processed successfully',
       data: payroll
+    });
+    await publishPayrollProcessed({
+      employeeCode,
+      payrollId: payroll?._id?.toString(),
+      month,
+      year,
+      status: payroll?.status,
+      tenantId: req.headers['x-tenant-id'] || req.headers['X-Tenant-Id'],
+      requestId: req.headers['x-request-id'] || req.headers['X-Request-ID']
     });
     
   } catch (error) {
@@ -181,6 +197,13 @@ const lockMonthlyPayroll = async (req, res, next) => {
         year: parseInt(year),
         locked_records: result.modifiedCount
       }
+    });
+    await publishPayrollApproved({
+      month: parseInt(month),
+      year: parseInt(year),
+      locked_records: result.modifiedCount,
+      tenantId: req.headers['x-tenant-id'] || req.headers['X-Tenant-Id'],
+      requestId: req.headers['x-request-id'] || req.headers['X-Request-ID']
     });
     
   } catch (error) {

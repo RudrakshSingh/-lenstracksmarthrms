@@ -12,6 +12,15 @@ const approvalWorkflowSchema = new mongoose.Schema({
     trim: true
   },
   
+  // Tenant isolation
+  tenantId: {
+    type: String,
+    required: false, // Optional for backward compatibility
+    trim: true,
+    lowercase: true,
+    index: true
+  },
+  
   // Workflow Type
   workflow_type: {
     type: String,

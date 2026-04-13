@@ -1,6 +1,7 @@
 const Salary = require('../models/Salary.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
+const { publishSalaryCalculated } = require('../utils/payrollEvents');
 
 // Calculate salary for an employee
 const calculateSalary = async (req, res) => {
@@ -23,14 +24,9 @@ const calculateSalary = async (req, res) => {
       });
     }
 
-    // Check if employee exists
-    const employee = await User.findOne({ employee_id: employee_id.toUpperCase() });
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: 'Employee not found'
-      });
-    }
+    // Employee lookup is best-effort in production because payroll may receive
+    // valid cross-service employee codes before local auth-user sync completes.
+    const employee = await User.findOne({ employee_id: employee_id.toUpperCase() }).lean();
 
     // Calculate salary components
     const salaryData = Salary.calculateSalary(gross_monthly, variable_incentive, professional_tax, tds);
@@ -54,13 +50,22 @@ const calculateSalary = async (req, res) => {
       monthly_ctc: salaryData.monthly_ctc,
       annual_ctc: salaryData.annual_ctc
     });
+    await publishSalaryCalculated({
+      employeeCode: employee_id.toUpperCase(),
+      employee_id: employee_id.toUpperCase(),
+      gross_monthly,
+      monthly_ctc: salaryData.monthly_ctc,
+      annual_ctc: salaryData.annual_ctc,
+      tenantId: req.headers['x-tenant-id'] || req.headers['X-Tenant-Id'],
+      requestId: req.headers['x-request-id'] || req.headers['X-Request-ID']
+    });
 
     res.status(201).json({
       success: true,
       message: 'Salary calculated successfully',
       data: {
         employee_id: salary.employee_id,
-        employee_name: employee.name,
+        employee_name: employee?.name || employee_id.toUpperCase(),
         gross_monthly: salary.gross_monthly,
         variable_incentive: salary.variable_incentive,
         basic_salary: salary.basic_salary,
@@ -97,12 +102,10 @@ const calculateSalary = async (req, res) => {
 const getCurrentSalary = async (req, res) => {
   try {
     const { employeeId } = req.params;
-    const userId = req.user.id;
-
-    // Check if user is requesting their own salary or has permission
-    const requestingUser = await User.findById(userId);
-    if (requestingUser.employee_id !== employeeId.toUpperCase() && 
-        !['admin', 'superadmin', 'hr'].includes(requestingUser.role)) {
+    const role = (req.user?.role || '').toLowerCase();
+    const requesterEmployeeId = (req.user?.employee_id || '').toUpperCase();
+    const isPrivileged = ['admin', 'superadmin', 'hr'].includes(role);
+    if (!isPrivileged && requesterEmployeeId !== employeeId.toUpperCase()) {
       return res.status(403).json({
         success: false,
         message: 'Access denied - insufficient permissions'
@@ -260,6 +263,15 @@ const updateSalary = async (req, res) => {
       gross_monthly,
       monthly_ctc: salaryData.monthly_ctc,
       annual_ctc: salaryData.annual_ctc
+    });
+    await publishSalaryCalculated({
+      employeeCode: employeeId.toUpperCase(),
+      employee_id: employeeId.toUpperCase(),
+      gross_monthly,
+      monthly_ctc: salaryData.monthly_ctc,
+      annual_ctc: salaryData.annual_ctc,
+      tenantId: req.headers['x-tenant-id'] || req.headers['X-Tenant-Id'],
+      requestId: req.headers['x-request-id'] || req.headers['X-Request-ID']
     });
 
     res.status(200).json({

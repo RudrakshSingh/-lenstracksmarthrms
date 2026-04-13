@@ -158,14 +158,17 @@ const rosterSchema = new mongoose.Schema({
 
 // Compound Indexes
 rosterSchema.index({ employee: 1, date: 1 }); // For employee schedule lookup
+rosterSchema.index({ employeeId: 1, date: 1 }); // OPTIMIZED: Fast employeeId + date lookup
 rosterSchema.index({ store: 1, date: 1 }); // For store roster lookup
 rosterSchema.index({ tenantId: 1, date: 1 }); // For tenant-wide roster queries
+rosterSchema.index({ tenantId: 1, employeeId: 1, date: 1 }); // OPTIMIZED: Compound index for common query
 rosterSchema.index({ date: 1, status: 1 }); // For date and status filtering
 
-// Unique constraint: One employee cannot be assigned to multiple stores on the same date and overlapping shift
+// Unique constraint removed to allow upsert behavior
+// One employee can have only one active roster per date (handled in service layer)
 rosterSchema.index(
   { employee: 1, date: 1, shiftStart: 1 },
-  { unique: true, name: 'unique_employee_date_shift' }
+  { name: 'employee_date_shift_idx' }  // Non-unique index for query performance
 );
 
 // Virtual for full shift duration (in hours)
@@ -224,9 +227,19 @@ rosterSchema.pre('save', function(next) {
 
 // Static method to check for overlapping shifts
 rosterSchema.statics.checkOverlap = async function(employeeId, date, shiftStart, shiftEnd, excludeRosterId = null) {
+  // Use date range to handle timezone issues (start of day to end of day)
+  const dateObj = new Date(date);
+  const startOfDay = new Date(dateObj);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(dateObj);
+  endOfDay.setHours(23, 59, 59, 999);
+
   const query = {
     employeeId,
-    date: new Date(date),
+    date: {
+      $gte: startOfDay,
+      $lte: endOfDay
+    },
     status: { $nin: ['CANCELLED'] }
   };
   

@@ -23,6 +23,18 @@ app.use(cors({
   credentials: true
 }));
 
+// Behind ALB path prefix /tenant-management — strip before rate limits and routes
+const INGRESS_PATH_PREFIX = '/tenant-management';
+app.use((req, res, next) => {
+  const p = req.path || '';
+  if (p === INGRESS_PATH_PREFIX || p.startsWith(`${INGRESS_PATH_PREFIX}/`)) {
+    const rest = p.slice(INGRESS_PATH_PREFIX.length) || '/';
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    req.url = rest + qs;
+  }
+  next();
+});
+
 // Rate limiting
 const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

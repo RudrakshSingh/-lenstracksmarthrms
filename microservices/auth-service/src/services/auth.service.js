@@ -6,6 +6,12 @@ const { connectRedis } = require('../config/redis');
 const { sendWelcomeEmail, sendPasswordResetEmail } = require('../utils/email');
 const { logAuthEvent } = require('../utils/audit');
 const logger = require('../config/logger');
+const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
+
+/** Microservices (e.g. attendance) use Redis keyed by permRev; JWT carries permissions as fallback when cache misses. Set JWT_SKIP_PERMISSIONS_CLAIM=1 to omit (smaller tokens). */
+function jwtPermissionsPayloadEnabled() {
+  return process.env.JWT_SKIP_PERMISSIONS_CLAIM !== 'true' && process.env.JWT_SKIP_PERMISSIONS_CLAIM !== '1';
+}
 
 class AuthService {
   constructor() {
@@ -202,12 +208,27 @@ class AuthService {
         throw new Error(`Failed to create user: ${saveError.message}`);
       }
 
-      // Generate tokens (include employee_id for microservice communication)
-      const accessToken = generateAccessToken({ 
-        userId: user._id, 
+      const permRevForToken = user.permissionsRevision != null ? user.permissionsRevision : 0;
+      let effectiveForJwt = [];
+      try {
+        const resolved = await resolveEffectivePermissionsForUser(user);
+        effectiveForJwt = resolved.effectivePermissions || [];
+      } catch (permErr) {
+        logger.warn('Register: could not compute effective permissions for JWT', {
+          error: permErr.message,
+          userId: user._id
+        });
+      }
+
+      // Generate tokens (employee_id + permRev + permissions for downstream Redis/JWT alignment)
+      const accessToken = generateAccessToken({
+        userId: user._id,
+        email: user.email,
         role: user.role,
-        tenantId: user.tenantId, // Multi-tenant scoping (safe additive claim)
-        employee_id: user.employee_id // ← CRITICAL: Include for attendance/HR services
+        tenantId: user.tenantId,
+        employee_id: user.employee_id,
+        permRev: permRevForToken,
+        ...(jwtPermissionsPayloadEnabled() && { permissions: effectiveForJwt })
       });
       const refreshToken = generateRefreshToken({ userId: user._id });
 
@@ -672,15 +693,35 @@ class AuthService {
         }
       }
 
-      // Generate tokens (include tenantId for multi-tenant security)
       // Use role name if role is ObjectId, otherwise use role string
       const roleForToken = typeof user.role === 'object' ? (user.role.name || 'employee') : (user.role || 'employee');
-      const accessToken = generateAccessToken({ 
-        userId: user._id || user.id, 
-        email: user.email, // ✅ CRITICAL: Include email for frontend validation
+
+      const permUser = await User.findById(userId).select(
+        'role custom_permissions permission_denials permissions permissionsRevision'
+      );
+      const permRev = permUser && permUser.permissionsRevision != null ? permUser.permissionsRevision : 0;
+
+      let effectiveForJwt = [];
+      try {
+        if (permUser) {
+          const resolved = await resolveEffectivePermissionsForUser(permUser);
+          effectiveForJwt = resolved.effectivePermissions || [];
+        }
+      } catch (permErr) {
+        logger.warn('Login: could not compute effective permissions for JWT', {
+          error: permErr.message,
+          userId
+        });
+      }
+
+      const accessToken = generateAccessToken({
+        userId: user._id || user.id,
+        email: user.email,
         role: roleForToken,
-        tenantId: user.tenantId, // ✅ CRITICAL: Include tenantId for multi-tenant security
-        employee_id: user.employee_id || user.employeeId // ← CRITICAL: Include for attendance/HR services
+        tenantId: user.tenantId,
+        employee_id: user.employee_id || user.employeeId,
+        permRev,
+        ...(jwtPermissionsPayloadEnabled() && { permissions: effectiveForJwt })
       });
       const refreshToken = generateRefreshToken({ userId: user._id });
 
@@ -723,6 +764,10 @@ class AuthService {
           role: user.role,
           tenantId: user.tenantId
         };
+      }
+
+      if (permUser) {
+        userProfile.permissions = effectiveForJwt;
       }
 
       // CRITICAL: Return 200 (not 401) even when password is temporary
@@ -795,18 +840,34 @@ class AuthService {
         throw new Error('Invalid refresh token');
       }
 
-      // Get user
-      const user = await User.findById(decoded.userId);
+      // Get user (fields needed for effective permissions in JWT)
+      const user = await User.findById(decoded.userId).select(
+        'role email tenantId employee_id is_active status custom_permissions permission_denials permissions permissionsRevision'
+      );
       if (!user || !user.is_active || user.status === 'inactive') {
         throw new Error('User not found or inactive');
       }
 
-      // Generate new access token (include tenantId for multi-tenant security)
-      const accessToken = generateAccessToken({ 
-        userId: user._id, 
-        role: user.role,
-        tenantId: user.tenantId, // ✅ CRITICAL: Include tenantId
-        employee_id: user.employee_id // ✅ Include employee_id if available
+      const permRev = user.permissionsRevision != null ? user.permissionsRevision : 0;
+      let effectiveForJwt = [];
+      try {
+        const resolved = await resolveEffectivePermissionsForUser(user);
+        effectiveForJwt = resolved.effectivePermissions || [];
+      } catch (permErr) {
+        logger.warn('Refresh: could not compute effective permissions for JWT', {
+          error: permErr.message,
+          userId: user._id
+        });
+      }
+
+      const accessToken = generateAccessToken({
+        userId: user._id,
+        email: user.email,
+        role: user.role || 'employee',
+        tenantId: user.tenantId,
+        employee_id: user.employee_id,
+        permRev,
+        ...(jwtPermissionsPayloadEnabled() && { permissions: effectiveForJwt })
       });
 
       logger.info('Access token refreshed', { userId: user._id });
@@ -904,13 +965,20 @@ class AuthService {
         throw new Error('Current password is incorrect');
       }
 
-      // Update password
-      user.password = newPassword;
-      // Clear temporary password flags (after this, flow should behave exactly like before)
-      user.mustChangePassword = false;
-      user.passwordTemporary = false;
-      user.passwordChangedAt = new Date();
-      await user.save();
+      // Hash and persist via updateOne so legacy/HR-synced users are not blocked by
+      // full-document validation errors on save().
+      const hashed = await hashPassword(newPassword);
+      await User.updateOne(
+        { _id: userId },
+        {
+          $set: {
+            password: hashed,
+            mustChangePassword: false,
+            passwordTemporary: false,
+            passwordChangedAt: new Date()
+          }
+        }
+      );
 
       // Remove all refresh tokens to force re-login
       await this.removeRefreshToken(userId);
@@ -936,12 +1004,18 @@ class AuthService {
         throw new Error('User not found');
       }
 
-      // Update password (will be hashed by pre-save hook)
-      user.password = newPassword;
-      user.mustChangePassword = false;
-      user.passwordTemporary = false;
-      user.passwordChangedAt = new Date();
-      await user.save();
+      const hashed = await hashPassword(newPassword);
+      await User.updateOne(
+        { _id: userId },
+        {
+          $set: {
+            password: hashed,
+            mustChangePassword: false,
+            passwordTemporary: false,
+            passwordChangedAt: new Date()
+          }
+        }
+      );
 
       // Remove all refresh tokens to force re-login
       await this.removeRefreshToken(userId);

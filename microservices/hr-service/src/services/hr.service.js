@@ -78,7 +78,6 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
       });
       // Return existing employee instead of throwing error (for onboarding flow)
       const existing = await User.findById(existingEmployeeId._id)
-        .populate('role', 'name permissions')
         .populate('store', 'name address')
         .populate('departmentRef', 'name code description');
       return existing;
@@ -97,7 +96,6 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
       });
       // Return existing user instead of throwing error (for onboarding flow)
       const existing = await User.findById(existingUser._id)
-        .populate('role', 'name permissions')
         .populate('store', 'name address')
         .populate('departmentRef', 'name code description');
       return existing;
@@ -124,27 +122,29 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
     }
 
     // Handle special store values: "backoffice", "office", "", or actual store ID
+    // CRITICAL: Check both top-level storeId AND workLocation.storeId
     let store = null;
     let workLocationType = null;
+    let effectiveStoreId = storeId || rest.workLocation?.storeId || rest.work_location?.storeId;
     
-    if (storeId) {
-      if (storeId === 'backoffice' || storeId === 'office') {
+    if (effectiveStoreId) {
+      if (effectiveStoreId === 'backoffice' || effectiveStoreId === 'office') {
         // Special work location types - don't validate as ObjectId
-        workLocationType = storeId;
+        workLocationType = effectiveStoreId;
         store = null; // No actual store object
-      } else if (storeId !== '') {
+      } else if (effectiveStoreId !== '') {
         // Actual store ID - validate as MongoDB ObjectId
-        if (!mongoose.Types.ObjectId.isValid(storeId)) {
+        if (!mongoose.Types.ObjectId.isValid(effectiveStoreId)) {
           throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid store ID format');
         }
-        store = await Store.findById(storeId);
+        store = await Store.findById(effectiveStoreId);
         if (!store) {
           throw new ApiError(httpStatus.BAD_REQUEST, 'Specified store not found');
         }
         workLocationType = 'store';
       }
     }
-
+    
     // Handle department lookup
     let departmentRef = null;
     if (employeeData.department) {
@@ -164,17 +164,104 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
     }
 
     // Prepare employee data
+    // CRITICAL: Map fields for auth-service User model compatibility
+    // CRITICAL: Handle salary_breakdown and annual_ctc from frontend (auto-calculated)
+    // Frontend auto-calculates salary_breakdown - ensure it's saved
+    if (rest.salary_breakdown && typeof rest.salary_breakdown === 'object') {
+      // Ensure all values are numbers (convert strings to numbers)
+      Object.keys(rest.salary_breakdown).forEach(key => {
+        if (rest.salary_breakdown[key] === '' || rest.salary_breakdown[key] === null) {
+          rest.salary_breakdown[key] = 0;
+        } else if (typeof rest.salary_breakdown[key] === 'string') {
+          const num = parseFloat(rest.salary_breakdown[key]);
+          rest.salary_breakdown[key] = isNaN(num) ? 0 : num;
+        }
+      });
+    }
+    
+    // Handle salaryBreakdown (camelCase variant)
+    if (rest.salaryBreakdown && typeof rest.salaryBreakdown === 'object') {
+      Object.keys(rest.salaryBreakdown).forEach(key => {
+        if (rest.salaryBreakdown[key] === '' || rest.salaryBreakdown[key] === null) {
+          rest.salaryBreakdown[key] = 0;
+        } else if (typeof rest.salaryBreakdown[key] === 'string') {
+          const num = parseFloat(rest.salaryBreakdown[key]);
+          rest.salaryBreakdown[key] = isNaN(num) ? 0 : num;
+        }
+      });
+      // Map camelCase to snake_case for backend
+      if (!rest.salary_breakdown) {
+        rest.salary_breakdown = rest.salaryBreakdown;
+      }
+    }
+    
+    // Ensure annual_ctc is a number (frontend might send as string)
+    if (rest.annual_ctc !== undefined && rest.annual_ctc !== null) {
+      if (typeof rest.annual_ctc === 'string') {
+        const num = parseFloat(rest.annual_ctc);
+        rest.annual_ctc = isNaN(num) ? 0 : num;
+      }
+    }
+    if (rest.annualCtc !== undefined && rest.annualCtc !== null) {
+      if (typeof rest.annualCtc === 'string') {
+        const num = parseFloat(rest.annualCtc);
+        rest.annualCtc = isNaN(num) ? 0 : num;
+      }
+      // Map camelCase to snake_case for backend
+      if (!rest.annual_ctc) {
+        rest.annual_ctc = rest.annualCtc;
+      }
+    }
+    
     const userData = {
       tenantId: employeeTenantId, // CRITICAL: Use employeeTenantId (already calculated above)
-      employeeId: normalizedEmployeeId, // Explicitly set employeeId
+      employeeId: normalizedEmployeeId, // HR service field
+      employee_id: normalizedEmployeeId, // Auth service field (required)
       code: normalizedEmployeeId, // Also set code
       email,
-      role: role._id,
-      store: store?._id,
+      role: role._id, // HR service uses ObjectId
+      roleName: role.name || 'employee', // Store role name for auth-service compatibility
+      store: store?._id, // CRITICAL: Assign store ObjectId
       status: 'active',
       ...rest,
       departmentRef // Add department reference
     };
+    
+    // CRITICAL: Set workLocation - prioritize provided workLocation data, merge with store data
+    if (store && store._id) {
+      // Merge store data with provided workLocation data (provided data takes precedence)
+      userData.workLocation = {
+        storeId: store._id.toString(),
+        store_id: store._id.toString(), // Also set snake_case for compatibility
+        storeName: rest.workLocation?.storeName || rest.work_location?.storeName || store.name || '',
+        store_name: rest.workLocation?.storeName || rest.work_location?.storeName || store.name || '',
+        city: rest.workLocation?.city || rest.work_location?.city || store.address?.city || '',
+        state: rest.workLocation?.state || rest.work_location?.state || store.address?.state || '',
+        pincode: rest.workLocation?.pincode || rest.work_location?.pincode || store.address?.zip || store.address?.pincode || ''
+      };
+      logger.info('Setting workLocation from store (merged with provided data)', {
+        storeId: store._id.toString(),
+        storeName: userData.workLocation.storeName,
+        city: userData.workLocation.city,
+        state: userData.workLocation.state
+      });
+    } else if (rest.workLocation || rest.work_location) {
+      // Use provided workLocation if no store (handle both camelCase and snake_case)
+      const providedWorkLocation = rest.workLocation || rest.work_location;
+      userData.workLocation = {
+        storeId: providedWorkLocation.storeId || providedWorkLocation.store_id || '',
+        store_id: providedWorkLocation.storeId || providedWorkLocation.store_id || '',
+        storeName: providedWorkLocation.storeName || providedWorkLocation.store_name || '',
+        store_name: providedWorkLocation.storeName || providedWorkLocation.store_name || '',
+        city: providedWorkLocation.city || '',
+        state: providedWorkLocation.state || '',
+        pincode: providedWorkLocation.pincode || ''
+      };
+      logger.info('Setting workLocation from provided data (no store)', {
+        storeId: userData.workLocation.storeId,
+        city: userData.workLocation.city
+      });
+    }
     
     // Log tenantId for debugging
     logger.info('Creating employee with tenantId', {
@@ -203,6 +290,55 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
       logger.warn('No firstName provided, using email prefix', { firstName: userData.firstName });
     }
     
+    // CRITICAL: Set 'name' field for auth-service User model (required)
+    if (!userData.name) {
+      userData.name = userData.fullName || `${userData.firstName} ${userData.lastName}`.trim() || userData.firstName;
+      logger.info('Set name field for auth-service compatibility', { name: userData.name });
+    }
+    
+    // Ensure designation exists (required by User model)
+    if (!userData.designation && !userData.jobTitle) {
+      // Default designation based on role or use "Employee"
+      const roleName = role?.name || normalizedRole || 'employee';
+      userData.designation = roleName.charAt(0).toUpperCase() + roleName.slice(1);
+      logger.info('No designation provided, using default based on role', { 
+        designation: userData.designation,
+        role: roleName
+      });
+    } else if (!userData.designation && userData.jobTitle) {
+      // Use jobTitle as designation if designation not provided
+      userData.designation = userData.jobTitle;
+      logger.info('Using jobTitle as designation', { designation: userData.designation });
+    }
+    
+    // CRITICAL: Set joining_date for auth-service User model (required)
+    if (!userData.joining_date && !userData.doj) {
+      userData.joining_date = new Date(); // Default to today
+      userData.doj = new Date(); // Also set doj for HR service
+      logger.info('Set joining_date and doj to today', { 
+        joining_date: userData.joining_date,
+        doj: userData.doj 
+      });
+    } else if (userData.doj && !userData.joining_date) {
+      // Map doj to joining_date
+      userData.joining_date = userData.doj;
+    } else if (userData.joining_date && !userData.doj) {
+      // Map joining_date to doj
+      userData.doj = userData.joining_date;
+    }
+    
+    // CRITICAL: Ensure name field is set (auth-service requires 'name', not just firstName/lastName)
+    // This will be synced by pre-save hook, but set it explicitly here too
+    if (!userData.name && userData.firstName) {
+      userData.name = userData.lastName ? `${userData.firstName} ${userData.lastName}`.trim() : userData.firstName;
+    }
+    
+    // CRITICAL: Ensure employee_id is set (auth-service requires 'employee_id', not just employeeId)
+    // This will be synced by pre-save hook, but set it explicitly here too
+    if (!userData.employee_id && userData.employeeId) {
+      userData.employee_id = userData.employeeId;
+    }
+    
     // Only add password if provided (user might already be registered via auth service)
     if (password) {
       userData.password = password;
@@ -217,6 +353,30 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
     // Save employee and verify
     try {
       await employee.save();
+      
+      // CRITICAL: Update employee with auth-service compatibility fields after save
+      // This ensures all required fields are set even if pre-save hook didn't catch them
+      const updateFields = {};
+      if (!employee.employee_id && employee.employeeId) {
+        updateFields.employee_id = employee.employeeId;
+      }
+      if (!employee.name && employee.firstName) {
+        updateFields.name = employee.lastName ? `${employee.firstName} ${employee.lastName}`.trim() : employee.firstName;
+      }
+      if (!employee.joining_date && employee.doj) {
+        updateFields.joining_date = employee.doj;
+      } else if (!employee.joining_date && !employee.doj) {
+        updateFields.joining_date = new Date();
+        updateFields.doj = new Date();
+      }
+      
+      if (Object.keys(updateFields).length > 0) {
+        await User.updateOne({ _id: employee._id }, { $set: updateFields });
+        logger.info('Updated employee with auth-service compatibility fields', { 
+          employeeId: normalizedEmployeeId,
+          updateFields 
+        });
+      }
       
       // Reload from database to verify it was saved
       const savedEmployee = await User.findById(employee._id);
@@ -279,7 +439,6 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
             { email }
           ]
         })
-          .populate('role', 'name permissions')
           .populate('store', 'name address');
         
         if (existing) {
@@ -474,9 +633,10 @@ const getEmployees = async (filters = {}, page = 1, limit = 10, tenantId = null)
     const getData = async () => {
       // CRITICAL: Always filter by tenantId for tenant isolation
       const queryTenantId = tenantId || filters.tenantId || 'default';
+      const normalizedTenantId = String(queryTenantId).toLowerCase().trim();
       const query = { 
         isDeleted: false,
-        tenantId: { $exists: true, $eq: queryTenantId } // CRITICAL: Require tenantId to exist and match
+        tenantId: normalizedTenantId // CRITICAL: Direct match (simpler and more reliable)
       };
       
       // Log if tenantId is missing (for debugging)
@@ -493,7 +653,26 @@ const getEmployees = async (filters = {}, page = 1, limit = 10, tenantId = null)
         // Sanitize and validate employeeId
         const sanitized = sanitizeEmployeeId(filters.employeeId);
         if (sanitized) {
-          query.employeeId = sanitized;
+          // CRITICAL: Query both employeeId and employee_id fields (database might use either)
+          query.$or = query.$or || [];
+          query.$or.push(
+            { employeeId: sanitized },
+            { employee_id: sanitized },
+            { employeeId: sanitized.toUpperCase() },
+            { employee_id: sanitized.toUpperCase() }
+          );
+          // If $or already exists from search filter, merge them
+          if (query.$or.length > 4) {
+            // Combine with existing $or conditions
+            const existingOr = query.$or.slice(0, -4);
+            query.$or = [
+              ...existingOr,
+              { employeeId: sanitized },
+              { employee_id: sanitized },
+              { employeeId: sanitized.toUpperCase() },
+              { employee_id: sanitized.toUpperCase() }
+            ];
+          }
         } else {
           logger.warn('Invalid employeeId format provided', { employeeId: filters.employeeId });
         }
@@ -540,18 +719,28 @@ const getEmployees = async (filters = {}, page = 1, limit = 10, tenantId = null)
 
       const skip = (page - 1) * limit;
 
-      const [employees, total] = await Promise.all([
-        User.find(query)
-          .populate('role', 'name permissions')
-          .populate('store', 'name address')
-          .populate('departmentRef', 'name code description')
-          .select('-password -refreshToken')
-          // .sort({ createdAt: -1 })  // Removed: Cosmos DB index issue
-          .skip(skip)
-          .limit(limit)
-          .lean(), // Use lean() for read-only queries - returns plain JS objects (faster)
-        User.countDocuments(query)
-      ]);
+      // Add timeout handling with graceful fallback
+      const [employees, total] = await Promise.race([
+        Promise.all([
+          User.find(query)
+            .populate('store', 'name address')
+            .populate('departmentRef', 'name code description')
+            .select('-password -refreshToken')
+            // .sort({ createdAt: -1 })  // Removed: Cosmos DB index issue
+            .skip(skip)
+            .limit(limit)
+            .lean() // Use lean() for read-only queries - returns plain JS objects (faster)
+            .maxTimeMS(5000), // 5 second query timeout
+          User.countDocuments(query).maxTimeMS(5000)
+        ]),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Query timeout')), 5000)
+        )
+      ]).catch((error) => {
+        logger.error('Employee query timeout or error', { error: error.message, query });
+        // Return empty result instead of throwing error to prevent 500
+        return [[], 0];
+      });
 
       const totalPages = Math.ceil(total / limit);
 
@@ -595,32 +784,46 @@ const getEmployeeById = async (employeeId, tenantId = null) => {
     // Normalize the employeeId input
     const normalizedId = employeeId ? employeeId.toString().trim() : '';
     
-    // Build query with tenantId filter
+    // Build query with STRICT tenantId filter (CRITICAL for tenant isolation)
+    // Normalize tenantId to lowercase for consistent comparison
+    const normalizedTenantId = String(employeeTenantId).toLowerCase().trim();
+    
     let query;
     if (mongoose.Types.ObjectId.isValid(normalizedId)) {
-      // If it's a valid ObjectId, search by _id AND tenantId (require tenantId to exist)
+      // If it's a valid ObjectId, search by _id with STRICT tenantId filter
       query = { 
-        _id: normalizedId, 
-        tenantId: { $exists: true, $eq: employeeTenantId } // CRITICAL: Require tenantId to exist
+        _id: normalizedId,
+        tenantId: normalizedTenantId // Direct match (tenantId is already normalized to lowercase)
       };
+      
       employee = await User.findOne(query)
-        .populate('role', 'name permissions')
         .populate('store', 'name address')
         .populate('departmentRef', 'name code description')
+        .populate('role', 'name code')
         .lean();
     } else {
-      // If it's not a valid ObjectId, search by employeeId AND tenantId (require tenantId to exist)
+      // If it's not a valid ObjectId, search by employeeId with STRICT tenantId filter
+      // Use $and to combine employeeId match with tenantId match
       query = { 
-        tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
-        $or: [
-          { employeeId: normalizedId.toUpperCase() },
-          { employeeId: normalizedId }
+        $and: [
+          {
+            $or: [
+              { employee_id: normalizedId.toUpperCase() },
+              { employee_id: normalizedId },
+              { employeeId: normalizedId.toUpperCase() },
+              { employeeId: normalizedId }
+            ]
+          },
+          { 
+            tenantId: normalizedTenantId // Direct match (tenantId is already normalized to lowercase)
+          }
         ]
       };
+      
       employee = await User.findOne(query)
-        .populate('role', 'name permissions')
         .populate('store', 'name address')
         .populate('departmentRef', 'name code description')
+        .populate('role', 'name code')
         .lean();
     }
 
@@ -636,6 +839,213 @@ const getEmployeeById = async (employeeId, tenantId = null) => {
 
     if (employee.isDeleted) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+    }
+
+    // CRITICAL: Fix store population if it failed due to tenant mismatch
+    // If employee has a store reference but populate returned null/invalid, try to fetch it
+    if (employee.store && (typeof employee.store === 'object')) {
+      const storeId = employee.store._id || employee.store.id || employee.store;
+      const storeName = employee.store.name;
+      
+      // Check if store object is empty or has empty IDs
+      const isEmptyStore = !storeId || 
+                          (typeof storeId === 'string' && storeId.trim() === '') ||
+                          (storeId && storeId.toString().trim() === '') ||
+                          Object.keys(employee.store).length === 0;
+      
+      // Also check workLocation for storeId as fallback
+      let fallbackStoreId = null;
+      if (isEmptyStore && employee.workLocation && employee.workLocation.storeId) {
+        fallbackStoreId = employee.workLocation.storeId;
+        logger.info('Found storeId in workLocation', { storeId: fallbackStoreId });
+      }
+      
+      const effectiveStoreId = (!isEmptyStore && storeId) ? storeId : fallbackStoreId;
+      
+      // If store has an ID but name is missing or "Unknown Store", try to fetch it
+      if (effectiveStoreId && (!storeName || storeName === 'Unknown Store' || storeName === '' || isEmptyStore)) {
+        try {
+          // First try in employee's tenant
+          let store = await Store.findOne({ 
+            _id: effectiveStoreId, 
+            isDeleted: false,
+            tenantId: { $exists: true, $eq: employeeTenantId }
+          }).lean();
+          
+          // If not found in employee's tenant, try without tenant restriction (cross-tenant lookup)
+          if (!store) {
+            logger.info('Store not found in employee tenant, trying cross-tenant lookup', {
+              storeId: effectiveStoreId,
+              employeeTenantId,
+              employeeId: normalizedId
+            });
+            store = await Store.findOne({ 
+              _id: effectiveStoreId, 
+              isDeleted: false
+            }).lean();
+            
+            if (store) {
+            logger.info('Store found in different tenant', {
+              storeId: effectiveStoreId,
+              storeTenantId: store.tenantId,
+              employeeTenantId
+            });
+          }
+        }
+        
+        // If store found, update the employee object
+        if (store) {
+          employee.store = {
+            _id: store._id,
+            id: store._id,
+            name: store.name,
+            code: store.code,
+            address: store.address || {}
+          };
+          logger.info('Store populated successfully', {
+            storeId: effectiveStoreId,
+            storeName: store.name,
+            storeTenantId: store.tenantId
+          });
+        } else {
+          logger.warn('Store not found even with cross-tenant lookup', { storeId: effectiveStoreId });
+        }
+        } catch (storeError) {
+          logger.warn('Error fetching store details', { 
+            storeId: effectiveStoreId, 
+            error: storeError.message 
+          });
+        }
+      } else if (isEmptyStore && !fallbackStoreId) {
+        // If store is completely empty and no fallback, log for debugging
+        logger.info('Employee has empty store object, no fallback storeId found', {
+          employeeId: normalizedId,
+          tenantId: employeeTenantId,
+          hasWorkLocation: !!employee.workLocation
+        });
+      }
+    } else if (employee.store && mongoose.Types.ObjectId.isValid(employee.store)) {
+      // If store is just an ObjectId (not populated), try to fetch it
+      try {
+        let store = await Store.findOne({ 
+          _id: employee.store, 
+          isDeleted: false,
+          tenantId: { $exists: true, $eq: employeeTenantId }
+        }).lean();
+        
+        if (!store) {
+          // Try cross-tenant lookup
+          store = await Store.findOne({ 
+            _id: employee.store, 
+            isDeleted: false
+          }).lean();
+        }
+        
+        if (store) {
+          employee.store = {
+            _id: store._id,
+            id: store._id,
+            name: store.name,
+            code: store.code,
+            address: store.address || {}
+          };
+        }
+      } catch (storeError) {
+        logger.warn('Error fetching store by ObjectId', { 
+          storeId: employee.store, 
+          error: storeError.message 
+        });
+      }
+    }
+
+    // CRITICAL: Merge CompensationProfile data if it exists
+    // Onboarding saves salary, statutory, bank, and emergency contact data to CompensationProfile
+    try {
+      const CompensationProfile = require('../models/CompensationProfile.model');
+      const profile = await CompensationProfile.findOne({
+        $or: [
+          { employee: employee._id },
+          { employeeId: employee.employeeId || employee.employee_id }
+        ]
+      }).lean();
+
+      if (profile) {
+        logger.info('Found CompensationProfile, merging data', {
+          employeeId: employee.employeeId || employee.employee_id,
+          profileId: profile._id
+        });
+
+        // Merge salary/compensation data
+        if (profile.annual_ctc || profile.ctc) {
+          employee.annual_ctc = profile.annual_ctc || profile.ctc;
+          employee.annualCtc = employee.annual_ctc;
+        }
+        if (profile.base_salary || profile.baseSalary) {
+          employee.base_salary = profile.base_salary || profile.baseSalary;
+          employee.baseSalary = employee.base_salary;
+        }
+        if (profile.salary_breakdown && Object.keys(profile.salary_breakdown).length > 0) {
+          employee.salary_breakdown = profile.salary_breakdown;
+          employee.salaryBreakdown = employee.salary_breakdown;
+        }
+
+        // Merge statutory information
+        if (profile.uan) employee.uan = profile.uan;
+        if (profile.esiNo) {
+          employee.esiNo = profile.esiNo;
+          employee.esi_no = profile.esiNo;
+          employee.esiNumber = profile.esiNo;
+          employee.esi_number = profile.esiNo;
+        }
+        if (profile.panNumber) {
+          employee.panNumber = profile.panNumber;
+          employee.pan_number = profile.panNumber;
+          employee.pan = profile.panNumber;
+        }
+
+        // Merge bank account
+        if (profile.bankAccount && Object.keys(profile.bankAccount).length > 0) {
+          employee.bankAccount = {
+            accountNumber: profile.bankAccount.accountNumber || null,
+            account_number: profile.bankAccount.accountNumber || null,
+            account_no: profile.bankAccount.accountNumber || null,
+            ifscCode: profile.bankAccount.ifscCode || null,
+            ifsc_code: profile.bankAccount.ifscCode || null,
+            ifsc: profile.bankAccount.ifscCode || null,
+            bankName: profile.bankAccount.bankName || null,
+            bank_name: profile.bankAccount.bankName || null,
+            branchName: profile.bankAccount.branchName || null,
+            branch_name: profile.bankAccount.branchName || null,
+            branch: profile.bankAccount.branchName || null,
+            accountType: profile.bankAccount.accountType || null,
+            account_type: profile.bankAccount.accountType || null
+          };
+          employee.bank_account = employee.bankAccount;
+        }
+
+        // Merge emergency contact
+        if (profile.emergencyContact && Object.keys(profile.emergencyContact).length > 0) {
+          employee.emergencyContact = {
+            name: profile.emergencyContact.name || null,
+            relationship: profile.emergencyContact.relationship || null,
+            phone: profile.emergencyContact.phone || profile.emergencyContact.contact_number || null,
+            contact_number: profile.emergencyContact.phone || profile.emergencyContact.contact_number || null
+          };
+          employee.emergency_contact = employee.emergencyContact;
+        }
+
+        // Merge previous employment
+        if (profile.previousEmployment && Object.keys(profile.previousEmployment).length > 0) {
+          employee.previousEmployment = profile.previousEmployment;
+          employee.previous_employment = employee.previousEmployment;
+        }
+      }
+    } catch (profileError) {
+      // Log but don't fail - CompensationProfile is optional
+      logger.warn('Error fetching CompensationProfile', {
+        error: profileError.message,
+        employeeId: employee.employeeId || employee.employee_id
+      });
     }
 
     return employee;
@@ -674,24 +1084,47 @@ const updateEmployee = async (employeeId, updateData, updatedBy, tenantId = null
     let employee;
     let query;
     
+    // Check if we're updating tenantId - if so, find employee without tenant restriction first
+    const isTenantMigration = updateData.tenantId && updateData.tenantId !== employeeTenantId;
+    
     if (mongoose.Types.ObjectId.isValid(employeeId)) {
-      // If it's a valid ObjectId, search by _id AND tenantId (require tenantId to exist)
-      query = { 
-        _id: employeeId, 
-        tenantId: { $exists: true, $eq: employeeTenantId } // CRITICAL: Require tenantId to exist
-      };
-      employee = await User.findOne(query);
+      // If it's a valid ObjectId, search by _id
+      if (isTenantMigration) {
+        // For tenant migration, find by _id first without tenant restriction
+        employee = await User.findById(employeeId);
+        if (employee) {
+          query = { _id: employeeId }; // Use _id only for update
+        }
+      } else {
+        // Normal update - require tenantId match
+        query = { 
+          _id: employeeId, 
+          tenantId: { $exists: true, $eq: employeeTenantId } // CRITICAL: Require tenantId to exist
+        };
+        employee = await User.findOne(query);
+      }
     } else {
-      // If it's not a valid ObjectId, search by employeeId AND tenantId (require tenantId to exist)
-      query = { 
-        tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
-        employeeId: employeeId.toUpperCase() 
-      };
-      employee = await User.findOne(query);
+      // If it's not a valid ObjectId, search by employeeId
+      if (isTenantMigration) {
+        // For tenant migration, try to find without tenant restriction
+        employee = await User.findOne({ 
+          employeeId: employeeId.toUpperCase() 
+        });
+        if (employee) {
+          query = { employeeId: employeeId.toUpperCase() }; // Use employeeId only for update
+        }
+      } else {
+        // Normal update - require tenantId match
+        query = { 
+          tenantId: { $exists: true, $eq: employeeTenantId }, // CRITICAL: Require tenantId to exist
+          employeeId: employeeId.toUpperCase() 
+        };
+        employee = await User.findOne(query);
+      }
     }
     
     if (!employee) {
-      logger.warn('Employee not found for update', { employeeId, tenantId: employeeTenantId });
+      logger.warn('Employee not found for update', { employeeId, tenantId: employeeTenantId, isTenantMigration });
       throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
     }
 
@@ -725,12 +1158,43 @@ const updateEmployee = async (employeeId, updateData, updatedBy, tenantId = null
     // ============================================
     // Store Update
     // ============================================
-    if (storeId) {
-      const store = await Store.findById(storeId);
-      if (!store) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Specified store not found');
+    if (storeId !== undefined && storeId !== null) {
+      if (storeId === '' || storeId === 'backoffice' || storeId === 'office') {
+        // Special work location types - clear store
+        rest.store = null;
+        if (storeId === 'backoffice' || storeId === 'office') {
+          rest.workLocation = {
+            storeId: storeId,
+            storeName: storeId === 'backoffice' ? 'Backoffice' : 'Office',
+            type: storeId,
+            city: updateData.workLocation?.city || employee.workLocation?.city || '',
+            state: updateData.workLocation?.state || employee.workLocation?.state || '',
+            pincode: updateData.workLocation?.pincode || employee.workLocation?.pincode || ''
+          };
+        }
+      } else {
+        // Actual store ID - validate and assign
+        if (!mongoose.Types.ObjectId.isValid(storeId)) {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid store ID format');
+        }
+        const store = await Store.findById(storeId);
+        if (!store) {
+          throw new ApiError(httpStatus.BAD_REQUEST, 'Specified store not found');
+        }
+        rest.store = store._id;
+        // CRITICAL: Update workLocation with store details
+        rest.workLocation = {
+          storeId: store._id.toString(),
+          storeName: store.name || '',
+          city: store.address?.city || updateData.workLocation?.city || employee.workLocation?.city || '',
+          state: store.address?.state || updateData.workLocation?.state || employee.workLocation?.state || '',
+          pincode: store.address?.zip || store.address?.pincode || updateData.workLocation?.pincode || employee.workLocation?.pincode || ''
+        };
+        logger.info('Updating store and workLocation', {
+          storeId: store._id.toString(),
+          storeName: store.name
+        });
       }
-      rest.store = store._id;
     }
     
     // ============================================
@@ -760,6 +1224,19 @@ const updateEmployee = async (employeeId, updateData, updatedBy, tenantId = null
     // ============================================
     if (!rest.fullName && (rest.firstName || rest.lastName)) {
       rest.fullName = `${rest.firstName || employee.firstName || ''} ${rest.lastName || employee.lastName || ''}`.trim();
+    }
+    
+    // ============================================
+    // Handle TenantId Update (if provided)
+    // ============================================
+    if (updateData.tenantId && updateData.tenantId !== employeeTenantId) {
+      const newTenantId = String(updateData.tenantId).toLowerCase().trim()
+      logger.info('Updating employee tenantId', {
+        employeeId,
+        oldTenantId: employeeTenantId,
+        newTenantId
+      })
+      rest.tenantId = newTenantId
     }
     
     // ============================================
@@ -802,7 +1279,7 @@ const updateEmployee = async (employeeId, updateData, updatedBy, tenantId = null
       query,
       { $set: rest },
       { new: true, runValidators: true }
-    ).populate('role', 'name permissions').populate('store', 'name address').populate('departmentRef', 'name code description');
+    ).populate('store', 'name address').populate('departmentRef', 'name code description');
 
     // ============================================
     // NOTE: All statutory fields now stored directly in User model
@@ -1073,9 +1550,10 @@ const getStores = async (filters = {}, page = 1, limit = 10, tenantId = null) =>
       logger.warn('getStores called without tenantId - using default', { filters });
     }
     
+    const normalizedTenantId = String(storeTenantId).toLowerCase().trim();
     const query = { 
       isDeleted: false,
-      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
+      tenantId: normalizedTenantId // CRITICAL: Direct match (simpler and more reliable)
     };
 
     if (filters.status) {
@@ -1092,14 +1570,27 @@ const getStores = async (filters = {}, page = 1, limit = 10, tenantId = null) =>
 
     const skip = (page - 1) * limit;
 
-    const [stores, total] = await Promise.all([
-      Store.find(query)
-        .populate('manager', 'name email employee_id')
-        // .sort({ createdAt: -1 })  // Removed: Cosmos DB index issue
-        .skip(skip)
-        .limit(limit),
-      Store.countDocuments(query)
-    ]);
+    // Add timeout handling for database queries
+    const [stores, total] = await Promise.race([
+      Promise.all([
+        Store.find(query)
+          .select('name code address coordinates tenantId manager')
+          .populate('manager', 'name employee_id')
+          // .sort({ createdAt: -1 })  // Removed: Cosmos DB index issue
+          .skip(skip)
+          .limit(limit)
+          .lean() // Use lean() for faster queries
+          .maxTimeMS(2000), // Reduced timeout for faster response
+        Store.countDocuments(query).maxTimeMS(5000)
+      ]),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Query timeout')), 5000)
+      )
+    ]).catch((error) => {
+      logger.error('Store query timeout or error', { error: error.message, query });
+      // Return empty result instead of throwing error
+      return [[], 0];
+    });
 
     return {
       stores,
@@ -1124,15 +1615,72 @@ const getStores = async (filters = {}, page = 1, limit = 10, tenantId = null) =>
  */
 const createStore = async (storeData, createdBy, tenantId = null) => {
   try {
+    // CRITICAL: Map frontend auto-generated fields to backend format
+    // Frontend sends: storeCode, latitude, longitude, street, city, state, pincode, country, full_address, id
+    // Backend expects: code, coordinates.latitude, coordinates.longitude, address.street, etc.
+    
+    // Map storeCode to code
+    if (storeData.storeCode && !storeData.code) {
+      storeData.code = storeData.storeCode;
+      logger.info('Mapped storeCode to code', { storeCode: storeData.storeCode });
+    }
+    
+    // Map flat coordinates to coordinates object
+    if ((storeData.latitude || storeData.longitude) && !storeData.coordinates) {
+      storeData.coordinates = {
+        latitude: storeData.latitude || null,
+        longitude: storeData.longitude || null
+      };
+      logger.info('Mapped flat coordinates to coordinates object', { 
+        latitude: storeData.latitude, 
+        longitude: storeData.longitude 
+      });
+    }
+    
+    // Map flat address fields to address object
+    if ((storeData.street || storeData.city || storeData.state || storeData.pincode || storeData.country) && !storeData.address) {
+      storeData.address = {
+        street: storeData.street || '',
+        city: storeData.city || '',
+        state: storeData.state || '',
+        country: storeData.country || 'India',
+        zipCode: storeData.pincode || storeData.zipCode || '',
+        zip: storeData.pincode || storeData.zip || ''
+      };
+      logger.info('Mapped flat address fields to address object', {
+        street: storeData.street,
+        city: storeData.city,
+        state: storeData.state,
+        pincode: storeData.pincode
+      });
+    }
+    
+    // Remove auto-generated fields that shouldn't be saved
+    delete storeData.id; // MongoDB _id is auto-generated
+    delete storeData.full_address; // This is computed, not stored
+    delete storeData.storeCode; // Already mapped to code
+    delete storeData.latitude; // Already mapped to coordinates
+    delete storeData.longitude; // Already mapped to coordinates
+    delete storeData.street; // Already mapped to address
+    delete storeData.city; // Already mapped to address
+    delete storeData.state; // Already mapped to address
+    delete storeData.pincode; // Already mapped to address
+    delete storeData.country; // Already mapped to address
+    
     // CRITICAL: Ensure tenantId is set (required for tenant isolation)
     const storeTenantId = (tenantId || storeData.tenantId || 'default').toString().toLowerCase().trim();
     
-    const { code, googleMapsUrl } = storeData;
+    const normalizedCode = (storeData.code || '').toString().trim().toUpperCase();
+    const { googleMapsUrl } = storeData;
+    if (!normalizedCode) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Store code is required');
+    }
+    const generatedStoreId = `${storeTenantId}-${normalizedCode}`;
 
     // Check if store code already exists FOR THIS TENANT (tenant isolation)
     const existingStore = await Store.findOne({ 
-      tenantId: { $exists: true, $eq: storeTenantId },
-      code 
+      tenantId: storeTenantId, // Direct match (simpler and more reliable)
+      code: normalizedCode
     });
     if (existingStore) {
       throw new ApiError(httpStatus.CONFLICT, 'Store with this code already exists');
@@ -1166,6 +1714,8 @@ const createStore = async (storeData, createdBy, tenantId = null) => {
 
     const store = new Store({
       ...storeData,
+      code: normalizedCode,
+      store_id: generatedStoreId,
       tenantId: storeTenantId, // CRITICAL: Set tenantId for tenant isolation
       createdBy,
       updatedBy: createdBy
@@ -1186,7 +1736,7 @@ const createStore = async (storeData, createdBy, tenantId = null) => {
       logger.warn('Failed to record audit log', { error: auditError.message });
     }
 
-    logger.info('Store created successfully', { storeId: store._id, code, createdBy });
+    logger.info('Store created successfully', { storeId: store._id, code: normalizedCode, generatedStoreId, createdBy });
     return store;
   } catch (error) {
     logger.error('Error in createStore service', { error: error.message, storeData, createdBy });
@@ -1203,20 +1753,64 @@ const getStoreById = async (storeId, tenantId = null) => {
   try {
     // CRITICAL: Filter by tenantId for tenant isolation
     const storeTenantId = tenantId || 'default';
+    const mongoose = require('mongoose');
     
     if (!tenantId) {
       logger.warn('getStoreById called without tenantId - using default', { storeId });
     }
     
-    const store = await Store.findOne({ 
-      _id: storeId, 
+    // Build query - try by ID first
+    let query = {
       isDeleted: false,
-      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
-    })
+      tenantId: storeTenantId // Simplified query - just match tenantId
+    };
+    
+    // Check if storeId is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(storeId)) {
+      query._id = storeId;
+    } else {
+      // If not a valid ObjectId, try to find by code
+      query.code = storeId.toUpperCase().trim();
+      logger.info('StoreId is not a valid ObjectId, trying to find by code', { storeId, code: query.code });
+    }
+    
+    let store = await Store.findOne(query)
       .populate('manager', 'name email employee_id');
 
+    // If not found with tenantId, try without tenantId restriction (for debugging)
+    // This helps identify tenant mismatch issues
     if (!store) {
-      logger.warn('Store not found', { storeId, tenantId: storeTenantId });
+      logger.warn('Store not found with tenantId filter, trying without tenant restriction', { 
+        storeId, 
+        tenantId: storeTenantId,
+        query 
+      });
+      
+      // Try without tenantId to see if store exists but in different tenant
+      const fallbackQuery = {
+        isDeleted: false
+      };
+      
+      if (mongoose.Types.ObjectId.isValid(storeId)) {
+        fallbackQuery._id = storeId;
+      } else {
+        fallbackQuery.code = storeId.toUpperCase().trim();
+      }
+      
+      const fallbackStore = await Store.findOne(fallbackQuery).lean();
+      
+      if (fallbackStore) {
+        logger.error('Store found but tenantId mismatch!', {
+          storeId,
+          requestedTenantId: storeTenantId,
+          actualTenantId: fallbackStore.tenantId,
+          storeName: fallbackStore.name,
+          storeCode: fallbackStore.code
+        });
+        throw new ApiError(httpStatus.NOT_FOUND, `Store not found in tenant '${storeTenantId}'. Store belongs to tenant '${fallbackStore.tenantId}'`);
+      }
+      
+      logger.warn('Store not found', { storeId, tenantId: storeTenantId, query });
       throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
@@ -1237,24 +1831,71 @@ const getStoreById = async (storeId, tenantId = null) => {
 const updateStore = async (storeId, updateData, updatedBy, tenantId = null) => {
   try {
     // CRITICAL: Filter by tenantId for tenant isolation
-    const storeTenantId = tenantId || updateData.tenantId || store?.tenantId || 'default';
+    const storeTenantId = tenantId || updateData.tenantId || 'default';
+    const mongoose = require('mongoose');
     
     if (!tenantId && !updateData.tenantId) {
       logger.warn('updateStore called without tenantId - using default', { storeId });
     }
     
-    const store = await Store.findOne({ 
-      _id: storeId, 
+    // Build query - try by ID first, or by code if not valid ObjectId
+    let query = {
       isDeleted: false,
-      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
-    });
+      tenantId: storeTenantId // Simplified query - just match tenantId
+    };
+    
+    // Check if storeId is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(storeId)) {
+      query._id = storeId;
+    } else {
+      // If not a valid ObjectId, try to find by code
+      query.code = storeId.toUpperCase().trim();
+      logger.info('StoreId is not a valid ObjectId, trying to find by code for update', { storeId, code: query.code });
+    }
+    
+    let store = await Store.findOne(query);
 
+    // If not found with tenantId, try without tenantId restriction (for debugging)
     if (!store) {
-      logger.warn('Store not found for update', { storeId, tenantId: storeTenantId });
+      logger.warn('Store not found for update with tenantId filter, trying without tenant restriction', { 
+        storeId, 
+        tenantId: storeTenantId,
+        query 
+      });
+      
+      // Try without tenantId to see if store exists but in different tenant
+      const fallbackQuery = {
+        isDeleted: false
+      };
+      
+      if (mongoose.Types.ObjectId.isValid(storeId)) {
+        fallbackQuery._id = storeId;
+      } else {
+        fallbackQuery.code = storeId.toUpperCase().trim();
+      }
+      
+      const fallbackStore = await Store.findOne(fallbackQuery).lean();
+      
+      if (fallbackStore) {
+        logger.error('Store found for update but tenantId mismatch!', {
+          storeId,
+          requestedTenantId: storeTenantId,
+          actualTenantId: fallbackStore.tenantId,
+          storeName: fallbackStore.name,
+          storeCode: fallbackStore.code
+        });
+        throw new ApiError(httpStatus.NOT_FOUND, `Store not found in tenant '${storeTenantId}'. Store belongs to tenant '${fallbackStore.tenantId}'`);
+      }
+      
+      logger.warn('Store not found for update', { storeId, tenantId: storeTenantId, query });
       throw new ApiError(httpStatus.NOT_FOUND, 'Store not found');
     }
 
     // Check if code is being updated and if it already exists FOR THIS TENANT
+    if (updateData.code) {
+      updateData.code = updateData.code.toString().trim().toUpperCase();
+    }
+
     if (updateData.code && updateData.code !== store.code) {
       const existingStore = await Store.findOne({ 
       tenantId: { $exists: true, $eq: storeTenantId }, // CRITICAL: Require tenantId to exist
@@ -1267,6 +1908,9 @@ const updateStore = async (storeId, updateData, updatedBy, tenantId = null) => {
     }
 
     const previousData = { ...store.toObject() };
+    if (updateData.code) {
+      updateData.store_id = `${storeTenantId}-${updateData.code}`;
+    }
     
     Object.assign(store, updateData, { updatedBy, updatedAt: new Date() });
     await store.save();
@@ -1308,16 +1952,28 @@ const deleteStore = async (storeId, deletedBy, tenantId = null) => {
   try {
     // CRITICAL: Filter by tenantId for tenant isolation
     const storeTenantId = tenantId || 'default';
+    const mongoose = require('mongoose');
     
     if (!tenantId) {
       logger.warn('deleteStore called without tenantId - using default', { storeId });
     }
     
-    const store = await Store.findOne({ 
-      _id: storeId, 
+    // Build query - try by ID first, or by code if not valid ObjectId
+    let query = {
       isDeleted: false,
-      tenantId: { $exists: true, $eq: storeTenantId } // CRITICAL: Require tenantId to exist and match
-    });
+      tenantId: storeTenantId // Simplified query - just match tenantId
+    };
+    
+    // Check if storeId is a valid MongoDB ObjectId
+    if (mongoose.Types.ObjectId.isValid(storeId)) {
+      query._id = storeId;
+    } else {
+      // If not a valid ObjectId, try to find by code
+      query.code = storeId.toUpperCase().trim();
+      logger.info('StoreId is not a valid ObjectId, trying to find by code for delete', { storeId, code: query.code });
+    }
+    
+    const store = await Store.findOne(query);
 
     if (!store) {
       logger.warn('Store not found for delete', { storeId, tenantId: storeTenantId });

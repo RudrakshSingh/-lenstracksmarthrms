@@ -10,6 +10,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const logger = require('./config/logger');
 const { buildErrorBody } = require('./utils/apiError.util');
+const { toErrorPayload } = require('./utils/errorResponse');
 
 function createApp() {
   const app = express();
@@ -263,19 +264,16 @@ function createApp() {
         error: err.message,
         stack: err.stack,
         path: req.path,
-        method: req.method
+        method: req.method,
+        mongoCode: err.code
       });
 
-      const status = err.status || 500;
-      const code = err.code || 'INTERNAL_ERROR';
-      const message = err.message || 'Internal server error';
-      res.status(status).json(
-        buildErrorBody({
-          code,
-          message,
-          extra: process.env.NODE_ENV === 'development' ? { stack: err.stack } : undefined
-        })
-      );
+      const mapped = toErrorPayload(err, 'INTERNAL_ERROR');
+      const body = {
+        ...mapped.body,
+        ...(process.env.NODE_ENV === 'development' ? { meta: { stack: err.stack } } : {})
+      };
+      res.status(mapped.status).json(body);
     });
   };
 

@@ -68,10 +68,153 @@ databaseRouter.initializeRegistry()
 // Compression
 app.use(compression({ level: 6, threshold: 1024 }));
 
+// CRITICAL: Direct route for /api/tenant/company MUST be FIRST (before any other routes)
+// This ensures it's registered before catch-all routes in other services
+const tenantController = require('./controllers/tenant.controller');
+const { authenticate } = require('./middleware/auth.middleware');
+
+// Register direct route FIRST - this takes precedence over router
+// Make authentication optional - try with auth, fallback to header-based lookup
+app.get('/api/tenant/company', async (req, res, next) => {
+  try {
+    // Try authentication first (non-blocking)
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    let user = null;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const token = authHeader.substring(7);
+        const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'etelios-dev-secret-key-2024';
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = decoded;
+        req.user = decoded; // Set user for controller
+      } catch (jwtError) {
+        // Auth failed, continue without user
+        logger.debug('JWT verification failed, continuing without auth', { error: jwtError.message });
+      }
+    }
+    
+    // If we have a user, use controller (which will use req.user)
+    if (user) {
+      return await tenantController.getCurrentCompany(req, res, next);
+    }
+    
+    // Fallback: Try to get company from headers
+    const tenantId = req.headers['x-tenant-id'] || req.query.tenantId;
+    if (tenantId) {
+      try {
+        const Tenant = require('./models/Tenant.model');
+        const tenant = await Tenant.findOne({ tenantId }).lean();
+        if (tenant) {
+          return res.json({
+            success: true,
+            data: {
+              id: tenant._id?.toString(),
+              tenantId: tenant.tenantId,
+              name: tenant.name,
+              domain: tenant.domain,
+              email: tenant.email,
+              status: tenant.status
+            },
+            message: 'Company retrieved successfully'
+          });
+        }
+      } catch (err) {
+        logger.warn('Failed to get tenant from header', { error: err.message, tenantId });
+      }
+    }
+    
+    // Final fallback: Get first active tenant
+    try {
+      const Tenant = require('./models/Tenant.model');
+      const tenant = await Tenant.findOne({ status: 'active' }).lean();
+      if (tenant) {
+        return res.json({
+          success: true,
+          data: {
+            id: tenant._id?.toString(),
+            tenantId: tenant.tenantId,
+            name: tenant.name,
+            domain: tenant.domain,
+            email: tenant.email,
+            status: tenant.status
+          },
+          message: 'Company retrieved successfully (using first active tenant)'
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to get first active tenant', { error: err.message });
+    }
+    
+    // If all fails, return 404
+    return res.status(404).json({
+      success: false,
+      message: 'Company not found',
+      error: 'COMPANY_NOT_FOUND'
+    });
+  } catch (error) {
+    logger.error('Error in /api/tenant/company', { error: error.message, stack: error.stack });
+    next(error);
+  }
+});
+
 // Routes
+// CRITICAL: Register /api/tenant routes BEFORE /api/tenants to ensure correct matching
+// Frontend endpoint: /api/tenant/company (singular) - MUST be before /api/tenants
+app.use('/api/tenant', tenantRoutes);
 app.use('/api/tenants', tenantRoutes);
 // Also support /api/admin/tenants for documentation compatibility
 app.use('/api/admin/tenants', tenantRoutes);
+
+// Add direct route for /api/tenant (list tenants) - before 404 handler
+// This route handles GET /api/tenant (without /company)
+// CRITICAL: This route MUST be registered before app.use('/api/tenant', ...) to ensure it matches
+app.get('/api/tenant', (req, res, next) => {
+  logger.info('GET /api/tenant hit', {
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    hasAuth: !!req.headers.authorization,
+    tenantId: req.headers['x-tenant-id']
+  });
+  
+  (async () => {
+  try {
+    // Try authentication first (non-blocking)
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    let user = null;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const token = authHeader.substring(7);
+        const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || 'etelios-dev-secret-key-2024';
+        const decoded = jwt.verify(token, JWT_SECRET);
+        user = decoded;
+        req.user = decoded;
+      } catch (jwtError) {
+        // Auth failed, continue without user
+        logger.debug('JWT verification failed for /api/tenant', { error: jwtError.message });
+      }
+    }
+    
+    // Check if user has admin role
+    if (user) {
+      const userRole = user.role || user.roleName;
+      if (userRole && ['admin', 'superadmin', 'super-admin'].includes(userRole.toLowerCase())) {
+        return await tenantController.listTenants(req, res, next);
+      }
+    }
+    
+    // For non-admin or no auth, return current company instead
+    return await tenantController.getCurrentCompany(req, res, next);
+  } catch (error) {
+    logger.error('Error in /api/tenant', { error: error.message, stack: error.stack });
+    next(error);
+  }
+  })().catch(next);
+});
 
 // Admin MFE compatibility routes (matches frontend docs)
 app.use('/api', adminMfeCompatRoutes);
@@ -146,12 +289,25 @@ app.use((error, req, res, next) => {
   });
 });
 
-// 404 handler
+// 404 handler - MUST be last
+// But don't catch routes that should be handled by other services
 app.use('*', (req, res) => {
+  // Log the request for debugging
+  logger.warn('404 - Route not found', {
+    method: req.method,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    headers: {
+      'x-tenant-id': req.headers['x-tenant-id'],
+      authorization: req.headers.authorization ? 'present' : 'missing'
+    }
+  });
+  
   res.status(404).json({
     success: false,
-    message: 'Route not found',
-    error: 'ROUTE_NOT_FOUND'
+    message: `Route not found: ${req.method} ${req.path}`,
+    error: 'ROUTE_NOT_FOUND',
+    service: 'tenant-registry-service'
   });
 });
 

@@ -2,9 +2,18 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: etelios-config
-  namespace: etelios-backend-prod
+  namespace: etelios-prod
+  annotations:
+    etelios.dev/jwt-hint: "Production auth/hr/attendance should set JWT_SECRET from Secret etelios-jwt-sync (see k8s/etelios-prod and k8s/deployments). ConfigMap value is a legacy fallback only."
 data:
   NODE_ENV: "production"
+  PORT: "3000"
+  JWT_SECRET: "etelios-super-secret-jwt-key-2024"
+  MONGODB_URI: "mongodb://admin:etelios123@mongodb.etelios-prod.svc.cluster.local:27017/etelios?authSource=admin"
+  MONGO_URI: "mongodb://admin:etelios123@mongodb.etelios-prod.svc.cluster.local:27017/etelios?authSource=admin"
+  REDIS_URL: "redis://redis:6379"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
   # CORS Configuration - Allow all origins for frontend compatibility
   # Can be set to specific frontend URL(s) for better security
   # Example: CORS_ORIGIN: "https://your-frontend-domain.com,https://another-domain.com"
@@ -42,9 +51,25 @@ data:
   ENABLE_ROLE_SEEDING: "false"
 
   # =========================
+  # SSL/TLS Configuration - PRODUCTION
+  # =========================
+  ENABLE_SSL: "true"
+  ENABLE_HTTPS: "true"
+  # SSL Certificate Paths (for Kubernetes, use mounted volumes or secrets)
+  # Certificate will be mounted from secret or configmap
+  SSL_CERT_PATH: "/etc/ssl/certs/etelios-cert.pem"
+  SSL_CERTIFICATE_PATH: "/etc/ssl/certs/etelios-cert.pem"
+  SSL_KEY_PATH: "/etc/ssl/private/etelios-key.pem"
+  SSL_CERTIFICATE_KEY_PATH: "/etc/ssl/private/etelios-key.pem"
+  # SSL/TLS Security Settings
+  SSL_MIN_VERSION: "TLSv1.2"
+  SSL_MAX_VERSION: "TLSv1.3"
+  SSL_REJECT_UNAUTHORIZED: "true"
+
+  # =========================
   # Database selection
   # =========================
-  # We use ONE Cosmos/Mongo connection string (from Secret MONGO_URI) and pick DB names via env.
+  # We use ONE Mongo/DocumentDB connection string (from Secret MONGO_URI) and pick DB names via env.
   # tenant-registry-service uses these env vars in src/utils/database.router.js
   DB_NAME: "tenant-db"
   TENANT_DB_NAME: "tenant-db"

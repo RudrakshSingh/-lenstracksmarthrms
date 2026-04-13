@@ -12,16 +12,52 @@ class LeaveService {
   async getLeaveBalance(employeeId, tenantId = 'default', leaveYear = null) {
     try {
       const year = leaveYear || new Date().getFullYear();
+      const mongoose = require('mongoose');
 
-      // Find employee - try with tenantId first, then without
-      let employee = await User.findOne({ employeeId, tenantId });
+      // Find employee - try multiple methods:
+      // 1. By employeeId with tenantId
+      // 2. By employeeId without tenantId
+      // 3. By MongoDB _id (if employeeId is ObjectId)
+      // 4. By email (if employeeId looks like email)
+      let employee = null;
+      
+      // Try 1: By employeeId with tenantId
+      employee = await User.findOne({ 
+        $or: [
+          { employeeId: employeeId.toUpperCase() },
+          { employee_id: employeeId.toUpperCase() }
+        ],
+        tenantId 
+      });
+      
+      // Try 2: By employeeId without tenantId
       if (!employee) {
-        // Fallback: try without tenantId (for employees created without tenantId)
-        employee = await User.findOne({ employeeId });
+        employee = await User.findOne({ 
+          $or: [
+            { employeeId: employeeId.toUpperCase() },
+            { employee_id: employeeId.toUpperCase() }
+          ]
+        });
+      }
+      
+      // Try 3: By MongoDB _id (if employeeId is ObjectId)
+      if (!employee && mongoose.Types.ObjectId.isValid(employeeId)) {
+        employee = await User.findById(employeeId);
+      }
+      
+      // Try 4: By email (if employeeId looks like email)
+      if (!employee && employeeId.includes('@')) {
+        employee = await User.findOne({ 
+          email: employeeId.toLowerCase(),
+          tenantId 
+        });
+        if (!employee) {
+          employee = await User.findOne({ email: employeeId.toLowerCase() });
+        }
       }
       
       if (!employee) {
-        const error = new Error('Employee not found');
+        const error = new Error(`Employee not found. Searched by: employeeId=${employeeId}, tenantId=${tenantId}`);
         error.statusCode = 404;
         throw error;
       }

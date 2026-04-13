@@ -58,20 +58,8 @@ router.put(
   salesController.updateSalesOrderStatus
 );
 
-// Prescription Management Routes
-router.post(
-  '/prescriptions',
-  requireRole(['admin', 'manager', 'sales']),
-  requirePermission('manage_prescriptions'),
-  salesController.createPrescription
-);
-
-router.get(
-  '/prescriptions',
-  requireRole(['admin', 'manager', 'sales']),
-  requirePermission('view_prescriptions'),
-  salesController.getPrescriptions
-);
+// Prescription routes removed - use prescription-service for that
+// Keeping only simple daily sales entry
 
 // Sales Dashboard
 router.get(
@@ -89,11 +77,9 @@ router.get(
   salesController.getProductAvailability
 );
 
-// Manual Sales Entry (Temporary Entry)
+// Manual Sales Entry (Temporary Entry) - Simplified for quick access
 router.post(
   '/manual-entry',
-  requireRole(['admin', 'manager', 'sales', 'accountant']),
-  requirePermission('create_sales_orders'),
   salesController.createManualSalesEntry
 );
 

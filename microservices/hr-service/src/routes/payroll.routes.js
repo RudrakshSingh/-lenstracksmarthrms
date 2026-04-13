@@ -1,148 +1,96 @@
 const express = require('express');
 const router = express.Router();
-const payrollController = require('../controllers/payrollController');
 const { authenticate } = require('../middleware/auth.middleware');
-const { requireRole, requirePermission } = require('../middleware/rbac.middleware');
-const { validateRequest } = require('../middleware/validateRequest.wrapper');
+const { requireRole } = require('../middleware/rbac.middleware');
 const asyncHandler = require('../utils/asyncHandler');
-const Joi = require('joi');
+const { sendSuccess, sendError } = require('../../shared/utils/response.util');
+const logger = require('../config/logger');
+const { getEmployeePayroll } = require('../utils/payrollServiceClient');
 
 // All routes require authentication
 router.use(authenticate);
 
-// Validation schemas
-const createPayrollRunSchema = {
-  body: Joi.object({
-    month: Joi.number().integer().min(1).max(12).required(),
-    year: Joi.number().integer().min(2020).max(2100).required()
+/**
+ * @route   GET /api/payroll/preview
+ * @desc    Get payroll preview for an employee
+ * @access  Private (Employee can view own payroll, Admin/HR can view all)
+ */
+router.get(
+  '/payroll/preview',
+  requireRole(['hr', 'admin', 'manager', 'employee'], []),
+  asyncHandler(async (req, res, next) => {
+    try {
+      const { employeeId } = req.query;
+      const userRole = (req.user?.role || '').toUpperCase();
+      const isAdminOrHR = ['ADMIN', 'HR', 'SUPERADMIN', 'MANAGER'].includes(userRole);
+      const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || req.user?.tenantId || 'default';
+      
+      // Determine target employee
+      let targetEmployeeId = employeeId;
+      if (!targetEmployeeId) {
+        targetEmployeeId = req.user?.employee_id || req.user?.employeeId;
+      }
+      
+      // If employee is trying to view someone else's payroll and not admin/HR, deny
+      if (!isAdminOrHR && targetEmployeeId && targetEmployeeId !== req.user?.employee_id && targetEmployeeId !== req.user?.employeeId) {
+        return sendError(res, 'You can only view your own payroll', 'FORBIDDEN', 403);
+      }
+      
+      if (!targetEmployeeId) {
+        return sendError(res, 'employeeId is required', 'VALIDATION_ERROR', 400);
+      }
+
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const authorization = req.headers.authorization || req.headers.Authorization;
+      const requestId = req.headers['x-request-id'] || req.headers['X-Request-ID'];
+
+      const payrollResponse = await getEmployeePayroll({
+        employeeCode: targetEmployeeId,
+        month,
+        year,
+        authorization,
+        tenantId,
+        requestId
+      });
+
+      const payrollData = payrollResponse?.data || null;
+      const preview = payrollData
+        ? {
+            basicSalary: payrollData.basic_salary || 0,
+            allowances:
+              (payrollData.hra || 0) +
+              (payrollData.da || 0) +
+              (payrollData.special_allowance || 0) +
+              (payrollData.variable_pay || 0),
+            deductions: payrollData.total_employee_deductions || 0,
+            netSalary: payrollData.net_take_home || 0,
+            period: `${year}-${String(month).padStart(2, '0')}`,
+            status: payrollData.status || 'DRAFT'
+          }
+        : {
+            basicSalary: 0,
+            allowances: 0,
+            deductions: 0,
+            netSalary: 0,
+            period: `${year}-${String(month).padStart(2, '0')}`,
+            status: 'NOT_AVAILABLE'
+          };
+
+      return sendSuccess(res, {
+        employeeId: targetEmployeeId,
+        preview,
+        source: payrollData ? 'payroll-service' : 'fallback',
+        message: payrollData
+          ? 'Payroll preview retrieved from payroll-service'
+          : 'Payroll data not available for current month'
+      }, 'Payroll preview retrieved successfully');
+    } catch (error) {
+      logger.error('Error in getPayrollPreview controller', { error: error.message });
+      next(error);
+    }
   })
-};
-
-const lockPayrollRunSchema = {
-  params: Joi.object({
-    id: Joi.string().required()
-  })
-};
-
-const postPayrollRunSchema = {
-  body: Joi.object({
-    jv_number: Joi.string().required(),
-    jv_date: Joi.date().optional()
-  })
-};
-
-const createOverrideSchema = {
-  body: Joi.object({
-    employee_id: Joi.string().required(),
-    run_id: Joi.string().required(),
-    component_code: Joi.string().required(),
-    original_amount: Joi.number().required(),
-    override_amount: Joi.number().required(),
-    reason_code: Joi.string().valid('ARREAR', 'BONUS', 'PENALTY_WAIVE', 'ADJUSTMENT', 'CORRECTION', 'OTHER').required(),
-    reason: Joi.string().required().max(1000),
-    attachment_url: Joi.string().optional()
-  })
-};
-
-// Routes
-router.post(
-  '/payroll-runs',
-  requireRole(['hr', 'admin', 'accountant']),
-  requirePermission('hr.payroll.create'),
-  validateRequest(createPayrollRunSchema),
-  asyncHandler(payrollController.createPayrollRun)
-);
-
-router.post(
-  '/payroll-runs/:id/process',
-  requireRole(['hr', 'admin', 'accountant']),
-  requirePermission('hr.payroll.process'),
-  asyncHandler(payrollController.processPayrollRun)
-);
-
-router.post(
-  '/payroll-runs/:id/lock',
-  requireRole(['hr', 'admin', 'accountant']),
-  requirePermission('hr.payroll.lock'),
-  asyncHandler(payrollController.lockPayrollRun)
-);
-
-router.post(
-  '/payroll-runs/:id/post',
-  requireRole(['hr', 'admin', 'accountant']),
-  requirePermission('hr.payroll.post'),
-  validateRequest(postPayrollRunSchema),
-  asyncHandler(payrollController.postPayrollRun)
-);
-
-router.get(
-  '/payroll-runs',
-  requireRole(['hr', 'admin', 'accountant', 'manager']),
-  requirePermission('hr.payroll.read'),
-  asyncHandler(payrollController.getPayrollRuns)
-);
-
-router.get(
-  '/payroll-runs/:id',
-  requireRole(['hr', 'admin', 'accountant', 'manager']),
-  requirePermission('hr.payroll.read'),
-  asyncHandler(payrollController.getPayrollRunById)
-);
-
-router.post(
-  '/payroll-runs/:id/override',
-  requireRole(['hr', 'admin', 'accountant']),
-  requirePermission('hr.payroll.override'),
-  validateRequest(createOverrideSchema),
-  asyncHandler(payrollController.createPayrollOverride)
-);
-
-router.get(
-  '/payslips',
-  requireRole(['hr', 'admin', 'accountant', 'manager', 'employee']),
-  requirePermission('hr.payroll.read'),
-  asyncHandler(payrollController.getPayslips)
-);
-
-// Alias route for path compatibility
-router.get(
-  '/payroll/payslips',
-  requireRole(['hr', 'admin', 'accountant', 'manager', 'employee']),
-  requirePermission('hr.payroll.read'),
-  asyncHandler(payrollController.getPayslips)
-);
-
-// Payroll statistics
-router.get(
-  '/payroll/stats',
-  requireRole(['hr', 'admin', 'accountant', 'manager']),
-  requirePermission('hr.payroll.read'),
-  asyncHandler(payrollController.getPayrollStats)
-);
-
-// Payroll employees
-router.get(
-  '/payroll/employees',
-  requireRole(['hr', 'admin', 'accountant', 'manager']),
-  requirePermission('hr.payroll.read'),
-  asyncHandler(payrollController.getPayrollEmployees)
-);
-
-// Salary preview
-router.post(
-  '/payroll/salary/preview',
-  requireRole(['hr', 'admin', 'accountant']),
-  requirePermission('hr.payroll.read'),
-  asyncHandler(payrollController.previewSalary)
-);
-
-// Payroll approvals
-router.get(
-  '/payroll/approvals',
-  requireRole(['hr', 'admin', 'accountant']),
-  requirePermission('hr.payroll.approve'),
-  asyncHandler(payrollController.getPayrollApprovals)
 );
 
 module.exports = router;
-

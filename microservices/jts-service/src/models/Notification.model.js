@@ -11,6 +11,8 @@ const NotificationSchema = new Schema(
     payload: Schema.Types.Mixed,
     read: { type: Boolean, default: false, index: true },
     read_at: Date,
+    /** Channels this row represents (e.g. in_app, email) — blueprint-style delivery trace. */
+    delivery_channels: [{ type: String }],
     created_at: { type: Date, default: Date.now }
   },
   { timestamps: false }

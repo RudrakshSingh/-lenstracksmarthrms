@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User.model');
 const { verifyAccessToken } = require('../config/jwt');
 const logger = require('../config/logger');
+const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
 
 async function authenticate(req, res, next) {
   try {
@@ -80,7 +81,19 @@ async function authenticate(req, res, next) {
       });
     }
 
-    // Attach user to request
+    let effectivePermissions = [];
+    try {
+      const resolved = await resolveEffectivePermissionsForUser(user);
+      effectivePermissions = resolved.effectivePermissions || [];
+    } catch (permErr) {
+      logger.warn('Effective permissions resolution failed, falling back to stored permissions', {
+        error: permErr.message,
+        userId: user._id
+      });
+      effectivePermissions = user.permissions || [];
+    }
+
+    // Attach user to request (permissions = effective set for RBAC)
     req.user = {
       _id: user._id,
       id: user._id,
@@ -89,9 +102,14 @@ async function authenticate(req, res, next) {
       email: user.email,
       role: user.role,
       status: user.status,
+      tenantId: user.tenantId,
       stores: user.stores,
       reporting_manager: user.reporting_manager,
-      permissions: user.permissions
+      permissions: effectivePermissions,
+      permissionOverrides: {
+        custom_permissions: user.custom_permissions || [],
+        permission_denials: user.permission_denials || []
+      }
     };
 
     next();
@@ -142,6 +160,13 @@ async function optionalAuthenticate(req, res, next) {
         .populate('reporting_manager', 'name employee_id');
 
       if (user && user.is_active && user.status !== 'inactive') {
+        let effectivePermissions = [];
+        try {
+          const resolved = await resolveEffectivePermissionsForUser(user);
+          effectivePermissions = resolved.effectivePermissions || [];
+        } catch {
+          effectivePermissions = user.permissions || [];
+        }
         req.user = {
           id: user._id,
           employee_id: user.employee_id,
@@ -149,9 +174,14 @@ async function optionalAuthenticate(req, res, next) {
           email: user.email,
           role: user.role,
           status: user.status,
+          tenantId: user.tenantId,
           stores: user.stores,
           reporting_manager: user.reporting_manager,
-          permissions: user.permissions
+          permissions: effectivePermissions,
+          permissionOverrides: {
+            custom_permissions: user.custom_permissions || [],
+            permission_denials: user.permission_denials || []
+          }
         };
       }
     }

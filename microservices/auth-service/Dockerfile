@@ -7,10 +7,10 @@ WORKDIR /app
 # Copy package files from service directory
 COPY microservices/auth-service/package*.json ./
 
-# Copy shared utilities directory
-COPY microservices/shared ./shared
+# file:../shared in package.json resolves here (sibling of /app)
+COPY microservices/shared /shared
 
-# Install dependencies
+# Install dependencies (@etelios/shared linked from /shared)
 RUN if [ -f package-lock.json ]; then npm ci --omit=dev || npm install --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Production stage
@@ -26,11 +26,11 @@ RUN addgroup -g 1001 -S nodejs && \
 # Set working directory
 WORKDIR /app
 
-# Copy dependencies from builder
+# Copy dependencies from builder (includes symlink node_modules/@etelios/shared -> ../../../shared)
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 
-# Copy shared utilities from builder
-COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
+# Symlink target for file:../shared (resolves to /shared in the container)
+COPY --from=builder --chown=nodejs:nodejs /shared /shared
 
 # Copy application code from service directory
 COPY --chown=nodejs:nodejs microservices/auth-service/ ./

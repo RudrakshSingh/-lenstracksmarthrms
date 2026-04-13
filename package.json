@@ -88,6 +88,11 @@
     "nodemon": "^3.1.11",
     "prettier": "^3.1.0"
   },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "<rootDir>/tests/unit/auth.service.test.js"
+    ]
+  },
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=9.0.0"

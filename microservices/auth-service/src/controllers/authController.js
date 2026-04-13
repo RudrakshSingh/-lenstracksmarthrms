@@ -1,6 +1,7 @@
 const authService = require('../services/auth.service');
 const logger = require('../config/logger');
 const realtimeClient = require('../utils/realtime.client');
+const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
 
 /**
  * Register a new user
@@ -125,6 +126,13 @@ const login = async (req, res, next) => {
   try {
     // Support both 'email' (frontend) and 'emailOrEmployeeId' (backend) field names
     const emailOrEmployeeId = req.body.emailOrEmployeeId || req.body.email;
+    const tenantId = (
+      req.body.tenantId ||
+      req.headers['x-tenant-id'] ||
+      req.headers['x-tenant'] ||
+      req.query.tenantId ||
+      ''
+    ).toString().trim().toLowerCase();
     const password = req.body.password;
     
     // Validate required fields
@@ -137,7 +145,7 @@ const login = async (req, res, next) => {
     
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    const result = await authService.login(emailOrEmployeeId, password, ip, userAgent);
+    const result = await authService.login(emailOrEmployeeId, password, ip, userAgent, tenantId || null);
 
     // Send realtime notification
     if (result.user && result.user._id) {
@@ -262,7 +270,8 @@ const logout = async (req, res, next) => {
     const userId = req.user._id;
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    const result = await authService.logout(userId, ip, userAgent);
+    const token = req.headers.authorization?.split(' ')[1] || null; // Get token for attendance service call
+    const result = await authService.logout(userId, ip, userAgent, token);
 
     res.status(200).json({
       success: true,
@@ -281,10 +290,145 @@ const logout = async (req, res, next) => {
 const getProfile = async (req, res, next) => {
   try {
     const user = req.user;
+
+    // mock-login-fast: JWT userId is not a Mongo ObjectId — skip DB and mirror GET /me shape
+    if (user.isMock) {
+      const profile = {
+        _id: user._id || user.id,
+        id: user._id || user.id,
+        employeeId: user.employee_id || '',
+        employee_id: user.employee_id || '',
+        name: user.name || '',
+        firstName: '',
+        lastName: '',
+        email: user.email || '',
+        phone: user.phone || '',
+        tenantId: user.tenantId || 'default',
+        role: user.role || '',
+        status: user.status || 'active',
+        department: '',
+        designation: '',
+        jobTitle: '',
+        store: null,
+        departmentRef: null,
+        reporting_manager: user.reporting_manager || null,
+        storeId: null,
+        store_id: null,
+        permissions: user.permissions || [],
+        stores: user.stores || [],
+        avatar: '',
+        gender: '',
+        dob: null,
+        doj: null
+      };
+      return res.status(200).json({
+        success: true,
+        message: 'Profile retrieved successfully',
+        data: profile
+      });
+    }
+
+    const User = require('../models/User.model');
+    
+    // OPTIMIZED: Select only needed fields, reduce populate fields for faster response
+    const fullUser = await User.findById(user._id || user.id)
+      .select(
+        'employeeId employee_id email firstName lastName fullName name phone role status tenantId primary_store stores reporting_manager department designation jobTitle permissions custom_permissions permission_denials avatar gender dob doj'
+      )
+      .populate('primary_store', 'name code')
+      .populate('stores', 'name code')
+      .populate('reporting_manager', 'name employee_id')
+      .lean()
+      .maxTimeMS(2000);
+    
+    if (!fullUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    let effectivePermissions = fullUser.permissions || [];
+    try {
+      const resolved = await resolveEffectivePermissionsForUser(fullUser);
+      effectivePermissions = resolved.effectivePermissions || effectivePermissions;
+    } catch (permErr) {
+      logger.warn('getProfile: effective permissions failed', { error: permErr.message });
+    }
+
+    // Get primary store (prefer primary_store, fallback to first store in stores array)
+    const primaryStore = fullUser.primary_store || (fullUser.stores && fullUser.stores.length > 0 ? fullUser.stores[0] : null);
+    
+    // Build complete user profile with ALL available fields
+    const profile = {
+      _id: fullUser._id?.toString() || user._id || user.id,
+      id: fullUser._id?.toString() || user._id || user.id,
+      employeeId: fullUser.employeeId || fullUser.employee_id || user.employee_id || '',
+      employee_id: fullUser.employeeId || fullUser.employee_id || user.employee_id || '',
+      name: fullUser.name || fullUser.fullName || `${fullUser.firstName || ''} ${fullUser.lastName || ''}`.trim() || '',
+      firstName: fullUser.firstName || fullUser.first_name || '',
+      lastName: fullUser.lastName || fullUser.last_name || '',
+      email: fullUser.email || user.email || '',
+      phone: fullUser.phone || fullUser.phoneNumber || fullUser.phone_number || '',
+      tenantId: fullUser.tenantId || user.tenantId || 'default',
+      role: fullUser.role || user.role || '',
+      status: fullUser.status || (fullUser.is_active ? 'active' : 'inactive') || 'active',
+      department: fullUser.department || '',
+      designation: fullUser.designation || fullUser.position || '',
+      jobTitle: fullUser.jobTitle || fullUser.job_title || fullUser.designation || '',
+      store: primaryStore ? {
+        id: primaryStore._id?.toString() || primaryStore.id || '',
+        _id: primaryStore._id?.toString() || primaryStore.id || '',
+        name: primaryStore.name || '',
+        code: primaryStore.code || '',
+        address: primaryStore.address || {}
+      } : (fullUser.store ? {
+        id: fullUser.store._id?.toString() || fullUser.store.id || '',
+        _id: fullUser.store._id?.toString() || fullUser.store.id || '',
+        name: fullUser.store.name || '',
+        code: fullUser.store.code || '',
+        address: fullUser.store.address || {}
+      } : null),
+      departmentRef: fullUser.departmentRef ? {
+        id: fullUser.departmentRef._id?.toString() || fullUser.departmentRef.id || '',
+        _id: fullUser.departmentRef._id?.toString() || fullUser.departmentRef.id || '',
+        name: fullUser.departmentRef.name || fullUser.department || '',
+        code: fullUser.departmentRef.code || '',
+        description: fullUser.departmentRef.description || ''
+      } : (fullUser.department ? {
+        name: fullUser.department,
+        code: fullUser.department,
+        description: ''
+      } : null),
+      reporting_manager: fullUser.reporting_manager ? {
+        id: fullUser.reporting_manager._id?.toString() || fullUser.reporting_manager.id || '',
+        _id: fullUser.reporting_manager._id?.toString() || fullUser.reporting_manager.id || '',
+        name: fullUser.reporting_manager.name || fullUser.reporting_manager.fullName || '',
+        employee_id: fullUser.reporting_manager.employee_id || fullUser.reporting_manager.employeeId || '',
+        email: fullUser.reporting_manager.email || ''
+      } : (fullUser.reportingManager ? {
+        name: fullUser.reportingManagerName || fullUser.reportingManager || '',
+        employee_id: fullUser.reportingManager || ''
+      } : null),
+      // CRITICAL: Add storeId and store_id at root level for frontend compatibility (for Add Sales Entry modal)
+      storeId: primaryStore ? (primaryStore._id?.toString() || primaryStore.id || '') : (fullUser.store ? (fullUser.store._id?.toString() || fullUser.store.id || '') : (fullUser.stores && fullUser.stores.length > 0 ? (fullUser.stores[0]._id?.toString() || fullUser.stores[0].id || '') : null)),
+      store_id: primaryStore ? (primaryStore._id?.toString() || primaryStore.id || '') : (fullUser.store ? (fullUser.store._id?.toString() || fullUser.store.id || '') : (fullUser.stores && fullUser.stores.length > 0 ? (fullUser.stores[0]._id?.toString() || fullUser.stores[0].id || '') : null)),
+      permissions: effectivePermissions,
+      permissionOverrides: {
+        custom_permissions: fullUser.custom_permissions || [],
+        permission_denials: fullUser.permission_denials || []
+      },
+      stores: fullUser.stores || [],
+      avatar: fullUser.avatar || '',
+      gender: fullUser.gender || '',
+      dob: fullUser.dob || fullUser.dateOfBirth || fullUser.date_of_birth || null,
+      doj: fullUser.doj || fullUser.joinDate || fullUser.join_date || null
+    };
+    
     res.status(200).json({
       success: true,
       message: 'Profile retrieved successfully',
-      data: user
+      data: profile
     });
   } catch (error) {
     logger.error('Error in getProfile controller', { error: error.message });
@@ -297,7 +441,15 @@ const getProfile = async (req, res, next) => {
  */
 const updateProfile = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    if (req.user.isMock) {
+      return res.status(400).json({
+        success: false,
+        message: 'Profile update is not available for mock sessions',
+        code: 'MOCK_PROFILE_READ_ONLY'
+      });
+    }
+
+    const userId = req.user._id || req.user.id;
     const updateData = req.body;
     
     // Remove sensitive fields that shouldn't be updated via this endpoint
@@ -324,8 +476,16 @@ const updateProfile = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user?._id || req.user?.id;
     const { currentPassword, newPassword } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid session',
+        code: 'INVALID_SESSION'
+      });
+    }
 
     await authService.changePassword(userId, currentPassword, newPassword);
 
@@ -335,6 +495,20 @@ const changePassword = async (req, res, next) => {
     });
   } catch (error) {
     logger.error('Error in changePassword controller', { error: error.message });
+    if (error.message === 'Current password is incorrect') {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        code: 'INVALID_CURRENT_PASSWORD'
+      });
+    }
+    if (error.message === 'User not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+        code: 'USER_NOT_FOUND'
+      });
+    }
     next(error);
   }
 };
@@ -373,6 +547,80 @@ const resetPassword = async (req, res, next) => {
     });
   } catch (error) {
     logger.error('Error in resetPassword controller', { error: error.message });
+    next(error);
+  }
+};
+
+/**
+ * Admin reset password (without current password)
+ * POST /api/auth/admin/reset-password
+ */
+/**
+ * Admin reset password (without current password)
+ * POST /api/auth/admin/reset-password
+ */
+const adminResetPassword = async (req, res, next) => {
+  try {
+    const User = require('../models/User.model');
+    const { userId, email, newPassword } = req.body;
+    const requestedTenantId = (
+      req.headers['x-tenant-id'] ||
+      req.headers['x-tenant'] ||
+      req.user?.tenantId ||
+      ''
+    ).toString().trim().toLowerCase();
+    
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'newPassword is required'
+      });
+    }
+
+    let targetUserId = userId;
+    
+    // If email provided instead of userId, find user by email
+    if (!targetUserId && email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      const query = { email: normalizedEmail };
+
+      // Scope reset lookup to tenant so duplicate emails across tenants do not collide.
+      if (requestedTenantId && req.user?.role !== 'superadmin') {
+        query.tenantId = requestedTenantId;
+      }
+
+      const user = await User.findOne(query);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      targetUserId = user._id;
+    }
+
+    if (!targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Either userId or email is required'
+      });
+    }
+
+    await authService.adminResetPassword(targetUserId, newPassword);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully'
+    });
+  } catch (error) {
+    logger.error('Error in adminResetPassword controller', { error: error.message });
+    if (error.message === 'User not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+        code: 'USER_NOT_FOUND'
+      });
+    }
     next(error);
   }
 };
@@ -519,8 +767,15 @@ const mockLogin = async (req, res, next) => {
       ).catch(() => {}); // Fire and forget - don't block response
     }
 
-    // Generate tokens (synchronous operation - fast)
-    const accessToken = generateAccessToken({ userId: user._id, role: user.role || role });
+    const resolvedTenantId = (user.tenantId && String(user.tenantId).toLowerCase().trim()) || 'default';
+
+    // Generate tokens (synchronous operation - fast) — tenantId required for HR validateTenant / multi-tenant APIs
+    const accessToken = generateAccessToken({
+      userId: user._id,
+      role: user.role || role,
+      tenantId: resolvedTenantId,
+      employee_id: user.employee_id || mockEmployeeId
+    });
     const refreshToken = generateRefreshToken({ userId: user._id });
 
     // Build user profile (avoid calling methods on lean object)
@@ -531,7 +786,8 @@ const mockLogin = async (req, res, next) => {
       email: user.email || mockEmail,
       role: user.role || role,
       department: user.department || departmentMap[role] || 'SALES',
-      designation: user.designation || `${role.toUpperCase()} Manager`
+      designation: user.designation || `${role.toUpperCase()} Manager`,
+      tenantId: resolvedTenantId
     };
 
     if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'production') {
@@ -557,6 +813,7 @@ const mockLogin = async (req, res, next) => {
 module.exports = {
   register,
   login,
+  adminResetPassword,
   mockLogin,
   refreshToken,
   logout,

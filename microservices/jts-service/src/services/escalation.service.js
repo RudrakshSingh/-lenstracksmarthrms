@@ -148,6 +148,30 @@ class EscalationService {
 
     return activeEmployees.map((employee) => employee._id);
   }
+
+  /**
+   * Single payload for ops / “founder console”: recent escalation rows + active rules + count of tasks with escalation_level &gt; 0.
+   */
+  async getConsoleSnapshot(tenantId) {
+    const [recentEvents, activeRules, escalatedTaskCount] = await Promise.all([
+      EscalationEvent.find({ tenant_id: tenantId })
+        .sort({ created_at: -1 })
+        .limit(75)
+        .populate('task_id', 'title code status due_at priority')
+        .lean(),
+      EscalationRule.find({ tenant_id: tenantId, is_active: true }).sort({ updated_at: -1 }).lean(),
+      Task.countDocuments({
+        tenant_id: tenantId,
+        is_deleted: { $ne: true },
+        escalation_level: { $gt: 0 }
+      })
+    ]);
+    return {
+      recentEvents,
+      activeRules,
+      escalatedOpenTasksApprox: escalatedTaskCount
+    };
+  }
 }
 
 module.exports = new EscalationService();

@@ -23,6 +23,14 @@ const userSchema = new mongoose.Schema({
     uppercase: true,
     index: true
   },
+  // CRITICAL: Auth-service compatibility field
+  employee_id: {
+    type: String,
+    required: false, // Not required in HR service, but set for auth-service compatibility
+    trim: true,
+    uppercase: true,
+    index: true // OPTIMIZED: Add index for faster lookups
+  },
   code: {
     type: String,
     trim: true,
@@ -40,6 +48,13 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: 100,
     default: ''
+  },
+  // CRITICAL: Auth-service compatibility field
+  name: {
+    type: String,
+    required: false, // Not required in HR service, but set for auth-service compatibility
+    trim: true,
+    maxlength: 200
   },
   avatar: {
     type: String,
@@ -93,6 +108,24 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Role',
     required: false // Optional - will be assigned after employee creation
+  },
+  // Direct permissions on user (for auth-service compatibility)
+  permissions: [{
+    type: String
+  }],
+  // Extra allows on top of role (sync with auth-service when mirroring users)
+  custom_permissions: [{
+    type: String,
+    trim: true
+  }],
+  permission_denials: [{
+    type: String,
+    trim: true
+  }],
+  permissionsRevision: {
+    type: Number,
+    default: 0,
+    min: 0
   },
   
   // ============================================
@@ -281,6 +314,16 @@ const userSchema = new mongoose.Schema({
       trim: true
     }
   },
+  workMode: {
+    type: String,
+    enum: ['STORE_BOUND', 'BACKOFFICE', 'ROAMING'],
+    default: 'STORE_BOUND'
+  },
+  attendancePolicy: {
+    type: String,
+    enum: ['STRICT_GEOFENCE', 'NO_GEOFENCE', 'FLEXI_SHIFT'],
+    default: 'STRICT_GEOFENCE'
+  },
   
   // ============================================
   // Addresses
@@ -329,6 +372,11 @@ const userSchema = new mongoose.Schema({
   // ============================================
   doj: {
     type: Date
+  },
+  // CRITICAL: Auth-service compatibility field
+  joining_date: {
+    type: Date,
+    required: false // Not required in HR service, but set for auth-service compatibility
   },
   dob: {
     type: Date
@@ -519,10 +567,40 @@ userSchema.index({ tenantId: 1, employeeId: 1 }, { unique: true });
 // Index for tenant-based queries (most common query pattern)
 userSchema.index({ tenantId: 1, status: 1 });
 userSchema.index({ tenantId: 1, department: 1 });
+// CRITICAL: Compound index for direct MongoDB _id lookups with tenant filtering (performance optimization)
+userSchema.index({ _id: 1, tenantId: 1 });
 
 // Virtual for full name
 userSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
+});
+
+// Pre-save middleware to sync auth-service compatibility fields
+userSchema.pre('save', function(next) {
+  // CRITICAL: Sync employee_id from employeeId (auth-service compatibility)
+  if (this.employeeId && !this.employee_id) {
+    this.employee_id = this.employeeId;
+  } else if (this.employee_id && !this.employeeId) {
+    this.employeeId = this.employee_id;
+  }
+  
+  // CRITICAL: Sync name from firstName/lastName (auth-service compatibility)
+  if (!this.name && this.firstName) {
+    this.name = this.lastName ? `${this.firstName} ${this.lastName}`.trim() : this.firstName;
+  }
+  
+  // CRITICAL: Sync joining_date from doj (auth-service compatibility)
+  if (this.doj && !this.joining_date) {
+    this.joining_date = this.doj;
+  } else if (this.joining_date && !this.doj) {
+    this.doj = this.joining_date;
+  } else if (!this.joining_date && !this.doj && this.isNew) {
+    // Set default joining_date for new employees
+    this.joining_date = new Date();
+    this.doj = new Date();
+  }
+  
+  next();
 });
 
 // Pre-save middleware to hash password
@@ -557,3 +635,12 @@ userSchema.statics.findActive = function() {
 
 module.exports = mongoose.model('User', userSchema);
 
+
+// Performance indexes for common queries
+userSchema.index({ tenantId: 1, email: 1 }); // Fast email lookup
+userSchema.index({ tenantId: 1, employeeId: 1, status: 1 }); // Active employees by tenant
+userSchema.index({ tenantId: 1, employee_id: 1, status: 1 }); // OPTIMIZED: Fast employee_id lookup
+userSchema.index({ tenantId: 1, department: 1, status: 1 }); // Department employees
+userSchema.index({ tenantId: 1, store: 1, status: 1 }); // Store employees
+userSchema.index({ tenantId: 1, isDeleted: 1, status: 1 }); // OPTIMIZED: Common query pattern
+userSchema.index({ createdAt: -1 }); // Recent employees

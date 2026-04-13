@@ -1,0 +1,144 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-lenstrack-admin
+  namespace: etelios-prod
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: create-admin
+        image: node:18-alpine
+        command:
+        - sh
+        - -c
+        - |
+          apk add --no-cache curl
+          cat > /tmp/create-admin.js << 'EOFSCRIPT'
+          const mongoose = require('mongoose');
+          const bcrypt = require('bcryptjs');
+          
+          const MONGODB_URI = process.env.MONGODB_URI;
+          
+          const ADMIN = {
+            tenantId: 'lenstrack',
+            employee_id: 'ADMIN-LENSTRACK-001',
+            name: 'Lenstrack Admin',
+            email: 'admin@lenstrack.com',
+            phone: '+91-9876543210',
+            password: 'AdminPass123!',
+            role: 'admin',
+            department: 'HR',
+            band_level: 'A',
+            hierarchy_level: 'NATIONAL',
+            designation: 'System Administrator',
+            joining_date: new Date(),
+            status: 'active',
+            is_active: true,
+            mustChangePassword: false,
+            passwordTemporary: false
+          };
+          
+          const userSchema = new mongoose.Schema({
+            tenantId: String,
+            employee_id: String,
+            name: String,
+            email: String,
+            phone: String,
+            password: String,
+            role: String,
+            department: String,
+            band_level: String,
+            hierarchy_level: String,
+            designation: String,
+            joining_date: Date,
+            status: String,
+            is_active: Boolean,
+            mustChangePassword: Boolean,
+            passwordTemporary: Boolean,
+            createdAt: Date,
+            updatedAt: Date
+          }, { collection: 'users', strict: false });
+          
+          const User = mongoose.model('User', userSchema);
+          
+          async function createAdmin() {
+            try {
+              console.log('🚀 Creating Lenstrack Admin User...');
+              console.log('Connecting to MongoDB...');
+              
+              await mongoose.connect(MONGODB_URI, {
+                serverSelectionTimeoutMS: 30000
+              });
+              
+              console.log('✅ Connected to MongoDB');
+              
+              const existingUser = await User.findOne({
+                tenantId: ADMIN.tenantId,
+                email: ADMIN.email.toLowerCase()
+              });
+              
+              if (existingUser) {
+                console.log('⚠️  Admin user already exists!');
+                console.log(`Email: ${existingUser.email}`);
+                console.log(`Employee ID: ${existingUser.employee_id}`);
+                
+                // Update password
+                console.log('🔐 Updating password...');
+                const hashedPassword = await bcrypt.hash(ADMIN.password, 10);
+                existingUser.password = hashedPassword;
+                existingUser.mustChangePassword = false;
+                existingUser.passwordTemporary = false;
+                existingUser.updatedAt = new Date();
+                await existingUser.save();
+                console.log('✅ Password updated!');
+              } else {
+                console.log('👤 Creating admin user...');
+                const hashedPassword = await bcrypt.hash(ADMIN.password, 10);
+                
+                const user = new User({
+                  ...ADMIN,
+                  email: ADMIN.email.toLowerCase(),
+                  password: hashedPassword
+                });
+                
+                await user.save();
+                console.log('✅ Admin user created successfully!');
+              }
+              
+              console.log('\n🔐 Login Credentials:');
+              console.log(`Email: ${ADMIN.email}`);
+              console.log(`Password: ${ADMIN.password}`);
+              console.log(`Tenant: ${ADMIN.tenantId}`);
+              
+              await mongoose.connection.close();
+              console.log('\n✅ Done!');
+              process.exit(0);
+            } catch (error) {
+              console.error('❌ Error:', error.message);
+              process.exit(1);
+            }
+          }
+          
+          createAdmin();
+          EOFSCRIPT
+          
+          cd /tmp && npm init -y && npm install mongoose bcryptjs
+          NODE_PATH=/tmp/node_modules node /tmp/create-admin.js
+        env:
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: MONGODB_URI
+        volumeMounts:
+        - name: docdb-ca-cert
+          mountPath: /etc/ssl/certs/ca-cert.pem
+          subPath: ca-cert.pem
+          readOnly: true
+      volumes:
+      - name: docdb-ca-cert
+        secret:
+          secretName: docdb-ca-cert

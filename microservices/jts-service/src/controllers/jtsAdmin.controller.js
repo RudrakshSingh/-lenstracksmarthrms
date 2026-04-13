@@ -151,7 +151,15 @@ class JtsAdminController {
 
   async bindEmployeeFromJwt(req, res) {
     try {
-      const row = await jtsAdminService.bindEmployeeFromJwt(req.user.tenant_id, req.user);
+      const tenantHeader =
+        req.headers['x-tenant-id'] ||
+        req.headers['X-Tenant-Id'] ||
+        req.user.tenant_key ||
+        req.user.tenant_id;
+      const row = await jtsAdminService.bindEmployeeFromJwt(req.user.tenant_id, req.user, {
+        authorization: req.headers.authorization,
+        tenantHeader
+      });
       res.json({
         success: true,
         data: row,
@@ -274,6 +282,16 @@ class JtsAdminController {
     try {
       const rows = await jtsAdminService.listSlaRules(req.user.tenant_id);
       res.json({ success: true, data: rows });
+    } catch (error) {
+      const mapped = toErrorPayload(error, 'JTS_ADMIN_ERROR');
+      res.status(mapped.status).json(mapped.body);
+    }
+  }
+
+  async getSlaRule(req, res) {
+    try {
+      const row = await jtsAdminService.getSlaRule(req.user.tenant_id, req.params.id);
+      res.json({ success: true, data: row });
     } catch (error) {
       const mapped = toErrorPayload(error, 'JTS_ADMIN_ERROR');
       res.status(mapped.status).json(mapped.body);

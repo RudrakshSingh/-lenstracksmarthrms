@@ -44,6 +44,12 @@ const requireRole = (roles = [], permissions = []) => {
 
       // Check permissions
       if (permissions.length > 0) {
+        const userRole = req.user.role?.toUpperCase();
+        // SuperAdmin and Admin bypass all permission checks
+        if (userRole === 'SUPERADMIN' || userRole === 'ADMIN') {
+          return next();
+        }
+        
         const userPermissions = req.user.permissions || [];
         const hasPermission = permissions.some(p => userPermissions.includes(p));
         

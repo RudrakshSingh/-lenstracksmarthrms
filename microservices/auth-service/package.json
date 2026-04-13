@@ -10,6 +10,7 @@
     "lint": "eslint src --ext .js"
   },
   "dependencies": {
+    "@etelios/shared": "file:../shared",
     "@azure/identity": "^4.0.1",
     "@azure/keyvault-secrets": "^4.7.2",
     "@azure/storage-blob": "^12.28.0",

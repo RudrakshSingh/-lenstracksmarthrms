@@ -12,7 +12,18 @@ const TaskTypeSchema = new Schema(
       enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
       required: true
     },
-    description: String
+    description: String,
+    /** Optional default checklist rows when creating tasks of this type (blueprint-style template). */
+    checklist_template: [
+      {
+        key: { type: String, required: true },
+        label: { type: String, required: true },
+        order: { type: Number, default: 0 },
+        required: { type: Boolean, default: false }
+      }
+    ],
+    /** Role keys allowed to create / claim tasks of this type (empty = no extra restriction). */
+    allowed_role_keys: [{ type: String }]
   },
   { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } }
 );

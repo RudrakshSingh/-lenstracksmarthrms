@@ -1,0 +1,94 @@
+# Manual JTS production deploy: build → ECR → optional kubectl apply + rollout.
+#
+# Required repo secrets (for ECR push):
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#
+# Optional — only if you enable "apply_kubernetes" and want CI to touch the cluster:
+#   KUBE_CONFIG_B64  — base64-encoded kubeconfig for prod (rotate if leaked)
+#
+# Override account/region/repo via workflow env if your AWS setup differs.
+
+name: JTS prod — ECR + optional kubectl
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply_kubernetes:
+        description: 'Run kubectl apply + rollout (needs KUBE_CONFIG_B64 secret)'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ACCOUNT_ID: '383234048604'
+  ECR_REPOSITORY: etelios-jts-service
+  K8S_NAMESPACE: etelios-prod
+
+jobs:
+  jts-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push JTS image
+        env:
+          REGISTRY: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          DOCKER_BUILDKIT=1 docker build --platform linux/amd64 \
+            -f microservices/jts-service/Dockerfile \
+            -t "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            -t "$REGISTRY/$ECR_REPOSITORY:latest" \
+            .
+          docker push "$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          echo "Pushed $REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Install kubectl
+        if: inputs.apply_kubernetes == 'true'
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Configure kubeconfig
+        if: inputs.apply_kubernetes == 'true'
+        env:
+          KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KUBE_CONFIG_B64:-}" ]; then
+            echo "KUBE_CONFIG_B64 secret is empty; add it or run apply locally."
+            exit 1
+          fi
+          mkdir -p "$HOME/.kube"
+          echo "$KUBE_CONFIG_B64" | base64 -d > "$HOME/.kube/config"
+
+      - name: Apply JTS + ALB ingress and rollout
+        if: inputs.apply_kubernetes == 'true'
+        run: |
+          set -euo pipefail
+          kubectl apply -f k8s/etelios-prod/jts-service-deployment.yaml
+          kubectl apply -f k8s/ingress-alb-fixed.yaml
+          kubectl -n "$K8S_NAMESPACE" rollout restart deployment/jts-service
+          kubectl -n "$K8S_NAMESPACE" rollout status deployment/jts-service --timeout=300s
+          kubectl -n "$K8S_NAMESPACE" get pods -l app=jts-service -o wide

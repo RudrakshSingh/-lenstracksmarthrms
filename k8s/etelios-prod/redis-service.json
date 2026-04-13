@@ -1,0 +1,33 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Service\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"redis\"},\"name\":\"redis\",\"namespace\":\"etelios-prod\"},\"spec\":{\"ports\":[{\"port\":6379,\"targetPort\":6379}],\"selector\":{\"app\":\"redis\"},\"type\":\"ClusterIP\"}}\n"
+    },
+    "labels": {
+      "app": "redis"
+    },
+    "name": "redis",
+    "namespace": "etelios-prod"
+  },
+  "spec": {
+    "internalTrafficPolicy": "Cluster",
+    "ipFamilies": [
+      "IPv4"
+    ],
+    "ipFamilyPolicy": "SingleStack",
+    "ports": [
+      {
+        "port": 6379,
+        "protocol": "TCP",
+        "targetPort": 6379
+      }
+    ],
+    "selector": {
+      "app": "redis"
+    },
+    "sessionAffinity": "None",
+    "type": "ClusterIP"
+  }
+}

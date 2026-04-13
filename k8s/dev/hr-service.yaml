@@ -44,6 +44,9 @@ spec:
           value: "hr-service"
         - name: K8S_ENV
           value: "true"
+        # In-cluster JTS (same namespace as jts-service)
+        - name: JTS_SERVICE_URL
+          value: "http://jts-service:3018"
         - name: MONGO_URI
           valueFrom:
             secretKeyRef:

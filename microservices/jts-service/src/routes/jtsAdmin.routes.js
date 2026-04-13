@@ -110,11 +110,8 @@ router.post(
   }),
   (req, res) => ctrl.createEmployee(req, res)
 );
-router.post(
-  '/employees/bind-from-jwt',
-  requireRole(readRoles),
-  (req, res) => ctrl.bindEmployeeFromJwt(req, res)
-);
+/** Any authenticated user may bind their own JWT to catalog (self-service). Role array empty = no role gate. */
+router.post('/employees/bind-from-jwt', requireRole([]), (req, res) => ctrl.bindEmployeeFromJwt(req, res));
 router.patch(
   '/employees/:id/align-auth-code',
   requireRole(writeRoles),
@@ -204,6 +201,12 @@ router.delete(
 
 /* SLA */
 router.get('/sla-rules', requireRole(readRoles), (req, res) => ctrl.listSlaRules(req, res));
+router.get(
+  '/sla-rules/:id',
+  requireRole(readRoles),
+  validate({ params: Joi.object({ id: objectIdSchema.required() }) }),
+  (req, res) => ctrl.getSlaRule(req, res)
+);
 router.put(
   '/sla-rules',
   requireRole(writeRoles),

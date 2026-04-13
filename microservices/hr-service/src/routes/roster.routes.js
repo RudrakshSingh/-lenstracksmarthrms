@@ -136,6 +136,13 @@ router.post(
  * @note    Frontend sends PUT /api/roster with id in body, but backend expects :id in path
  */
 router.put(
+  '/',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.updateRoster
+);
+
+router.put(
   '/:id',
   authenticate,
   requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
@@ -148,6 +155,13 @@ router.put(
  * @access  Private (HR, Admin, Manager)
  * @note    Frontend sends DELETE /api/roster?id=..., but backend expects :id in path
  */
+router.delete(
+  '/',
+  authenticate,
+  requireRole(['HR', 'Admin', 'SuperAdmin', 'Manager']),
+  rosterController.deleteRoster
+);
+
 router.delete(
   '/:id',
   authenticate,

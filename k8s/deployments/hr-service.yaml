@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hr-service
-  namespace: etelios-backend-prod
+  namespace: etelios-prod
   labels:
     app: hr-service
 spec:
@@ -19,10 +19,10 @@ spec:
         kubectl.kubernetes.io/restartedAt: "2026-01-12T00:00:00Z"
     spec:
       imagePullSecrets:
-      - name: acr-secret
+      - name: ecr-registry-secret
       containers:
       - name: hr-service
-        image: eteliosacr-hvawabdbgge7e0fu.azurecr.io/hr-service:__IMAGE_TAG__
+        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-hr-service:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 3002
@@ -38,26 +38,34 @@ spec:
         - name: K8S_ENV
           value: "true"
         - name: API_GATEWAY_HOST
-          value: "eteliosacr-hvawabdbgge7e0fu.azurecr.io"
-        - name: MONGO_URI
-          valueFrom:
-            secretKeyRef:
-              name: etelios-secrets
-              key: HR_SERVICE_DB_URI
-        - name: MONGODB_URI
-          valueFrom:
-            secretKeyRef:
-              name: etelios-secrets
-              key: HR_SERVICE_DB_URI
+          value: "api-gateway"
+        - name: JTS_SERVICE_URL
+          value: "http://jts-service:3018"
         - name: DB_NAME
-          value: "hr-database"
+          value: "etelios"
         - name: RESTART_TIME
           value: "1736620800"
+        - name: DOCDB_TLS_CA_FILE
+          valueFrom:
+            secretKeyRef:
+              name: docdb-credentials
+              key: DOCDB_TLS_CA_FILE
+        # Overrides etelios-config JWT if present — must match auth-service (Lenstrack / all tenants)
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_SECRET
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_REFRESH_SECRET
         envFrom:
         - configMapRef:
-            name: etelios-config-prod
+            name: etelios-config
         - secretRef:
-            name: etelios-secrets
+            name: docdb-credentials
         resources:
           requests:
             memory: "256Mi"
@@ -91,12 +99,21 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - name: docdb-ca-cert
+          mountPath: /etc/ssl/certs/ca-cert.pem
+          subPath: ca-cert.pem
+          readOnly: true
+      volumes:
+      - name: docdb-ca-cert
+        secret:
+          secretName: docdb-ca-cert
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: hr-service
-  namespace: etelios-backend-prod
+  namespace: etelios-prod
   labels:
     app: hr-service
 spec:
@@ -108,4 +125,8 @@ spec:
     targetPort: 3002
     protocol: TCP
     name: http
+  - port: 80
+    targetPort: 3002
+    protocol: TCP
+    name: ingress
 # Pipeline trigger - 2026-01-08-20-53-41

@@ -3,22 +3,48 @@ const Joi = require("joi");
 const authController = require("../controllers/authController");
 const { authenticate } = require("../middleware/auth.middleware");
 const { validateRequest } = require("../middleware/validateRequest.wrapper");
-const jwt = require("jsonwebtoken");
+const { verifyAccessToken } = require("../config/jwt");
+const logger = require("../config/logger");
 
 const router = express.Router();
 
 // Optional authentication middleware - sets req.user if token is valid, but doesn't block if missing
+// FIXED: Now uses verifyAccessToken() which uses correct JWT_SECRET and validates issuer/audience
 const optionalAuthenticate = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
+      // Use verifyAccessToken() which:
+      // 1. Uses correct JWT_SECRET from jwt.js config
+      // 2. Validates issuer ('hrms-backend') and audience ('hrms-frontend')
+      // 3. Throws proper errors if token is invalid/expired
+      const decoded = verifyAccessToken(token);
+      
       // Get user from database to set req.user
       const User = require("../models/User.model");
-      req.user = await User.findById(decoded.userId).select('-password');
+      const user = await User.findById(decoded.userId).select('-password');
+      
+      if (user) {
+        // Set req.user with _id and id for register controller compatibility
+        req.user = {
+          _id: user._id,
+          id: user._id,
+          userId: user._id,
+          ...user.toObject ? user.toObject() : user
+        };
+      } else {
+        logger.warn('Optional auth: User not found in database', { userId: decoded.userId });
+      }
     }
   } catch (error) {
-    // Token invalid or expired - continue without authentication
+    // Token invalid or expired - continue without authentication (optional auth)
+    // Log in debug mode only to avoid noise
+    if (process.env.DEBUG === 'true' || process.env.LOG_OPTIONAL_AUTH === 'true') {
+      logger.debug('Optional authentication failed (expected for unauthenticated requests)', {
+        error: error.message,
+        errorType: error.name
+      });
+    }
   }
   next();
 };
@@ -28,6 +54,7 @@ const loginSchema = {
   body: Joi.object({
     emailOrEmployeeId: Joi.string().trim(),
     email: Joi.string().email().trim().lowercase(),
+    tenantId: Joi.string().trim().min(1).max(100).optional(),
     password: Joi.string().required().min(6).max(128)
       .messages({
         'any.required': 'Password is required',
@@ -115,6 +142,33 @@ const refreshTokenSchema = {
   })
 };
 
+const updateProfileSchema = {
+  body: Joi.object({
+    name: Joi.string().trim().max(100).optional(),
+    phone: Joi.string()
+      .trim()
+      .pattern(/^\+?[\d\s-()]+$/)
+      .optional()
+      .allow(''),
+    address: Joi.object({
+      street: Joi.string().trim().max(200).allow(''),
+      city: Joi.string().trim().max(100).allow(''),
+      state: Joi.string().trim().max(100).allow(''),
+      country: Joi.string().trim().max(100).allow(''),
+      pincode: Joi.string().trim().max(10).allow('')
+    }).optional(),
+    emergency_contact: Joi.object({
+      name: Joi.string().trim().max(100).allow(''),
+      relationship: Joi.string().trim().max(50).allow(''),
+      phone: Joi.string()
+        .trim()
+        .pattern(/^\+?[\d\s-()]+$/)
+        .allow('')
+    }).optional(),
+    date_of_birth: Joi.alternatives().try(Joi.date(), Joi.string().allow('')).optional()
+  })
+};
+
 // Routes
 router.post("/register",
   validateRequest(registerSchema),
@@ -125,6 +179,15 @@ router.post("/register",
 router.post("/login",
   validateRequest(loginSchema),
   authController.login
+);
+
+// Admin reset password (requires authentication and admin role)
+const { requireRole } = require('../middleware/rbac.middleware');
+
+router.post("/admin/reset-password",
+  authenticate,
+  requireRole(['admin', 'superadmin']),
+  authController.adminResetPassword
 );
 
 router.post("/refresh-token",
@@ -147,8 +210,40 @@ router.get("/profile",
   authController.getProfile
 );
 
+router.put("/profile",
+  authenticate,
+  validateRequest(updateProfileSchema),
+  authController.updateProfile
+);
+
+// OPTIMIZED: Add simple caching for /me endpoint (user profile doesn't change frequently)
+const cache = new Map();
+const CACHE_TTL = 10000; // 10 seconds
+
 router.get("/me",
   authenticate,
+  (req, res, next) => {
+    const cacheKey = `me:${req.user._id || req.user.id}:${req.tenantId || 'default'}`;
+    const cached = cache.get(cacheKey);
+    
+    if (cached && cached.expiresAt > Date.now()) {
+      return res.status(cached.status).json(cached.data);
+    }
+    
+    const originalJson = res.json.bind(res);
+    res.json = function(data) {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        cache.set(cacheKey, {
+          data,
+          status: res.statusCode,
+          expiresAt: Date.now() + CACHE_TTL
+        });
+      }
+      return originalJson(data);
+    };
+    
+    next();
+  },
   authController.getProfile
 );
 

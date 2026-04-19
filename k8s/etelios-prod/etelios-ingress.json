@@ -221,6 +221,18 @@
                   }
                 }
               },
+              "path": "/api/payroll-workflow",
+              "pathType": "Prefix"
+            },
+            {
+              "backend": {
+                "service": {
+                  "name": "payroll-service",
+                  "port": {
+                    "number": 80
+                  }
+                }
+              },
               "path": "/api/payroll",
               "pathType": "Prefix"
             },

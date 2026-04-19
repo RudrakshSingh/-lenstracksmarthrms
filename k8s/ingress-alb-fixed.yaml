@@ -141,6 +141,14 @@ spec:
             name: hr-service
             port:
               number: 3002
+      # Payroll workflow API (gates, runs, summary/:m/:y) — MUST be before /api/payroll prefix match
+      - path: /api/payroll-workflow
+        pathType: Prefix
+        backend:
+          service:
+            name: payroll-service
+            port:
+              number: 80
       # Payroll Service - Main payroll routes
       - path: /api/payroll
         pathType: Prefix

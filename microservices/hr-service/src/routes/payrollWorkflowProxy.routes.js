@@ -11,7 +11,8 @@ const { postStatutoryLookup } = require('../controllers/payrollStatutoryControll
 const router = express.Router();
 
 function payrollBase() {
-  return (process.env.PAYROLL_SERVICE_URL || 'http://payroll-service:3004').replace(/\/$/, '');
+  // K8s Service usually exposes payroll on port 80 → container 3004; use PAYROLL_SERVICE_URL in prod.
+  return (process.env.PAYROLL_SERVICE_URL || 'http://payroll-service').replace(/\/$/, '');
 }
 
 function fwdHeaders(req) {

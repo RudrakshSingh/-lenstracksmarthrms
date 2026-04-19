@@ -83,6 +83,9 @@ spec:
         # Server-to-server JTS (unified dashboard task widgets); same namespace ClusterIP
         - name: JTS_SERVICE_URL
           value: "http://jts-service:3018"
+        # Payroll workflow proxy + statutory (ClusterIP port 80 → pod 3004)
+        - name: PAYROLL_SERVICE_URL
+          value: "http://payroll-service:80"
         resources:
           requests:
             memory: "256Mi"

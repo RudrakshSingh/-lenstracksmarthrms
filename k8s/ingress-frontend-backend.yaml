@@ -251,6 +251,15 @@ spec:
             port:
               number: 3002
 
+      # Payroll workflow (workflow controller routes)
+      - path: /api/payroll-workflow
+        pathType: Prefix
+        backend:
+          service:
+            name: payroll-service
+            port:
+              number: 3004
+
       # Payroll Service
       - path: /api/payroll
         pathType: Prefix

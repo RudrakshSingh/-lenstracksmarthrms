@@ -6,6 +6,7 @@
 
 const { generateAccessToken, generateRefreshToken } = require('../config/jwt');
 const logger = require('../config/logger');
+const { getDefaultLandingPathForRole } = require('../utils/defaultLandingPath');
 
 /**
  * Fast mock login - returns tokens without database operations
@@ -72,7 +73,8 @@ const fastMockLogin = async (req, res, next) => {
       data: {
         user: userProfile,
         accessToken,
-        refreshToken
+        refreshToken,
+        defaultLandingPath: getDefaultLandingPathForRole(role)
       },
       mock: true,
       fastMode: true,

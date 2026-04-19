@@ -2,6 +2,7 @@ const authService = require('../services/auth.service');
 const logger = require('../config/logger');
 const realtimeClient = require('../utils/realtime.client');
 const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
+const { getDefaultLandingPathForRole } = require('../utils/defaultLandingPath');
 
 /**
  * Register a new user
@@ -794,13 +795,15 @@ const mockLogin = async (req, res, next) => {
       logger.info('Mock login successful', { userId: user._id, role: user.role || role, email: user.email || mockEmail });
     }
 
+    const resolvedRole = user.role || role;
     res.status(200).json({
       success: true,
       message: 'Mock login successful',
       data: {
         user: userProfile,
         accessToken,
-        refreshToken
+        refreshToken,
+        defaultLandingPath: getDefaultLandingPathForRole(resolvedRole)
       },
       mock: true
     });

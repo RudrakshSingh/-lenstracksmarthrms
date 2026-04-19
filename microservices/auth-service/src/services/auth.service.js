@@ -8,6 +8,7 @@ const { logAuthEvent } = require('../utils/audit');
 const logger = require('../config/logger');
 const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
 const { jwtPermissionsPayloadEnabled } = require('../config/jwtPermissionsClaim');
+const { getDefaultLandingPathForRole } = require('../utils/defaultLandingPath');
 
 class AuthService {
   constructor() {
@@ -777,10 +778,13 @@ class AuthService {
 
       // CRITICAL: Return 200 (not 401) even when password is temporary
       // Frontend will check mustChangePassword flag and redirect to change-password page
+      const defaultLandingPath = getDefaultLandingPathForRole(roleForToken);
       return {
         user: userProfile,
         accessToken,
         refreshToken,
+        /** Path only (e.g. /tenant-admin vs /admin/super-admin). Use after password change if mustChangePassword. */
+        defaultLandingPath,
         // Tenant creation flow support: frontend can use this to show "change password" screen
         // If true, frontend should redirect to /auth/change-password?reason=first_login
         mustChangePassword: mustChangePassword,

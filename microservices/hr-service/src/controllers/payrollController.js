@@ -83,8 +83,14 @@ const postPayrollRun = async (req, res, next) => {
     const { id } = req.params;
     const { jv_number, jv_date } = req.body;
     const userId = req.user.id;
-    
-    const run = await payrollRunService.postPayrollRun(id, userId, jv_number, jv_date);
+    const integrationContext = {
+      authorization: req.headers.authorization,
+      tenantId: req.headers['x-tenant-id'] || req.user?.tenantId,
+      companyId: req.headers['x-company-id'] || req.user?.companyId,
+      requestId: req.headers['x-request-id']
+    };
+
+    const run = await payrollRunService.postPayrollRun(id, userId, jv_number, jv_date, integrationContext);
     
     res.status(200).json({
       success: true,

@@ -40,6 +40,17 @@ const leavePolicySchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Store'
   }],
+  // Optional scoping for multi-tenant org structures (string codes match User.department etc.)
+  department_codes: [{
+    type: String,
+    trim: true,
+    uppercase: true
+  }],
+  location_codes: [{
+    type: String,
+    trim: true,
+    uppercase: true
+  }],
   applicable_from: {
     type: Date,
     required: true
@@ -117,6 +128,20 @@ const leavePolicySchema = new mongoose.Schema({
       min: 1,
       max: 3
     },
+    half_day_allowed: {
+      type: Boolean,
+      default: true
+    },
+    min_notice_days: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    max_continuous_days: {
+      type: Number,
+      default: null,
+      min: 0
+    },
     blackout_dates: [{
       start_date: Date,
       end_date: Date,
@@ -131,6 +156,46 @@ const leavePolicySchema = new mongoose.Schema({
       default: {}
     }
   }],
+
+  // Tenant-wide leave engine configuration (admin "form")
+  tenant_criteria: {
+    working_day_calculation: {
+      type: String,
+      enum: ['CALENDAR_DAYS', 'WORKING_DAYS_EX_WEEKENDS_AND_HOLIDAYS'],
+      default: 'CALENDAR_DAYS'
+    },
+    weekend_definition: {
+      type: String,
+      enum: ['SAT_SUN', 'SUN'],
+      default: 'SAT_SUN'
+    },
+    sandwich_rule: {
+      type: Boolean,
+      default: false
+    },
+    allow_leave_on_weekly_off: {
+      type: Boolean,
+      default: true
+    },
+    allow_leave_on_public_holiday: {
+      type: Boolean,
+      default: true
+    },
+    probation_days_from_doj: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    probation_block_all_leave: {
+      type: Boolean,
+      default: false
+    },
+    probation_allowed_leave_types: [{
+      type: String,
+      trim: true,
+      uppercase: true
+    }]
+  },
   
   // Accrual Rules
   accrual_rules: {
@@ -247,6 +312,7 @@ const leavePolicySchema = new mongoose.Schema({
 leavePolicySchema.index({ policy_id: 1, version: 1 });
 leavePolicySchema.index({ role_group: 1, is_active: 1 });
 leavePolicySchema.index({ applicable_from: 1, applicable_to: 1 });
+leavePolicySchema.index({ tenantId: 1, is_active: 1, applicable_from: -1 });
 
 // Pre-save middleware
 leavePolicySchema.pre('save', function(next) {

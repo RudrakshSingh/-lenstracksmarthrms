@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const compression = require('compression');
 const responseTime = require('response-time');
 const mongoose = require('mongoose');
@@ -53,7 +55,7 @@ const connectDB = async () => {
       maxPoolSize: 10,
       minPoolSize: 2,
       maxIdleTimeMS: 30000,
-      retryWrites: true,
+      retryWrites: false,
       retryReads: true,
     });
     if (!isProduction) logger.info('financial-service: MongoDB connected successfully');
@@ -70,28 +72,40 @@ const loadRoutes = () => {
     app.use('/api/financial', apiRateLimit, financialRoutes);
     if (!isProduction) logger.info('financial.routes.js loaded');
   } catch (error) {
-    logger.error('financial.routes.js failed:', { 
-      error: error.message, 
+    logger.error('financial.routes.js failed:', {
+      error: error.message,
       stack: error.stack,
-      name: error.name 
+      name: error.name
     });
     console.error('❌ financial.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
+    throw error;
   }
-  try {
-    const reportsRoutes = require('./routes/reports.routes.js');
-    app.use('/api/reports', apiRateLimit, reportsRoutes);
-    if (!isProduction) logger.info('reports.routes.js loaded');
-  } catch (error) {
-    logger.error('reports.routes.js failed:', { 
-      error: error.message, 
-      stack: error.stack,
-      name: error.name 
-    });
-    console.error('❌ reports.routes.js failed:', error.message);
-    if (error.stack) console.error('Stack:', error.stack);
+  const reportsDependencies = [
+    path.join(__dirname, './models/Attendance.model.js'),
+    path.join(__dirname, './models/User.model.js'),
+    path.join(__dirname, './models/Store.model.js'),
+    path.join(__dirname, './models/Asset.model.js')
+  ];
+  const hasReportsDeps = reportsDependencies.every((depPath) => fs.existsSync(depPath));
+
+  if (hasReportsDeps) {
+    try {
+      const reportsRoutes = require('./routes/reports.routes.js');
+      app.use('/api/reports', apiRateLimit, reportsRoutes);
+      if (!isProduction) logger.info('reports.routes.js loaded');
+    } catch (error) {
+      logger.warn('reports.routes.js skipped:', {
+        error: error.message
+      });
+    }
+  } else {
+    logger.warn('reports.routes.js skipped: missing optional report dependencies');
   }
 };
+
+// Register dynamic routes before fallback/static handlers.
+loadRoutes();
 
 // Health check
 app.get('/health', (req, res) => {
@@ -106,6 +120,7 @@ app.get('/health', (req, res) => {
     models: 9,
     services: 3
   });
+});
 
 // Business API Routes
 app.get('/api/financial/status', (req, res) => {
@@ -125,62 +140,6 @@ app.get('/api/financial/health', (req, res) => {
     businessLogic: 'active'
   });
 });
-
-
-app.get('/api/financial/ledger', (req, res) => {
-  res.json({
-    service: 'financial-service',
-    endpoint: '/api/financial/ledger',
-    method: 'GET',
-    status: 'success',
-    message: 'Get ledger entries',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/api/financial/accounts', (req, res) => {
-  res.json({
-    service: 'financial-service',
-    endpoint: '/api/financial/accounts',
-    method: 'GET',
-    status: 'success',
-    message: 'Get chart of accounts',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/api/financial/pl', (req, res) => {
-  res.json({
-    service: 'financial-service',
-    endpoint: '/api/financial/pl',
-    method: 'GET',
-    status: 'success',
-    message: 'Get P&L statement',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/api/financial/gst', (req, res) => {
-  res.json({
-    service: 'financial-service',
-    endpoint: '/api/financial/gst',
-    method: 'GET',
-    status: 'success',
-    message: 'Get GST data',
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/api/financial/reports', (req, res) => {
-  res.json({
-    service: 'financial-service',
-    endpoint: '/api/financial/reports',
-    method: 'GET',
-    status: 'success',
-    message: 'Get financial reports',
-    timestamp: new Date().toISOString()
-  });
-});});
 
 
 // Enhanced 404 handler with route information
@@ -231,7 +190,6 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     await connectDB();
-    loadRoutes();
     
     const PORT = process.env.PORT || 3009;
     

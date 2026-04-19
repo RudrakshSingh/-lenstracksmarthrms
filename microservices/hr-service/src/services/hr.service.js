@@ -419,6 +419,17 @@ const createEmployee = async (employeeData, createdBy, tenantId = null) => {
       
       // Use saved employee for rest of function
       employee = savedEmployee;
+
+      const mgrAssign = rest.reporting_manager_id || rest.reportingManager;
+      if (mgrAssign) {
+        try {
+          const { promotePeopleManagerById } = require('../utils/peopleManagerRoleSync');
+          const sync = await promotePeopleManagerById(mgrAssign);
+          logger.info('People-manager role sync (createEmployee)', { managerId: mgrAssign, sync });
+        } catch (syncErr) {
+          logger.warn('peopleManagerRoleSync failed', { error: syncErr.message, managerId: mgrAssign });
+        }
+      }
     } catch (saveError) {
       logger.error('Error saving employee to database', {
         error: saveError.message,

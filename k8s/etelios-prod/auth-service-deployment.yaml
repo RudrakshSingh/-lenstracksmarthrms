@@ -21,7 +21,7 @@ spec:
         - name: ecr-registry-secret
       containers:
       - name: auth-service
-        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-auth-service:auth-live-202604101306
+        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-auth-service:loophole-fix-20260416
         ports:
         - containerPort: 3001
           name: http
@@ -66,6 +66,24 @@ spec:
         # Same Redis as JTS/attendance — effective permission cache (etelios:perm:v1:eff:*)
         - name: REDIS_URL
           value: "redis://redis:6379"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_DB
+          value: "0"
+        - name: REDIS_DISABLED
+          value: "0"
+        # Keep access token cookie-safe by default; permissions come from login body / permission APIs.
+        - name: JWT_SKIP_PERMISSIONS_CLAIM
+          value: "1"
+        # Permission users endpoint controls
+        - name: PERMISSION_USERS_LIMIT_MAX
+          value: "100"
+        - name: PERMISSION_USERS_TIMEOUT_MS
+          value: "8000"
+        - name: PERMISSION_USERS_PROFILE_LOGS
+          value: "1"
         # Rate Limiting Configuration
         - name: RATE_LIMIT_MAX_REQUESTS
           value: "10000"

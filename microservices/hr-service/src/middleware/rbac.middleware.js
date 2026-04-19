@@ -129,8 +129,17 @@ const requirePermission = (permission) => {
       const userRole = (user.role || '').toLowerCase();
       const userPermissions = user.permissions || [];
       
-      // SuperAdmin and Admin bypass all permission checks
-      if (userRole === 'superadmin' || userRole === 'admin') {
+      // SuperAdmin, Admin, HR bypass permission checks (HR JWT often carries catalog codes, not hr.leave.* tokens)
+      if (userRole === 'superadmin' || userRole === 'admin' || userRole === 'hr') {
+        return next();
+      }
+
+      // Managers: leave routes use hr.leave.* strings; auth catalog/JWT may not include them — grant by role for leave module only
+      if (
+        userRole === 'manager' &&
+        typeof permission === 'string' &&
+        permission.startsWith('hr.leave.')
+      ) {
         return next();
       }
       

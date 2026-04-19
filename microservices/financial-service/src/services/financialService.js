@@ -2,6 +2,8 @@ const ProfitLoss = require('../models/ProfitLoss.model');
 const Expense = require('../models/Expense.model');
 const Ledger = require('../models/Ledger.model');
 const TDS = require('../models/TDS.model');
+const FinanceRecord = require('../models/FinanceRecord.model');
+const FinanceLog = require('../models/FinanceLog.model');
 const logger = require('../config/logger');
 
 class FinancialService {
@@ -89,7 +91,17 @@ class FinancialService {
     try {
       const expense = new Expense({
         ...expenseData,
-        requested_by: requestedBy
+        requested_by: requestedBy,
+        source_module: expenseData.source_module || 'MANUAL',
+        logs: [
+          {
+            event: 'expense_created',
+            actor_id: requestedBy,
+            details: {
+              source_module: expenseData.source_module || 'MANUAL'
+            }
+          }
+        ]
       });
       
       await expense.save();
@@ -110,7 +122,9 @@ class FinancialService {
    */
   async createExpenseLedgerEntry(expense) {
     try {
+      const baseTxnId = `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const ledgerEntry = new Ledger({
+        transaction_id: `${baseTxnId}-DR`,
         transaction_date: expense.expense_date,
         transaction_type: 'EXPENSE',
         account_head: 'EXPENSES',
@@ -118,7 +132,7 @@ class FinancialService {
         store_id: expense.store_id,
         description: expense.description,
         reference_number: expense.expense_number,
-        reference_type: 'EXPENSE',
+        reference_type: 'ADJUSTMENT',
         debit_amount: expense.total_amount,
         credit_amount: 0,
         vendor_id: expense.vendor_id,
@@ -133,6 +147,7 @@ class FinancialService {
       
       // Create corresponding payment entry
       const paymentEntry = new Ledger({
+        transaction_id: `${baseTxnId}-CR`,
         transaction_date: expense.payment_date || expense.expense_date,
         transaction_type: 'PAYMENT',
         account_head: expense.payment_method === 'CASH' ? 'CASH' : 'BANK',
@@ -182,6 +197,14 @@ class FinancialService {
       expense.status = 'APPROVED';
       expense.approved_by = approvedBy;
       expense.approved_at = new Date();
+      expense.logs = expense.logs || [];
+      expense.logs.push({
+        event: 'expense_approved',
+        actor_id: approvedBy,
+        details: {
+          comments: comments || null
+        }
+      });
       if (comments) {
         expense.notes = (expense.notes || '') + `\nApproval: ${comments}`;
       }
@@ -219,6 +242,12 @@ class FinancialService {
       expense.approved_by = rejectedBy;
       expense.approved_at = new Date();
       expense.rejection_reason = reason;
+      expense.logs = expense.logs || [];
+      expense.logs.push({
+        event: 'expense_rejected',
+        actor_id: rejectedBy,
+        details: { reason }
+      });
 
       await expense.save();
       
@@ -231,6 +260,105 @@ class FinancialService {
   }
 
   /**
+   * Reflect payroll month as finance expense (idempotent).
+   */
+  async createSalaryExpenseFromPayroll(payload, requestedBy) {
+    const {
+      month,
+      year,
+      store_id,
+      payment_method = 'BANK_TRANSFER',
+      employee_count = 0,
+      total_gross_salary = 0,
+      total_net_salary = 0
+    } = payload;
+
+    if (!month || !year || !store_id) {
+      const error = new Error('month, year and store_id are required');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const sourceRefId = `PAYROLL-${year}-${String(month).padStart(2, '0')}`;
+    const existing = await Expense.findOne({
+      source_module: 'PAYROLL',
+      source_ref_id: sourceRefId
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const expense = new Expense({
+      expense_number: `EXP-PAY-${year}${String(month).padStart(2, '0')}-${Date.now().toString().slice(-6)}`,
+      expense_date: new Date(Number(year), Number(month) - 1, 1),
+      store_id,
+      source_module: 'PAYROLL',
+      source_ref_id: sourceRefId,
+      category: 'SALARIES',
+      sub_category: 'PAYROLL_MONTHLY',
+      description: `Payroll salary reflection for ${sourceRefId}`,
+      amount: Number(total_net_salary || 0),
+      tax_amount: 0,
+      total_amount: Number(total_net_salary || 0),
+      payment_method,
+      status: 'APPROVED',
+      requested_by: requestedBy,
+      approved_by: requestedBy,
+      approved_at: new Date(),
+      logs: [
+        {
+          event: 'salary_expense_reflected',
+          actor_id: requestedBy,
+          details: {
+            source_ref_id: sourceRefId,
+            employee_count: Number(employee_count || 0),
+            total_gross_salary: Number(total_gross_salary || 0),
+            total_net_salary: Number(total_net_salary || 0)
+          }
+        }
+      ]
+    });
+
+    await expense.save();
+    await this.createExpenseLedgerEntry(expense);
+
+    const financeRecord = await FinanceRecord.create({
+      external_ref_id: sourceRefId,
+      source_module: 'PAYROLL',
+      record_type: 'SALARY_EXPENSE',
+      record_status: 'POSTED',
+      amount: Number(total_net_salary || 0),
+      expense_id: expense._id,
+      company_id: payload.company_id || null,
+      brand_id: payload.brand_id || null,
+      branch_id: payload.branch_id || null,
+      department_id: payload.department_id || null,
+      employee_id: payload.employee_id || null,
+      tenant_id: payload.tenant_id || null,
+      metadata: {
+        employee_count: Number(employee_count || 0),
+        total_gross_salary: Number(total_gross_salary || 0)
+      },
+      created_by: requestedBy
+    });
+
+    await FinanceLog.create({
+      external_ref_id: sourceRefId,
+      finance_record_id: financeRecord._id,
+      event_type: 'salary_expense_reflected',
+      status: 'SUCCESS',
+      actor_id: requestedBy,
+      details: {
+        expense_id: expense._id,
+        amount: expense.total_amount
+      }
+    });
+
+    return expense;
+  }
+
+  /**
    * Get expenses with filtering
    */
   async getExpenses(filters = {}) {
@@ -239,6 +367,8 @@ class FinancialService {
         store_id,
         category,
         status,
+        source_module,
+        source_ref_id,
         date_from,
         date_to,
         page = 1,
@@ -249,6 +379,8 @@ class FinancialService {
       if (store_id) query.store_id = store_id;
       if (category) query.category = category;
       if (status) query.status = status;
+      if (source_module) query.source_module = source_module;
+      if (source_ref_id) query.source_ref_id = source_ref_id;
       if (date_from || date_to) {
         query.expense_date = {};
         if (date_from) query.expense_date.$gte = new Date(date_from);
@@ -280,6 +412,10 @@ class FinancialService {
     }
   }
 
+  async getExpenseBySourceRef(sourceRefId) {
+    return Expense.findOne({ source_ref_id: sourceRefId });
+  }
+
   /**
    * Create ledger entry
    */
@@ -298,6 +434,188 @@ class FinancialService {
       logger.error('Error creating ledger entry:', error);
       throw error;
     }
+  }
+
+  /**
+   * Create payroll posting in ledger with idempotency.
+   */
+  async createPayrollPosting(postingData, createdBy) {
+    const {
+      payrollRunId,
+      period,
+      month,
+      year,
+      postDate,
+      jvNumber,
+      amountBreakdown = {},
+      metadata = {}
+    } = postingData;
+
+    if (!payrollRunId) {
+      const error = new Error('payrollRunId is required');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const idempotencyKey = metadata.idempotencyKey || `payroll-run-${payrollRunId}`;
+    const existingFinanceRecord = await FinanceRecord.findOne({ external_ref_id: idempotencyKey });
+    const existing = await Ledger.findOne({ transaction_id: `${idempotencyKey}-salary-expense` });
+    if (existing || existingFinanceRecord) {
+      return {
+        already_posted: true,
+        idempotency_key: idempotencyKey,
+        reference_number: jvNumber || payrollRunId,
+        finance_record_id: existingFinanceRecord?._id || null
+      };
+    }
+
+    const grossSalary = Number(amountBreakdown.grossSalary || 0);
+    const netSalary = Number(amountBreakdown.netSalary || 0);
+    const epfEmployee = Number(amountBreakdown.epfEmployee || 0);
+    const esicEmployee = Number(amountBreakdown.esicEmployee || 0);
+    const professionalTax = Number(amountBreakdown.professionalTax || amountBreakdown.pt || 0);
+    const tds = Number(amountBreakdown.tds || 0);
+    const epfEmployer = Number(amountBreakdown.epfEmployer || 0);
+    const esicEmployer = Number(amountBreakdown.esicEmployer || 0);
+    const employerCost = Number(amountBreakdown.employerCost || (epfEmployer + esicEmployer));
+    const employeeDeductions = epfEmployee + esicEmployee + professionalTax + tds;
+    const totalPayrollExpense = Math.max(0, grossSalary + employerCost);
+
+    const descriptionBase = `Payroll posting ${period || `${year}-${month}`}`;
+    const referenceNumber = jvNumber || payrollRunId;
+    const transactionDate = postDate ? new Date(postDate) : new Date();
+
+    const debitEntry = new Ledger({
+      transaction_id: `${idempotencyKey}-salary-expense`,
+      transaction_date: transactionDate,
+      transaction_type: 'JOURNAL',
+      account_head: 'EXPENSES',
+      sub_account: 'SALARY_EXPENSE',
+      description: `${descriptionBase} - salary expense`,
+      reference_number: referenceNumber,
+      reference_type: 'JOURNAL',
+      debit_amount: totalPayrollExpense,
+      credit_amount: 0,
+      status: 'CONFIRMED',
+      created_by: createdBy
+    });
+
+    const employerExpenseEntry = new Ledger({
+      transaction_id: `${idempotencyKey}-employer-contrib-expense`,
+      transaction_date: transactionDate,
+      transaction_type: 'JOURNAL',
+      account_head: 'EXPENSES',
+      sub_account: 'EMPLOYER_CONTRIBUTION_EXPENSE',
+      description: `${descriptionBase} - employer contribution expense`,
+      reference_number: referenceNumber,
+      reference_type: 'JOURNAL',
+      debit_amount: Math.max(0, employerCost),
+      credit_amount: 0,
+      status: 'CONFIRMED',
+      created_by: createdBy
+    });
+
+    const deductionPayableEntry = new Ledger({
+      transaction_id: `${idempotencyKey}-deduction-payable`,
+      transaction_date: transactionDate,
+      transaction_type: 'JOURNAL',
+      account_head: 'LIABILITIES',
+      sub_account: 'PAYROLL_DEDUCTION_PAYABLE',
+      description: `${descriptionBase} - employee deductions payable`,
+      reference_number: referenceNumber,
+      reference_type: 'JOURNAL',
+      debit_amount: 0,
+      credit_amount: Math.max(0, employeeDeductions),
+      status: 'CONFIRMED',
+      created_by: createdBy
+    });
+
+    const employerPayableEntry = new Ledger({
+      transaction_id: `${idempotencyKey}-employer-payable`,
+      transaction_date: transactionDate,
+      transaction_type: 'JOURNAL',
+      account_head: 'LIABILITIES',
+      sub_account: 'EMPLOYER_CONTRIBUTION_PAYABLE',
+      description: `${descriptionBase} - employer contributions payable`,
+      reference_number: referenceNumber,
+      reference_type: 'JOURNAL',
+      debit_amount: 0,
+      credit_amount: Math.max(0, employerCost),
+      status: 'CONFIRMED',
+      created_by: createdBy
+    });
+
+    const creditEntry = new Ledger({
+      transaction_id: `${idempotencyKey}-salary-payable`,
+      transaction_date: transactionDate,
+      transaction_type: 'JOURNAL',
+      account_head: 'LIABILITIES',
+      sub_account: 'SALARY_PAYABLE',
+      description: `${descriptionBase} - salary payable`,
+      reference_number: referenceNumber,
+      reference_type: 'JOURNAL',
+      debit_amount: 0,
+      credit_amount: Math.max(0, netSalary || (grossSalary - employeeDeductions)),
+      status: 'CONFIRMED',
+      created_by: createdBy
+    });
+
+    await debitEntry.save();
+    await employerExpenseEntry.save();
+    await deductionPayableEntry.save();
+    await employerPayableEntry.save();
+    await creditEntry.save();
+
+    const financeRecord = await FinanceRecord.create({
+      external_ref_id: idempotencyKey,
+      source_module: 'PAYROLL',
+      record_type: 'LEDGER_POSTING',
+      record_status: 'POSTED',
+      amount: totalPayrollExpense,
+      ledger_refs: [
+        debitEntry.transaction_id,
+        employerExpenseEntry.transaction_id,
+        deductionPayableEntry.transaction_id,
+        employerPayableEntry.transaction_id,
+        creditEntry.transaction_id
+      ],
+      metadata: {
+        payrollRunId,
+        period,
+        referenceNumber
+      },
+      created_by: createdBy
+    });
+    await FinanceLog.create({
+      external_ref_id: idempotencyKey,
+      finance_record_id: financeRecord._id,
+      event_type: 'record_posted',
+      status: 'SUCCESS',
+      actor_id: createdBy,
+      details: {
+        ledger_refs: [
+          debitEntry.transaction_id,
+          employerExpenseEntry.transaction_id,
+          deductionPayableEntry.transaction_id,
+          employerPayableEntry.transaction_id,
+          creditEntry.transaction_id
+        ]
+      }
+    });
+
+    return {
+      already_posted: false,
+      idempotency_key: idempotencyKey,
+      reference_number: referenceNumber,
+      ledger_entries: [
+        debitEntry._id,
+        employerExpenseEntry._id,
+        deductionPayableEntry._id,
+        employerPayableEntry._id,
+        creditEntry._id
+      ],
+      finance_record_id: financeRecord._id
+    };
   }
 
   /**

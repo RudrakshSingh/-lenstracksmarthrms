@@ -21,7 +21,7 @@ spec:
         - name: ecr-registry-secret
       containers:
       - name: hr-service
-        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-hr-service:hrms-jts-proxy-202604110148
+        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-hr-service:loophole-fix-20260416
         ports:
         - containerPort: 3002
           name: http

@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     required: true,
-    enum: ['superadmin', 'admin', 'hr', 'manager', 'employee', 'accountant', 'store_manager', 'sales', 'optometrist'],
+    enum: ['superadmin', 'admin', 'hr', 'manager', 'employee', 'accountant', 'finance', 'store_manager', 'sales', 'optometrist'],
     default: 'employee'
   },
   
@@ -293,7 +293,8 @@ userSchema.index({ tenantId: 1, role: 1 });
 userSchema.index({ tenantId: 1, department: 1 });
 userSchema.index({ tenantId: 1, status: 1 });
 userSchema.index({ tenantId: 1, is_active: 1 });
-userSchema.index({ tenantId: 1, created_at: -1 });
+// Used by permission users listing sorted by latest users.
+userSchema.index({ tenantId: 1, createdAt: -1 });
 
 // Virtual for full name
 userSchema.virtual('full_name').get(function() {

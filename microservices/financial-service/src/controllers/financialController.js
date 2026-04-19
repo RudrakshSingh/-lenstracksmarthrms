@@ -99,6 +99,31 @@ const createExpense = async (req, res, next) => {
 };
 
 /**
+ * @desc Reflect salary expense from payroll
+ * @route POST /api/financial/expenses/salary-reflection
+ * @access Private
+ */
+const reflectSalaryExpense = async (req, res, next) => {
+  try {
+    const expense = await financialService.createSalaryExpenseFromPayroll(req.body, req.user.id);
+    return res.status(200).json({
+      success: true,
+      message: 'Salary expense reflected successfully',
+      data: expense
+    });
+  } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    logger.error('Error in reflectSalaryExpense controller:', error);
+    return next(error);
+  }
+};
+
+/**
  * @desc Get expenses
  * @route GET /api/financial/expenses
  * @access Private (Admin, Manager, Store Manager)
@@ -117,6 +142,30 @@ const getExpenses = async (req, res, next) => {
   } catch (error) {
     logger.error('Error in getExpenses controller:', error);
     next(error);
+  }
+};
+
+/**
+ * @desc Get expense by source reference id
+ * @route GET /api/financial/expenses/by-source/:sourceRefId
+ * @access Private
+ */
+const getExpenseBySourceRef = async (req, res, next) => {
+  try {
+    const expense = await financialService.getExpenseBySourceRef(req.params.sourceRefId);
+    if (!expense) {
+      return res.status(404).json({
+        success: false,
+        message: 'Expense not found for source reference'
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      data: expense
+    });
+  } catch (error) {
+    logger.error('Error in getExpenseBySourceRef controller:', error);
+    return next(error);
   }
 };
 
@@ -387,6 +436,34 @@ const getFinancialDashboard = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc Create payroll posting
+ * @route POST /api/financial/payroll/posting
+ * @access Private
+ */
+const createPayrollPosting = async (req, res, next) => {
+  try {
+    const posting = await financialService.createPayrollPosting(req.body, req.user.id);
+
+    return res.status(200).json({
+      success: true,
+      message: posting.already_posted
+        ? 'Payroll run already posted to finance'
+        : 'Payroll run posted to finance successfully',
+      data: posting
+    });
+  } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+    logger.error('Error in createPayrollPosting controller:', error);
+    return next(error);
+  }
+};
+
 module.exports = {
   approveExpense,
   rejectExpense,
@@ -394,6 +471,8 @@ module.exports = {
   getPandL,
   getPandLSummary,
   createExpense,
+  reflectSalaryExpense,
+  getExpenseBySourceRef,
   getExpenses,
   createLedgerEntry,
   getLedgerEntries,
@@ -402,5 +481,6 @@ module.exports = {
   createTDSEntry,
   getTDSEntries,
   getTDSSummary,
-  getFinancialDashboard
+  getFinancialDashboard,
+  createPayrollPosting
 };

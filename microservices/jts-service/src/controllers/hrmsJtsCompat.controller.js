@@ -7,6 +7,7 @@ const Tenant = require('../models/Tenant.model');
 const ReviewGoal = require('../models/ReviewGoal.model');
 const PerformanceScore = require('../models/PerformanceScore.model');
 const logger = require('../config/logger');
+const { buildErrorBody, actorUnresolvedBody } = require('../utils/apiError.util');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
 const selfTaskController = require('./selfTask.controller');
@@ -59,11 +60,7 @@ class HrmsJtsCompatController {
     try {
       const tenant = await Tenant.findById(req.user.tenant_id).lean();
       if (!tenant) {
-        return res.status(404).json({
-          success: false,
-          error: 'TENANT_001_NOT_FOUND',
-          code: 'TENANT_001_NOT_FOUND'
-        });
+        return res.status(404).json(buildErrorBody({ code: 'TENANT_001_NOT_FOUND' }));
       }
       res.json({ success: true, data: tenant, message: 'Current tenant retrieved successfully' });
     } catch (error) {
@@ -78,11 +75,7 @@ class HrmsJtsCompatController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const page = Math.max(1, Number(req.query.page) || 1);
@@ -147,20 +140,17 @@ class HrmsJtsCompatController {
       const { tenant_id } = req.user;
       const myEmployeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!myEmployeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const requested = req.query.approverId;
       if (requested && requested !== myEmployeeId.toString() && !isPrivileged(req.user.role)) {
-        return res.status(403).json({
-          success: false,
-          error: 'Cannot list approvals for another approver',
-          code: 'JTS_APPROVAL_QUERY_FORBIDDEN'
-        });
+        return res.status(403).json(
+          buildErrorBody({
+            code: 'JTS_APPROVAL_QUERY_FORBIDDEN',
+            message: 'Cannot list approvals for another approver without elevated role'
+          })
+        );
       }
 
       const approverId = requested || myEmployeeId;
@@ -182,11 +172,7 @@ class HrmsJtsCompatController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const row = await taskCollaborationService.decideApproval(
@@ -209,11 +195,7 @@ class HrmsJtsCompatController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const row = await taskCollaborationService.decideApproval(

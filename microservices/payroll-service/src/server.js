@@ -152,6 +152,37 @@ const loadRoutes = () => {
     console.error('❌ deduction.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
+  try {
+    const payrollWorkflowRoutes = require('./routes/payrollWorkflow.routes.js');
+    app.use('/api/payroll-workflow', apiRateLimit, payrollWorkflowRoutes);
+    if (!isProduction) logger.info('payrollWorkflow.routes.js loaded');
+  } catch (error) {
+    logger.error('payrollWorkflow.routes.js failed:', {
+      error: error.message,
+      stack: error.stack
+    });
+  }
+  try {
+    const payrollValidationRoutes = require('./routes/payrollValidation.routes.js');
+    app.use('/api/payroll', apiRateLimit, payrollValidationRoutes);
+    if (!isProduction) logger.info('payrollValidation.routes.js loaded');
+  } catch (error) {
+    logger.error('payrollValidation.routes.js failed:', { error: error.message });
+  }
+  try {
+    const payrollPortalRoutes = require('./routes/payrollPortal.routes.js');
+    app.use('/api/payroll', apiRateLimit, payrollPortalRoutes);
+    if (!isProduction) logger.info('payrollPortal.routes.js loaded');
+  } catch (error) {
+    logger.error('payrollPortal.routes.js failed:', { error: error.message });
+  }
+  try {
+    const payrollComplianceRoutes = require('./routes/payrollCompliance.routes.js');
+    app.use('/api/payroll', apiRateLimit, payrollComplianceRoutes);
+    if (!isProduction) logger.info('payrollCompliance.routes.js loaded');
+  } catch (error) {
+    logger.error('payrollCompliance.routes.js failed:', { error: error.message });
+  }
 };
 
 // Health check

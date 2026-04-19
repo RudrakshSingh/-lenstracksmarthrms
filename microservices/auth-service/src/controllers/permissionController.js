@@ -1,6 +1,6 @@
 const User = require('../models/User.model');
 const PermissionAudit = require('../models/PermissionAudit.model');
-const { logger } = require('../config/logger');
+const logger = require('../config/logger');
 const {
   PERMISSION_GROUPS,
   ALL_PERMISSION_CODES,
@@ -8,7 +8,7 @@ const {
   PERMISSION_CATALOG_VERSION,
   filterValidCodes
 } = require('../config/permissionCatalog');
-const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
+const { resolveEffectivePermissionsForUser, resolveEffectivePermissionsForUsers } = require('../utils/effectivePermissions');
 const { assertNoPrivilegeEscalation, previewPrivilegeEscalation } = require('../utils/permissionEscalation');
 const {
   invalidateUserPermissionCache,
@@ -17,6 +17,64 @@ const {
 const permissionMetrics = require('../utils/permissionMetrics');
 
 const MANAGER_ROLES = ['superadmin', 'admin', 'hr'];
+const PERMISSION_LIST_LIMIT_MAX = parseInt(process.env.PERMISSION_USERS_LIMIT_MAX || '100', 10);
+const PERMISSION_LIST_TIMEOUT_MS = parseInt(process.env.PERMISSION_USERS_TIMEOUT_MS || '8000', 10);
+const PERMISSION_LIST_PROFILE_LOGS = process.env.PERMISSION_USERS_PROFILE_LOGS !== '0';
+
+function createTimeoutError(label, ms) {
+  const err = new Error(`${label} timed out after ${ms}ms`);
+  err.statusCode = 503;
+  err.code = 'PERMISSION_ROUTE_TIMEOUT';
+  return err;
+}
+
+async function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(createTimeoutError(label, ms)), ms))
+  ]);
+}
+
+function normalizeTenantId(value) {
+  return value == null ? '' : String(value).toLowerCase().trim();
+}
+
+function tenantHeader(req) {
+  return normalizeTenantId(req.get('X-Tenant-Id') || req.get('x-tenant-id'));
+}
+
+function parsePositiveInt(value, fallback) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return parsed;
+}
+
+function isTimeoutError(error) {
+  return error && (error.code === 'PERMISSION_ROUTE_TIMEOUT' || error.name === 'MongoServerSelectionError');
+}
+
+function sendJsonError(res, status, message, code, extra = {}) {
+  return res.status(status).json({
+    success: false,
+    message,
+    ...(code ? { code } : {}),
+    ...extra
+  });
+}
+
+function assertTenantHeaderMatchesToken(req) {
+  const actorRole = String(req.user?.role || '').toLowerCase();
+  if (actorRole === 'superadmin') return null;
+  const tokenTenant = normalizeTenantId(req.user?.tenantId);
+  const headerTenant = tenantHeader(req);
+  if (headerTenant && tokenTenant && headerTenant !== tokenTenant) {
+    return { ok: false, status: 403, message: 'X-Tenant-Id does not match token tenant', code: 'TENANT_MISMATCH' };
+  }
+  if (!tokenTenant) {
+    return { ok: false, status: 403, message: 'Token tenant is missing', code: 'TENANT_REQUIRED' };
+  }
+  return { ok: true, tenantId: tokenTenant };
+}
 
 function assertCanManageUserPermissions(req, targetUser) {
   const actor = req.user;
@@ -130,6 +188,11 @@ const getDepartmentPermissions = async (req, res) => {
 
 const getUserPermissions = async (req, res) => {
   try {
+    const tenantGate = assertTenantHeaderMatchesToken(req);
+    if (!tenantGate?.ok) {
+      return sendJsonError(res, tenantGate.status, tenantGate.message, tenantGate.code);
+    }
+
     const { userId } = req.params;
 
     const user = await User.findById(userId).select(
@@ -187,6 +250,11 @@ const getUserPermissions = async (req, res) => {
 
 const patchUserPermissionOverrides = async (req, res) => {
   try {
+    const tenantGate = assertTenantHeaderMatchesToken(req);
+    if (!tenantGate?.ok) {
+      return sendJsonError(res, tenantGate.status, tenantGate.message, tenantGate.code);
+    }
+
     const { userId } = req.params;
     const customIn = req.body.custom_permissions;
     const denyIn = req.body.permission_denials;
@@ -319,6 +387,11 @@ const patchUserPermissionOverrides = async (req, res) => {
 
 const updateUserPermissions = async (req, res) => {
   try {
+    const tenantGate = assertTenantHeaderMatchesToken(req);
+    if (!tenantGate?.ok) {
+      return sendJsonError(res, tenantGate.status, tenantGate.message, tenantGate.code);
+    }
+
     const { userId } = req.params;
     const { permissions, permission_denials, action } = req.body;
 
@@ -466,40 +539,105 @@ const updateUserPermissions = async (req, res) => {
 
 const getAllUsersWithPermissions = async (req, res) => {
   try {
-    const { page = 1, limit = 10, department, band_level } = req.query;
+    const routeStartMs = Date.now();
+    const tenantGate = assertTenantHeaderMatchesToken(req);
+    if (!tenantGate?.ok) {
+      return sendJsonError(res, tenantGate.status, tenantGate.message, tenantGate.code);
+    }
+
+    const page = parsePositiveInt(req.query.page, 1);
+    const limitRaw = parsePositiveInt(req.query.limit, 20);
+    const limit = Math.min(limitRaw, PERMISSION_LIST_LIMIT_MAX);
+    const department = req.query.department ? String(req.query.department).toUpperCase().trim() : '';
+    const bandLevel = req.query.band_level ? String(req.query.band_level).trim() : '';
+    const role = req.query.role ? String(req.query.role).toLowerCase().trim() : '';
+    const status = req.query.status ? String(req.query.status).toLowerCase().trim() : '';
+    const search = req.query.search ? String(req.query.search).trim() : '';
+    const includePermissions =
+      req.query.includePermissions === '1' ||
+      req.query.includePermissions === 'true';
 
     const filter = {};
-    if (department) filter.department = department.toUpperCase();
-    if (band_level) filter.band_level = band_level;
+    if (department) filter.department = department;
+    if (bandLevel) filter.band_level = bandLevel;
+    if (role) filter.role = role;
+    if (status) filter.status = status;
 
     const actorRole = String(req.user.role || '').toLowerCase();
     if (actorRole !== 'superadmin') {
-      filter.tenantId = String(req.user.tenantId || '').toLowerCase();
+      filter.tenantId = tenantGate.tenantId;
+    } else if (tenantHeader(req)) {
+      filter.tenantId = tenantHeader(req);
     }
 
-    const users = await User.find(filter)
-      .select(
-        'name email employee_id department band_level hierarchy_level role custom_permissions permission_denials is_active status tenantId permissionsRevision'
-      )
-      .populate('stores', 'name code')
-      .populate('reporting_manager', 'name employee_id')
+    if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escaped, 'i');
+      filter.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { employee_id: searchRegex }
+      ];
+    }
+
+    const projection =
+      'name email employee_id department band_level hierarchy_level role custom_permissions permission_denials is_active status tenantId permissionsRevision createdAt';
+    const skip = (page - 1) * limit;
+    const usersQuery = User.find(filter)
+      .select(projection)
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(limit)
+      .skip(skip)
+      .lean()
+      .maxTimeMS(Math.max(1000, PERMISSION_LIST_TIMEOUT_MS - 1000));
+    const countQuery = User.countDocuments(filter).maxTimeMS(Math.max(1000, PERMISSION_LIST_TIMEOUT_MS - 1000));
 
-    const total = await User.countDocuments(filter);
+    const dbStartMs = Date.now();
+    const [users, total] = await withTimeout(
+      Promise.all([
+        usersQuery,
+        countQuery
+      ]),
+      PERMISSION_LIST_TIMEOUT_MS,
+      'permission users listing'
+    );
+    const dbDurationMs = Date.now() - dbStartMs;
 
-    const usersWithPermissions = [];
-    for (const u of users) {
-      const resolved = await resolveEffectivePermissionsForUser(u);
-      const departmentPermissions = User.getDepartmentPermissions(u.department);
-      const plain = u.toObject();
-      usersWithPermissions.push({
-        ...plain,
-        userId: String(plain._id || u._id),
-        departmentPermissions,
-        effectivePermissions: resolved.effectivePermissions,
-        totalPermissions: resolved.effectivePermissions.length
+    const resolveStartMs = Date.now();
+    const usersWithPermissions = users.map((u) => ({
+      ...u,
+      userId: String(u._id),
+      departmentPermissions: User.getDepartmentPermissions(u.department)
+    }));
+
+    if (includePermissions && usersWithPermissions.length > 0) {
+      const resolvedList = await withTimeout(
+        resolveEffectivePermissionsForUsers(usersWithPermissions),
+        Math.max(1000, Math.floor(PERMISSION_LIST_TIMEOUT_MS * 0.7)),
+        'permission effective-permissions list'
+      );
+      resolvedList.forEach((resolved, idx) => {
+        usersWithPermissions[idx].effectivePermissions = resolved.effectivePermissions;
+        usersWithPermissions[idx].totalPermissions = resolved.effectivePermissions.length;
+      });
+    }
+    const resolveDurationMs = Date.now() - resolveStartMs;
+    const totalDurationMs = Date.now() - routeStartMs;
+
+    if (PERMISSION_LIST_PROFILE_LOGS) {
+      logger.info('permission.users.performance', {
+        tenantId: filter.tenantId || null,
+        includePermissions,
+        page,
+        limit,
+        resultCount: usersWithPermissions.length,
+        totalMatched: total,
+        usedHint: false,
+        timings: {
+          dbMs: dbDurationMs,
+          resolveMs: resolveDurationMs,
+          totalMs: totalDurationMs
+        }
       });
     }
 
@@ -507,23 +645,33 @@ const getAllUsersWithPermissions = async (req, res) => {
       success: true,
       data: usersWithPermissions,
       pagination: {
-        current: parseInt(page, 10),
+        current: page,
         pages: Math.ceil(total / limit),
         total
       }
     });
   } catch (error) {
-    logger.error('Error getting users with permissions', { error: error.message });
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get users with permissions',
-      error: error.message
-    });
+    const errorMessage = error && error.message ? error.message : String(error || 'unknown error');
+    logger.error('Error getting users with permissions', { error: errorMessage });
+    if (isTimeoutError(error)) {
+      return sendJsonError(
+        res,
+        503,
+        'Permission users endpoint timed out. Please retry with smaller filters.',
+        'PERMISSION_USERS_TIMEOUT'
+      );
+    }
+    return sendJsonError(res, 500, 'Failed to get users with permissions', 'PERMISSION_USERS_ERROR');
   }
 };
 
 const resetUserPermissions = async (req, res) => {
   try {
+    const tenantGate = assertTenantHeaderMatchesToken(req);
+    if (!tenantGate?.ok) {
+      return sendJsonError(res, tenantGate.status, tenantGate.message, tenantGate.code);
+    }
+
     const { userId } = req.params;
 
     const user = await User.findById(userId);
@@ -627,6 +775,11 @@ const getPermissionMetrics = async (req, res) => {
 /** POST body: optional custom_permissions[], permission_denials[] — omitted arrays keep target user's current values */
 const previewUserPermissionEscalation = async (req, res) => {
   try {
+    const tenantGate = assertTenantHeaderMatchesToken(req);
+    if (!tenantGate?.ok) {
+      return sendJsonError(res, tenantGate.status, tenantGate.message, tenantGate.code);
+    }
+
     const { userId } = req.params;
 
     const user = await User.findById(userId).select(

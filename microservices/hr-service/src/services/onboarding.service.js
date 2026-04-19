@@ -285,24 +285,22 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
       }
     }
 
-    // Validate reporting manager (optional - can be employeeId or ObjectId)
+    // Resolve reporting manager (optional - can be employeeId or ObjectId)
+    let reportingManagerUser = null;
     if (reporting_manager_id) {
       const mongoose = require('mongoose');
       let manager = null;
-      
-      // Try to find by ObjectId first
+
       if (mongoose.Types.ObjectId.isValid(reporting_manager_id)) {
         manager = await User.findById(reporting_manager_id);
       }
-      
-      // If not found, try by employeeId
       if (!manager) {
         manager = await User.findOne({ employeeId: reporting_manager_id });
       }
-      
-      // If still not found, log warning but don't fail (manager might be added later)
       if (!manager) {
         logger.warn('Reporting manager not found, proceeding without manager assignment', { reporting_manager_id });
+      } else {
+        reportingManagerUser = manager;
       }
     }
 
@@ -533,6 +531,20 @@ const addWorkDetails = async (employeeId, workData, createdBy) => {
         } else {
           throw upsertError;
         }
+      }
+    }
+
+    if (reportingManagerUser) {
+      user.reportingManager = String(reportingManagerUser._id);
+      const fn = reportingManagerUser.firstName || '';
+      const ln = reportingManagerUser.lastName || '';
+      user.reportingManagerName = `${fn} ${ln}`.trim() || reportingManagerUser.name || '';
+      try {
+        const { promotePeopleManagerById } = require('../utils/peopleManagerRoleSync');
+        const sync = await promotePeopleManagerById(reportingManagerUser._id);
+        logger.info('People-manager role sync (onboarding)', { managerId: reportingManagerUser._id, sync });
+      } catch (syncErr) {
+        logger.warn('peopleManagerRoleSync failed', { error: syncErr.message });
       }
     }
 

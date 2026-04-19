@@ -4,6 +4,7 @@ const PayrollOverride = require('../models/PayrollOverride.model');
 const ReturnsRemakesFeed = require('../models/ReturnsRemakesFeed.model');
 const IncentiveClaim = require('../models/IncentiveClaim.model');
 const Employee = require('../models/Employee.model');
+const { postPayrollRunToFinance } = require('../utils/financialServiceClient');
 const logger = require('../config/logger');
 
 class PayrollRunService {
@@ -129,7 +130,7 @@ class PayrollRunService {
   /**
    * Post payroll run
    */
-  async postPayrollRun(runId, userId, jvNumber, jvDate) {
+  async postPayrollRun(runId, userId, jvNumber, jvDate, integrationContext = {}) {
     try {
       const run = await PayrollRun.findOne({ run_id: runId });
       if (!run) {
@@ -139,19 +140,60 @@ class PayrollRunService {
       if (run.status !== 'LOCKED') {
         throw new Error(`Payroll run must be LOCKED to post. Current: ${run.status}`);
       }
-      
+
+      if (run.finance_posting_status === 'POSTED') {
+        throw new Error(`Payroll run ${runId} is already posted to finance`);
+      }
+
+      const payrollPostingPayload = {
+        payrollRunId: run.run_id,
+        period: run.period,
+        month: run.month,
+        year: run.year,
+        postDate: jvDate || new Date().toISOString(),
+        jvNumber: jvNumber || undefined,
+        amountBreakdown: {
+          grossSalary: run.total_gross || 0,
+          netSalary: run.total_net || 0,
+          employerCost: run.total_employer_contributions || 0,
+          epfEmployee: run.total_epf_employee || 0,
+          epfEmployer: run.total_epf_employer || 0,
+          esicEmployee: run.total_esic_employee || 0,
+          esicEmployer: run.total_esic_employer || 0,
+          tds: run.total_tds || 0
+        },
+        metadata: {
+          sourceModule: 'hr-service',
+          idempotencyKey: `hr-payroll-run-${run.run_id}`
+        }
+      };
+
+      let financeResponse;
+      try {
+        financeResponse = await postPayrollRunToFinance(payrollPostingPayload, integrationContext);
+      } catch (integrationError) {
+        run.finance_posting_status = 'FAILED';
+        run.finance_error = integrationError.response?.data?.message || integrationError.message;
+        await run.save();
+        throw new Error(`Failed to post payroll to finance: ${run.finance_error}`);
+      }
+
+      // Generate bank file
+      await this.generateBankFile(run);
+
+      // Generate payslips
+      await this.generatePayslips(run);
+
       run.status = 'POSTED';
       run.posted_at = new Date();
       run.posted_by = userId;
       run.post_jv_number = jvNumber;
       run.post_jv_date = jvDate ? new Date(jvDate) : new Date();
-      
-      // Generate bank file
-      await this.generateBankFile(run);
-      
-      // Generate payslips
-      await this.generatePayslips(run);
-      
+      run.finance_posting_status = 'POSTED';
+      run.finance_reference_number = financeResponse?.data?.reference_number || financeResponse?.data?.idempotency_key || null;
+      run.finance_posted_at = new Date();
+      run.finance_error = null;
+
       await run.save();
       
       logger.info(`Payroll run posted: ${runId}`);

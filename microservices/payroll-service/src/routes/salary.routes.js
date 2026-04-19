@@ -6,7 +6,9 @@ const {
   getSalaryHistory,
   updateSalary,
   getPayrollSummary,
-  bulkCalculateSalaries
+  bulkCalculateSalaries,
+  generateMonthlySalaryRecords,
+  reflectMonthlySalaryExpense
 } = require('../controllers/salaryController');
 const { authenticate } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/rbac.middleware');
@@ -28,5 +30,11 @@ router.get('/payroll-summary', authenticate, requireRole(['admin', 'superadmin',
 
 // Bulk calculate salaries for multiple employees
 router.post('/bulk-calculate', authenticate, requireRole(['admin', 'superadmin', 'hr']), bulkCalculateSalaries);
+
+// Generate month-wise payroll records from active salary structures
+router.post('/monthly-records/generate', authenticate, requireRole(['admin', 'superadmin', 'hr']), generateMonthlySalaryRecords);
+
+// Reflect payroll month as finance salary expense
+router.post('/monthly-records/reflect-expense', authenticate, requireRole(['admin', 'superadmin', 'hr']), reflectMonthlySalaryExpense);
 
 module.exports = router;

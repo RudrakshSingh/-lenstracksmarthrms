@@ -1,5 +1,7 @@
 # JTS Implementation Blueprint ↔ Implemented Backend — Gap Analysis
 
+> **April 2026:** Many HTTP routes listed historically as “missing” are **now implemented** (bulk, force-complete, lifecycle, analytics splits, timer sessions, recurrence). See **`docs/JTS_BACKEND_GAP_CLOSURE_STATUS_APRIL_2026.md`** before opening new backend tickets from this file alone.
+
 This document compares the **JTS Implementation Blueprint** (target schema + Swagger-level API + screen map) to the **current `jts-service` codebase** (`microservices/jts-service`). Use it for backlog planning for backend, QA, and solution architecture.
 
 **Conventions in code today:** MongoDB fields are mostly **snake_case** (`tenant_id`, `due_at`); HTTP JSON for HRMS is often **camelCase** via mappers (`taskFrontend.mapper.js`). The blueprint’s `tenantId` / `createdAt` naming matches the **API DTO** style more than raw Mongoose documents.

@@ -1,16 +1,13 @@
 const taskCollaborationService = require('../services/taskCollaboration.service');
 const logger = require('../config/logger');
+const { actorUnresolvedBody } = require('../utils/apiError.util');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
 
 async function employeeOr403(req, res) {
   const employeeId = await resolveEmployeeId(req.user.tenant_id, req.user);
   if (!employeeId) {
-    res.status(403).json({
-      success: false,
-      error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-      code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-    });
+    res.status(403).json(actorUnresolvedBody());
     return null;
   }
   return employeeId;

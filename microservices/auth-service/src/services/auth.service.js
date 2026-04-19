@@ -7,11 +7,7 @@ const { sendWelcomeEmail, sendPasswordResetEmail } = require('../utils/email');
 const { logAuthEvent } = require('../utils/audit');
 const logger = require('../config/logger');
 const { resolveEffectivePermissionsForUser } = require('../utils/effectivePermissions');
-
-/** Microservices (e.g. attendance) use Redis keyed by permRev; JWT carries permissions as fallback when cache misses. Set JWT_SKIP_PERMISSIONS_CLAIM=1 to omit (smaller tokens). */
-function jwtPermissionsPayloadEnabled() {
-  return process.env.JWT_SKIP_PERMISSIONS_CLAIM !== 'true' && process.env.JWT_SKIP_PERMISSIONS_CLAIM !== '1';
-}
+const { jwtPermissionsPayloadEnabled } = require('../config/jwtPermissionsClaim');
 
 class AuthService {
   constructor() {
@@ -108,7 +104,7 @@ class AuthService {
           logger.info('Reactivated existing role', { role: normalizedRole });
         } else {
           // Create the role if it doesn't exist (for standard roles)
-          const validRoles = ['admin', 'hr', 'manager', 'employee', 'superadmin', 'accountant', 'store_manager', 'sales', 'optometrist'];
+          const validRoles = ['admin', 'hr', 'manager', 'employee', 'superadmin', 'accountant', 'finance', 'store_manager', 'sales', 'optometrist'];
           
           if (validRoles.includes(normalizedRole)) {
             try {
@@ -182,6 +178,15 @@ class AuthService {
       // Save user with detailed error handling
       try {
         await user.save();
+        if (user.reporting_manager) {
+          try {
+            const { promotePeopleManagerById } = require('../utils/peopleManagerRoleSync');
+            const sync = await promotePeopleManagerById(user.reporting_manager);
+            logger.info('Reporting-manager role sync (register)', { targetManagerId: user.reporting_manager, sync });
+          } catch (syncErr) {
+            logger.warn('promotePeopleManagerById failed (non-blocking)', { error: syncErr.message });
+          }
+        }
       } catch (saveError) {
         logger.error('Failed to save user to database', {
           error: saveError.message,

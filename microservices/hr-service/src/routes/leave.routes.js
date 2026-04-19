@@ -37,6 +37,29 @@ const approveLeaveRequestSchema = {
   })
 };
 
+const tenantLeaveCriteriaSchema = {
+  body: Joi.object({
+    name: Joi.string().max(200),
+    version: Joi.string().max(50),
+    role_group: Joi.string().valid('SALES', 'BACKEND', 'LAB', 'HR', 'MANAGEMENT', 'TECH', 'ALL'),
+    applicable_from: Joi.date(),
+    applicable_to: Joi.date().allow(null),
+    department_codes: Joi.array().items(Joi.string().trim().uppercase()).default([]),
+    location_codes: Joi.array().items(Joi.string().trim().uppercase()).default([]),
+    tenant_criteria: Joi.object({
+      working_day_calculation: Joi.string().valid('CALENDAR_DAYS', 'WORKING_DAYS_EX_WEEKENDS_AND_HOLIDAYS'),
+      weekend_definition: Joi.string().valid('SAT_SUN', 'SUN'),
+      sandwich_rule: Joi.boolean(),
+      allow_leave_on_weekly_off: Joi.boolean(),
+      allow_leave_on_public_holiday: Joi.boolean(),
+      probation_days_from_doj: Joi.number().integer().min(0),
+      probation_block_all_leave: Joi.boolean(),
+      probation_allowed_leave_types: Joi.array().items(Joi.string().trim().uppercase())
+    }).unknown(true),
+    leave_types: Joi.array().items(Joi.object().unknown(true)).optional()
+  }).unknown(true)
+};
+
 // Routes
 router.get(
   '/policies/leave',
@@ -196,6 +219,21 @@ router.get(
 // ============================================
 // Leave Type Management
 // ============================================
+router.get(
+  '/policies/leave/criteria',
+  requireRole(['hr', 'admin']),
+  requirePermission('hr.leave.read'),
+  asyncHandler(leaveManagementController.getTenantLeavePolicyCriteria)
+);
+
+router.put(
+  '/policies/leave/criteria',
+  requireRole(['hr', 'admin']),
+  requirePermission('hr.leave.update'),
+  validateRequest(tenantLeaveCriteriaSchema),
+  asyncHandler(leaveManagementController.saveTenantLeavePolicyCriteria)
+);
+
 router.post(
   '/policies/leave/types',
   requireRole(['hr', 'admin']),
@@ -208,6 +246,36 @@ router.put(
   requireRole(['hr', 'admin']),
   requirePermission('hr.leave.update'),
   asyncHandler(leaveManagementController.updateLeaveType)
+);
+
+// Aliases: some clients call hyphenated "leave-policy" instead of policies/leave
+router.post(
+  '/leave-policy/types',
+  requireRole(['hr', 'admin']),
+  requirePermission('hr.leave.update'),
+  asyncHandler(leaveManagementController.createLeaveType)
+);
+
+router.put(
+  '/leave-policy/types/:id',
+  requireRole(['hr', 'admin']),
+  requirePermission('hr.leave.update'),
+  asyncHandler(leaveManagementController.updateLeaveType)
+);
+
+router.get(
+  '/leave-policy/criteria',
+  requireRole(['hr', 'admin']),
+  requirePermission('hr.leave.read'),
+  asyncHandler(leaveManagementController.getTenantLeavePolicyCriteria)
+);
+
+router.put(
+  '/leave-policy/criteria',
+  requireRole(['hr', 'admin']),
+  requirePermission('hr.leave.update'),
+  validateRequest(tenantLeaveCriteriaSchema),
+  asyncHandler(leaveManagementController.saveTenantLeavePolicyCriteria)
 );
 
 // ============================================

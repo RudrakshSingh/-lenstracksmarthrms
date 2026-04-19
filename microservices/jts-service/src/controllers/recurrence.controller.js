@@ -1,5 +1,6 @@
 const RecurrenceRule = require('../models/RecurrenceRule.model');
 const logger = require('../config/logger');
+const { buildErrorBody } = require('../utils/apiError.util');
 const { toErrorPayload } = require('../utils/errorResponse');
 
 class RecurrenceController {
@@ -22,11 +23,7 @@ class RecurrenceController {
       const { tenant_id } = req.user;
       const row = await RecurrenceRule.findOne({ _id: req.params.id, tenant_id: tenant_id });
       if (!row) {
-        return res.status(404).json({
-          success: false,
-          error: 'JTS_RECURRENCE_RULE_NOT_FOUND',
-          code: 'JTS_RECURRENCE_RULE_NOT_FOUND'
-        });
+        return res.status(404).json(buildErrorBody({ code: 'JTS_RECURRENCE_RULE_NOT_FOUND' }));
       }
       res.json({ success: true, data: row, message: 'Recurrence rule retrieved' });
     } catch (error) {
@@ -60,11 +57,7 @@ class RecurrenceController {
       const { tenant_id } = req.user;
       const row = await RecurrenceRule.findOne({ _id: req.params.id, tenant_id: tenant_id });
       if (!row) {
-        return res.status(404).json({
-          success: false,
-          code: 'JTS_RECURRENCE_RULE_NOT_FOUND',
-          error: 'JTS_RECURRENCE_RULE_NOT_FOUND'
-        });
+        return res.status(404).json(buildErrorBody({ code: 'JTS_RECURRENCE_RULE_NOT_FOUND' }));
       }
       const b = req.body;
       if (b.name != null) row.name = b.name;
@@ -87,11 +80,7 @@ class RecurrenceController {
       const { tenant_id } = req.user;
       const r = await RecurrenceRule.deleteOne({ _id: req.params.id, tenant_id: tenant_id });
       if (r.deletedCount === 0) {
-        return res.status(404).json({
-          success: false,
-          code: 'JTS_RECURRENCE_RULE_NOT_FOUND',
-          error: 'JTS_RECURRENCE_RULE_NOT_FOUND'
-        });
+        return res.status(404).json(buildErrorBody({ code: 'JTS_RECURRENCE_RULE_NOT_FOUND' }));
       }
       res.status(204).send();
     } catch (error) {

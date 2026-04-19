@@ -43,7 +43,11 @@ const getLeavePolicy = async (req, res, next) => {
         return res.status(200).json({
           success: true,
           message: 'Leave policy retrieved successfully',
-          data: { leaveTypes }
+          data: {
+            leaveTypes,
+            tenantCriteria: policy.tenant_criteria || {},
+            policyId: policy.policy_id
+          }
         });
       }
       

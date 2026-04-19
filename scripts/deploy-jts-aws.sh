@@ -75,6 +75,10 @@ kubectl cluster-info >/dev/null 2>&1 || { echo "kubectl not connected to a clust
 echo "==> kubectl apply $DEPLOYMENT_FILE"
 kubectl apply -f "$ROOT/$DEPLOYMENT_FILE"
 
+# Ensure the running Deployment uses the image we just pushed (manifest may still say :latest or an old pin).
+echo "==> kubectl set image → $IMAGE"
+kubectl -n "$NAMESPACE" set image "deployment/jts-service" "jts-service=$IMAGE"
+
 if [[ "${APPLY_INGRESS}" == "1" ]]; then
   echo "==> kubectl apply $INGRESS_FILE (routes /jts and /api/jts → jts-service)"
   kubectl apply -f "$ROOT/$INGRESS_FILE"

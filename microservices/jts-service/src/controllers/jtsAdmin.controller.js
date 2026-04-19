@@ -1,6 +1,7 @@
 const jtsAdminService = require('../services/jtsAdmin.service');
 const { listTenantsVisible, canMutateAnyTenant } = require('../services/tenantScope.service');
 const logger = require('../config/logger');
+const { buildErrorBody, actorUnresolvedBody } = require('../utils/apiError.util');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
 const { logAudit } = require('../utils/auditLogger');
@@ -12,7 +13,9 @@ class JtsAdminController {
       res.json({ success: true, data: rows });
     } catch (error) {
       logger.error('JTS list tenants', { error: error.message });
-      res.status(500).json({ success: false, error: error.message });
+      res
+        .status(500)
+        .json(buildErrorBody({ code: 'INTERNAL_ERROR', message: error.message || 'Internal server error' }));
     }
   }
 
@@ -29,11 +32,7 @@ class JtsAdminController {
   async createTenant(req, res) {
     try {
       if (!canMutateAnyTenant(req.user.role)) {
-        return res.status(403).json({
-          success: false,
-          code: 'JTS_TENANT_SCOPE_FORBIDDEN',
-          error: 'JTS_TENANT_SCOPE_FORBIDDEN'
-        });
+        return res.status(403).json(buildErrorBody({ code: 'JTS_TENANT_SCOPE_FORBIDDEN' }));
       }
       const row = await jtsAdminService.createTenant(req.body);
       await logAudit(req.user.tenant_id, null, 'JTS_TENANT_CREATE', { payload: req.body });
@@ -47,11 +46,7 @@ class JtsAdminController {
   async updateTenant(req, res) {
     try {
       if (!canMutateAnyTenant(req.user.role) && String(req.params.id) !== String(req.user.tenant_id)) {
-        return res.status(403).json({
-          success: false,
-          code: 'JTS_TENANT_SCOPE_FORBIDDEN',
-          error: 'JTS_TENANT_SCOPE_FORBIDDEN'
-        });
+        return res.status(403).json(buildErrorBody({ code: 'JTS_TENANT_SCOPE_FORBIDDEN' }));
       }
       const row = await jtsAdminService.updateTenant(req.params.id, req.body);
       res.json({ success: true, data: row });
@@ -519,10 +514,7 @@ class JtsAdminController {
     try {
       const actorId = await resolveEmployeeId(req.user.tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const row = await jtsAdminService.recordDataAccess(
         req.user.tenant_id,

@@ -1,5 +1,6 @@
 const notificationService = require('../services/notification.service');
 const logger = require('../config/logger');
+const { actorUnresolvedBody } = require('../utils/apiError.util');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
 
@@ -9,11 +10,7 @@ class NotificationController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const result = await notificationService.getInbox(tenant_id, employeeId, req.query);
       res.json({
@@ -33,11 +30,7 @@ class NotificationController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const notification = await notificationService.markAsRead(
         tenant_id,
@@ -57,11 +50,7 @@ class NotificationController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const result = await notificationService.markAllAsRead(tenant_id, employeeId);
       res.json({ success: true, data: result });
@@ -77,11 +66,7 @@ class NotificationController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const preference = await notificationService.getOrCreatePreference(tenant_id, employeeId);
       res.json({ success: true, data: preference });
@@ -97,11 +82,7 @@ class NotificationController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const preference = await notificationService.updatePreference(tenant_id, employeeId, req.body);
       res.json({ success: true, data: preference });

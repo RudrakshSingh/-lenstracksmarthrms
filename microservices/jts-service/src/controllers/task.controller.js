@@ -6,7 +6,7 @@ const catalogDefaults = require('../services/catalogDefaults.service');
 const logger = require('../config/logger');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
-const { buildErrorBody } = require('../utils/apiError.util');
+const { buildErrorBody, actorUnresolvedBody } = require('../utils/apiError.util');
 const {
   normalizeListQuery,
   normalizeManagerTaskBody,
@@ -94,7 +94,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json(buildErrorBody({ code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED' }));
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       let body = normalizeManagerTaskBody(req.body);
@@ -455,7 +455,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json(buildErrorBody({ code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED' }));
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const b = normalizeUpdateTaskBody(req.body);
@@ -538,11 +538,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       await taskStatusService.changeStatus(tenant_id, req.params.id, 'ACCEPTED', {
         actorId,
@@ -562,11 +558,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       await taskStatusService.changeStatus(tenant_id, req.params.id, 'REJECTED', {
         actorId,
@@ -586,11 +578,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const task = await taskService.completeTask(
@@ -622,11 +610,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const task = await taskService.completeTask(
@@ -658,7 +642,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json(buildErrorBody({ code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED' }));
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const task = await taskService.getTaskById(tenant_id, req.params.id);
@@ -716,7 +700,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json(buildErrorBody({ code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED' }));
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const { action, taskIds, payload } = req.body;
@@ -757,11 +741,7 @@ class TaskController {
 
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       await taskStatusService.changeStatus(tenant_id, id, status, {
@@ -788,11 +768,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       await taskStatusService.changeStatus(tenant_id, req.params.id, 'IN_PROGRESS', {
         actorId,
@@ -812,11 +788,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       await taskStatusService.changeStatus(tenant_id, req.params.id, 'PENDING_REVIEW', {
         actorId,
@@ -836,11 +808,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const taskId = req.params.id;
@@ -891,11 +859,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       await taskStatusService.changeStatus(tenant_id, req.params.id, 'CANCELLED', {
         actorId,
@@ -915,11 +879,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const reason = req.body?.reason || req.body?.blockedReason || null;
       await taskStatusService.changeStatus(tenant_id, req.params.id, 'BLOCKED', {
@@ -941,11 +901,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       await taskStatusService.changeStatus(tenant_id, req.params.id, 'IN_PROGRESS', {
         actorId,
@@ -965,20 +921,18 @@ class TaskController {
       const { tenant_id } = req.user;
       const actorId = await resolveEmployeeId(tenant_id, req.user);
       if (!actorId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const newAssignee =
         req.body?.assigned_to_employee_id || req.body?.assignedToEmployeeId || req.body?.assigneeId;
       if (!newAssignee) {
-        return res.status(400).json({
-          success: false,
-          error: 'assignedToEmployeeId is required',
-          code: 'VALIDATION_ERROR'
-        });
+        return res.status(400).json(
+          buildErrorBody({
+            code: 'VALIDATION_ERROR',
+            message: 'assignedToEmployeeId (or assigned_to_employee_id / assigneeId) is required',
+            details: ['assignee reference missing']
+          })
+        );
       }
       const newAssigneeOid = await resolveEmployeeIdToObjectId(tenant_id, newAssignee, { actorId });
       const task = await taskService.reassignTask(tenant_id, req.params.id, newAssigneeOid, actorId);
@@ -997,11 +951,7 @@ class TaskController {
         limit: req.query.limit
       });
       if (data === null) {
-        return res.status(404).json({
-          success: false,
-          error: 'Task not found',
-          code: 'TASK_001_NOT_FOUND'
-        });
+        return res.status(404).json(buildErrorBody({ code: 'TASK_001_NOT_FOUND' }));
       }
       res.json({ success: true, data, message: 'Task activities retrieved successfully' });
     } catch (error) {
@@ -1016,11 +966,7 @@ class TaskController {
       const { tenant_id } = req.user;
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const rating = Number(req.body.rating);

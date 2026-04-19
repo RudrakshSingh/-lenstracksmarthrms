@@ -3,12 +3,14 @@ const router = express.Router();
 const financialController = require('../controllers/financialController');
 const invoiceController = require('../controllers/invoiceController');
 const { authenticate } = require('../middleware/auth.middleware');
+const { enforceTenantContext } = require('../middleware/tenantContext.middleware');
 const { requireRole, requirePermission } = require('../middleware/rbac.middleware');
-const { validateRequest } = require('../middleware/validateRequest.middleware');
+const { validateRequest } = require('../middleware/validateRequest.wrapper');
 const Joi = require('joi');
 
 // All financial routes require authentication
 router.use(authenticate);
+router.use(enforceTenantContext);
 
 // P&L Management Routes
 router.post(
@@ -40,11 +42,23 @@ router.post(
   financialController.createExpense
 );
 
+router.post(
+  '/expenses/salary-reflection',
+  requireRole(['admin', 'manager', 'accountant', 'hr']),
+  financialController.reflectSalaryExpense
+);
+
 router.get(
   '/expenses',
   requireRole(['admin', 'manager', 'store_manager', 'accountant']),
   requirePermission('view_expenses'),
   financialController.getExpenses
+);
+
+router.get(
+  '/expenses/by-source/:sourceRefId',
+  requireRole(['admin', 'manager', 'store_manager', 'accountant', 'hr']),
+  financialController.getExpenseBySourceRef
 );
 
 router.post(
@@ -118,6 +132,13 @@ router.get(
   requireRole(['admin', 'manager', 'accountant']),
   requirePermission('view_financial_dashboard'),
   financialController.getFinancialDashboard
+);
+
+// Payroll to Finance Posting (Phase 1 bridge)
+router.post(
+  '/payroll/posting',
+  requireRole(['admin', 'manager', 'accountant', 'hr']),
+  financialController.createPayrollPosting
 );
 
 // Invoice Management Routes

@@ -1,5 +1,6 @@
 const performanceManagementService = require('../services/performanceManagement.service');
 const logger = require('../config/logger');
+const { actorUnresolvedBody } = require('../utils/apiError.util');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
 
@@ -114,10 +115,7 @@ class PerformanceManagementController {
     try {
       const employeeId = await resolveEmployeeId(req.user.tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
       const row = await performanceManagementService.acknowledgeReview(
         req.user.tenant_id,

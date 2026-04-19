@@ -1,9 +1,55 @@
 const User = require('../models/User.model');
-const Role = require('../models/Role.model');
 const Store = require('../models/Store.model');
 const bcrypt = require('bcryptjs');
 const logger = require('../config/logger');
 const { generateTokens } = require('../config/jwt');
+const { promotePeopleManagerById } = require('../utils/peopleManagerRoleSync');
+
+function normalizeTenantId(value) {
+  return value == null ? '' : String(value).toLowerCase().trim();
+}
+
+function tenantHeader(req) {
+  return normalizeTenantId(req.get('X-Tenant-Id') || req.get('x-tenant-id'));
+}
+
+/** Non–super-admin: require token tenant; optional header must match token. */
+function resolveActorTenantForMutation(req) {
+  const actorRole = String(req.user?.role || '').toLowerCase();
+  if (actorRole === 'superadmin') {
+    return { ok: true, tenantId: tenantHeader(req) || null, superadmin: true };
+  }
+  const tt = normalizeTenantId(req.user?.tenantId);
+  if (!tt) {
+    return { ok: false, status: 403, message: 'Token tenant is missing', code: 'TENANT_REQUIRED' };
+  }
+  const headerTenant = tenantHeader(req);
+  if (headerTenant && headerTenant !== tt) {
+    return { ok: false, status: 403, message: 'X-Tenant-Id does not match token tenant', code: 'TENANT_MISMATCH' };
+  }
+  return { ok: true, tenantId: tt, superadmin: false };
+}
+
+function assertAccessToTargetRealUser(req, targetUser) {
+  if (!targetUser) {
+    return { ok: false, status: 404, message: 'User not found' };
+  }
+  const actorRole = String(req.user?.role || '').toLowerCase();
+  const ut = normalizeTenantId(targetUser.tenantId);
+  if (actorRole === 'superadmin') {
+    const ht = tenantHeader(req);
+    if (ht && ht !== ut) {
+      return { ok: false, status: 404, message: 'User not found' };
+    }
+    return { ok: true };
+  }
+  const gate = resolveActorTenantForMutation(req);
+  if (!gate.ok) return gate;
+  if (ut !== gate.tenantId) {
+    return { ok: false, status: 404, message: 'User not found' };
+  }
+  return { ok: true };
+}
 
 /**
  * Real User Registration Controller
@@ -37,8 +83,25 @@ const registerRealUser = async (req, res, next) => {
       });
     }
 
+    const actorRole = String(req.user?.role || '').toLowerCase();
+    let registrationTenantId;
+    if (actorRole === 'superadmin') {
+      registrationTenantId = tenantHeader(req) || normalizeTenantId(req.body.tenant_id) || 'default';
+    } else {
+      const gate = resolveActorTenantForMutation(req);
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          success: false,
+          message: gate.message,
+          ...(gate.code ? { code: gate.code } : {})
+        });
+      }
+      registrationTenantId = gate.tenantId;
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({
+      tenantId: registrationTenantId,
       $or: [
         { email: email.toLowerCase() },
         { employee_id: employee_id.toUpperCase() }
@@ -83,10 +146,17 @@ const registerRealUser = async (req, res, next) => {
           message: 'Reporting manager not found'
         });
       }
+      if (normalizeTenantId(reportingManager.tenantId) !== registrationTenantId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Reporting manager must belong to the same tenant'
+        });
+      }
     }
 
     // Create user data
     const userData = {
+      tenantId: registrationTenantId,
       employee_id: employee_id.toUpperCase(),
       first_name: first_name.trim(),
       last_name: last_name.trim(),
@@ -107,6 +177,15 @@ const registerRealUser = async (req, res, next) => {
 
     const user = new User(userData);
     await user.save();
+
+    if (reportingManager) {
+      try {
+        const sync = await promotePeopleManagerById(reportingManager._id);
+        logger.info('Reporting-manager role sync', { targetManagerId: reportingManager._id, sync });
+      } catch (e) {
+        logger.warn('promotePeopleManagerById failed (non-blocking)', { error: e.message });
+      }
+    }
 
     // Populate the response
     await user.populate([
@@ -164,6 +243,21 @@ const getRealUsers = async (req, res, next) => {
     } = req.query;
 
     const filter = { is_active: true };
+
+    const actorRole = String(req.user?.role || '').toLowerCase();
+    if (actorRole !== 'superadmin') {
+      const gate = resolveActorTenantForMutation(req);
+      if (!gate.ok) {
+        return res.status(gate.status).json({
+          success: false,
+          message: gate.message,
+          ...(gate.code ? { code: gate.code } : {})
+        });
+      }
+      filter.tenantId = gate.tenantId;
+    } else if (tenantHeader(req)) {
+      filter.tenantId = tenantHeader(req);
+    }
 
     // Apply filters
     if (role) filter.role = role;
@@ -225,10 +319,12 @@ const getRealUser = async (req, res, next) => {
       .populate('reporting_manager', 'first_name last_name role email')
       .select('-password');
 
-    if (!user) {
-      return res.status(404).json({
+    const access = assertAccessToTargetRealUser(req, user);
+    if (!access.ok) {
+      return res.status(access.status).json({
         success: false,
-        message: 'User not found'
+        message: access.message,
+        ...(access.code ? { code: access.code } : {})
       });
     }
 
@@ -252,11 +348,22 @@ const updateRealUser = async (req, res, next) => {
     const { id } = req.params;
     const updateData = req.body;
 
+    const existingTarget = await User.findById(id).select('tenantId');
+    const access = assertAccessToTargetRealUser(req, existingTarget);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        message: access.message,
+        ...(access.code ? { code: access.code } : {})
+      });
+    }
+
     // Remove sensitive fields
     delete updateData.password;
     delete updateData._id;
     delete updateData.created_at;
     delete updateData.created_by;
+    delete updateData.tenantId;
 
     // Validate role if provided
     if (updateData.role) {
@@ -289,6 +396,12 @@ const updateRealUser = async (req, res, next) => {
           message: 'Reporting manager not found'
         });
       }
+      if (normalizeTenantId(manager.tenantId) !== normalizeTenantId(existingTarget.tenantId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Reporting manager must belong to the same tenant'
+        });
+      }
     }
 
     updateData.updated_by = req.user._id;
@@ -308,6 +421,15 @@ const updateRealUser = async (req, res, next) => {
         success: false,
         message: 'User not found'
       });
+    }
+
+    if (updateData.reporting_manager) {
+      try {
+        const sync = await promotePeopleManagerById(updateData.reporting_manager);
+        logger.info('Reporting-manager role sync (update)', { targetManagerId: updateData.reporting_manager, sync });
+      } catch (e) {
+        logger.warn('promotePeopleManagerById failed (non-blocking)', { error: e.message });
+      }
     }
 
     logger.info('Real user updated successfully', {
@@ -335,6 +457,16 @@ const deactivateRealUser = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
+
+    const existingTarget = await User.findById(id).select('tenantId');
+    const access = assertAccessToTargetRealUser(req, existingTarget);
+    if (!access.ok) {
+      return res.status(access.status).json({
+        success: false,
+        message: access.message,
+        ...(access.code ? { code: access.code } : {})
+      });
+    }
 
     const user = await User.findByIdAndUpdate(
       id,

@@ -192,9 +192,19 @@ class TransferWorker {
       if (newStore) employee.primary_store = newStore;
       if (newDepartment) employee.department = newDepartment;
       if (newDesignation) employee.designation = newDesignation;
-      if (newManager) employee.reporting_manager = newManager;
+      if (newManager) employee.reportingManager = String(newManager);
 
       await employee.save();
+
+      if (newManager) {
+        try {
+          const { promotePeopleManagerById } = require('../utils/peopleManagerRoleSync');
+          const sync = await promotePeopleManagerById(newManager);
+          logger.info('People-manager role sync (transfer)', { newManager, sync });
+        } catch (syncErr) {
+          logger.warn('peopleManagerRoleSync failed', { error: syncErr.message });
+        }
+      }
 
       logger.info('Employee details updated after transfer', {
         employeeId,

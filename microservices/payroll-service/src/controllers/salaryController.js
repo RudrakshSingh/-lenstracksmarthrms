@@ -1,7 +1,9 @@
 const Salary = require('../models/Salary.model');
+const PayrollRecord = require('../models/PayrollRecord.model');
 const User = require('../models/User.model');
 const logger = require('../config/logger');
 const { publishSalaryCalculated } = require('../utils/payrollEvents');
+const { reflectSalaryExpense } = require('../utils/financialServiceClient');
 
 // Calculate salary for an employee
 const calculateSalary = async (req, res) => {
@@ -535,11 +537,168 @@ const bulkCalculateSalaries = async (req, res) => {
   }
 };
 
+// Generate month-wise payroll records from active salaries
+const generateMonthlySalaryRecords = async (req, res) => {
+  try {
+    const { month, year } = req.body;
+    const userId = req.user.id;
+
+    if (!month || !year) {
+      return res.status(400).json({
+        success: false,
+        message: 'month and year are required'
+      });
+    }
+
+    const activeSalaries = await Salary.find({ is_active: true }).lean();
+    if (activeSalaries.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active salary structures found'
+      });
+    }
+
+    const payrollDocs = [];
+    let totalGross = 0;
+    let totalNet = 0;
+
+    for (const salary of activeSalaries) {
+      const payrollDoc = {
+        employee_code: salary.employee_id,
+        month: Number(month),
+        year: Number(year),
+        total_days: 30,
+        present_days: 30,
+        eligible_days: 30,
+        base_salary: Number(salary.gross_monthly || 0),
+        adjusted_gross: Number(salary.gross_monthly || 0),
+        target_sales: 0,
+        actual_sales: 0,
+        sales_percentage: 0,
+        sales_deduction: 0,
+        sales_incentive: 0,
+        basic_salary: Number(salary.basic_salary || 0),
+        hra: Number(salary.hra || 0),
+        da: 0,
+        special_allowance: Number(salary.special_allowance || 0),
+        variable_pay: Number(salary.variable_incentive || 0),
+        epf_employee: Number(salary.epf_employee || 0),
+        esic_employee: Number(salary.esic_employee || 0),
+        professional_tax: Number(salary.professional_tax || 0),
+        tds: Number(salary.tds || 0),
+        total_employee_deductions: Number(salary.total_deductions || 0),
+        net_take_home: Number(salary.net_take_home || 0),
+        epf_employer: Number(salary.epf_employer || 0),
+        esic_employer: Number(salary.esic_employer || 0),
+        gratuity: Number(salary.gratuity || 0),
+        total_employer_contributions: Number(salary.employer_contributions || 0),
+        monthly_ctc: Number(salary.monthly_ctc || 0),
+        annual_ctc: Number(salary.annual_ctc || 0),
+        performance_status: 'AVERAGE',
+        performance_color: 'YELLOW',
+        status: 'DRAFT'
+      };
+
+      await PayrollRecord.findOneAndUpdate(
+        { employee_code: salary.employee_id, month: Number(month), year: Number(year) },
+        { $set: payrollDoc, $setOnInsert: { created_by: userId } },
+        { upsert: true, new: true, runValidators: true }
+      );
+
+      totalGross += payrollDoc.adjusted_gross;
+      totalNet += payrollDoc.net_take_home;
+      payrollDocs.push(payrollDoc);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Month-wise salary records generated successfully',
+      data: {
+        month: Number(month),
+        year: Number(year),
+        total_employees: payrollDocs.length,
+        total_gross: totalGross,
+        total_net: totalNet
+      }
+    });
+  } catch (error) {
+    logger.error('Error generating month-wise salary records', { error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: 'Error generating month-wise salary records',
+      error: error.message
+    });
+  }
+};
+
+// Reflect salary month into finance expense layer
+const reflectMonthlySalaryExpense = async (req, res) => {
+  try {
+    const { month, year, store_id, payment_method = 'BANK_TRANSFER' } = req.body;
+
+    if (!month || !year || !store_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'month, year and store_id are required'
+      });
+    }
+
+    const monthlyRecords = await PayrollRecord.find({
+      month: Number(month),
+      year: Number(year)
+    }).lean();
+
+    if (monthlyRecords.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No payroll records found for the provided month and year'
+      });
+    }
+
+    const totalNetSalary = monthlyRecords.reduce((sum, rec) => sum + Number(rec.net_take_home || 0), 0);
+    const totalGrossSalary = monthlyRecords.reduce((sum, rec) => sum + Number(rec.adjusted_gross || 0), 0);
+
+    const response = await reflectSalaryExpense(
+      {
+        month: Number(month),
+        year: Number(year),
+        store_id,
+        payment_method,
+        employee_count: monthlyRecords.length,
+        total_gross_salary: totalGrossSalary,
+        total_net_salary: totalNetSalary
+      },
+      {
+        authorization: req.headers.authorization,
+        tenantId: req.headers['x-tenant-id'] || req.user?.tenantId,
+        companyId: req.headers['x-company-id'] || req.user?.companyId,
+        requestId: req.headers['x-request-id']
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Salary expense reflected to finance successfully',
+      data: response?.data || response
+    });
+  } catch (error) {
+    logger.error('Error reflecting salary expense to finance', {
+      error: error.response?.data?.message || error.message
+    });
+    return res.status(error.response?.status || 500).json({
+      success: false,
+      message: error.response?.data?.message || 'Failed to reflect salary expense to finance'
+    });
+  }
+};
+
 module.exports = {
   calculateSalary,
   getCurrentSalary,
   getSalaryHistory,
   updateSalary,
   getPayrollSummary,
-  bulkCalculateSalaries
+  bulkCalculateSalaries,
+  generateMonthlySalaryRecords,
+  reflectMonthlySalaryExpense
 };

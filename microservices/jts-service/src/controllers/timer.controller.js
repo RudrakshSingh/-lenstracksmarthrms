@@ -3,7 +3,7 @@ const logger = require('../config/logger');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
 const { serializeTimer, serializeTimerSession, serializeTimerBundle } = require('../utils/taskFrontend.mapper');
-const { buildErrorBody } = require('../utils/apiError.util');
+const { buildErrorBody, actorUnresolvedBody } = require('../utils/apiError.util');
 
 class TimerController {
   /**
@@ -17,7 +17,7 @@ class TimerController {
 
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json(buildErrorBody({ code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED' }));
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const started = await timerService.startTimer(tenant_id, employeeId, taskId, {
@@ -51,11 +51,7 @@ class TimerController {
 
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const timer = await timerService.stopTimer(tenant_id, employeeId, taskId);
@@ -83,11 +79,7 @@ class TimerController {
 
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const timer = await timerService.stopTimer(tenant_id, employeeId, taskId, { stopReason: 'PAUSE' });
@@ -111,20 +103,12 @@ class TimerController {
 
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const bundle = await timerService.getTimerBundleForTask(tenant_id, employeeId, taskId);
       if (bundle === null) {
-        return res.status(404).json({
-          success: false,
-          error: 'TASK_001_NOT_FOUND',
-          code: 'TASK_001_NOT_FOUND'
-        });
+        return res.status(404).json(buildErrorBody({ code: 'TASK_001_NOT_FOUND' }));
       }
 
       const data = serializeTimerBundle(bundle);
@@ -148,11 +132,7 @@ class TimerController {
 
       const rows = await timerService.listTimerSessionsForTask(tenant_id, taskId, { limit });
       if (rows === null) {
-        return res.status(404).json({
-          success: false,
-          error: 'Task not found',
-          code: 'TASK_001_NOT_FOUND'
-        });
+        return res.status(404).json(buildErrorBody({ code: 'TASK_001_NOT_FOUND' }));
       }
 
       res.json({
@@ -173,11 +153,7 @@ class TimerController {
 
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const timers = await timerService.getActiveTimers(tenant_id, employeeId);

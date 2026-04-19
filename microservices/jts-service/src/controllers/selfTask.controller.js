@@ -1,6 +1,7 @@
 const selfTaskService = require('../services/selfTask.service');
 const taskService = require('../services/task.service');
 const logger = require('../config/logger');
+const { actorUnresolvedBody } = require('../utils/apiError.util');
 const { toErrorPayload } = require('../utils/errorResponse');
 const { resolveEmployeeId } = require('../utils/actor.util');
 const { normalizeSelfTaskBody } = require('../utils/taskRequest.normalize');
@@ -17,11 +18,7 @@ class SelfTaskController {
 
       const employeeId = await resolveEmployeeId(tenant_id, req.user);
       if (!employeeId) {
-        return res.status(403).json({
-          success: false,
-          error: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED',
-          code: 'JTS_ACTOR_EMPLOYEE_NOT_RESOLVED'
-        });
+        return res.status(403).json(actorUnresolvedBody());
       }
 
       const body = normalizeSelfTaskBody(req.body);

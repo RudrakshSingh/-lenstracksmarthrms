@@ -42,6 +42,11 @@ async function assertNoPrivilegeEscalation({
   const newEff = new Set(after.effectivePermissions);
 
   for (const p of newEff) {
+    // Route/view tokens are compiled server-side for navigation/layout.
+    // They should not block business-permission edits via escalation checks.
+    if (typeof p === 'string' && (p.startsWith('route:/') || p.startsWith('view:'))) {
+      continue;
+    }
     if (!oldEff.has(p) && !actorSet.has(p)) {
       const err = new Error(
         `Cannot grant permission "${p}" — not in your effective access. Ask superadmin.`

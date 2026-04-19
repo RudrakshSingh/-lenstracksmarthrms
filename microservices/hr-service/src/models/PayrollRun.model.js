@@ -78,6 +78,21 @@ const payrollRunSchema = new mongoose.Schema({
   post_jv_date: {
     type: Date
   },
+  finance_posting_status: {
+    type: String,
+    enum: ['NOT_POSTED', 'POSTED', 'FAILED'],
+    default: 'NOT_POSTED',
+    index: true
+  },
+  finance_reference_number: {
+    type: String
+  },
+  finance_posted_at: {
+    type: Date
+  },
+  finance_error: {
+    type: String
+  },
   
   // Summary Statistics
   total_employees: {
@@ -267,6 +282,7 @@ const payrollRunSchema = new mongoose.Schema({
 // Indexes
 payrollRunSchema.index({ month: 1, year: 1 }, { unique: true });
 payrollRunSchema.index({ status: 1, created_at: 1 });
+payrollRunSchema.index({ run_id: 1, finance_posting_status: 1 });
 
 // Pre-save middleware
 payrollRunSchema.pre('save', function(next) {

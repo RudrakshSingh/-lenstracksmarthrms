@@ -1,6 +1,18 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../config/logger');
 
+async function enrichPermissionsIfAvailable(req, decoded) {
+  try {
+    const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
+    const { connectRedis } = require('../config/redis');
+    await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => connectRedis(), logger);
+  } catch (err) {
+    logger.warn('JWT permission enrichment skipped', {
+      reason: err.message
+    });
+  }
+}
+
 /**
  * Authentication middleware
  * Returns 401 (not 404) when authentication fails
@@ -119,9 +131,7 @@ const authenticate = async (req, res, next) => {
       };
     }
 
-    const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
-    const { connectRedis } = require('../config/redis');
-    await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => connectRedis(), logger);
+    await enrichPermissionsIfAvailable(req, decoded);
 
     next();
   } catch (error) {

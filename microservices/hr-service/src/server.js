@@ -1016,7 +1016,7 @@ const loadRoutes = () => {
     }
   });
 
-  // Proxy /api/jts/* and /hrms/api/jts/* to jts-service (HRMS-MFE may use apiBase /hrms/api)
+   // Proxy /api/jts/* and /hrms/api/jts/* to jts-service (HRMS-MFE may use apiBase /hrms/api)
   const JTS_SERVICE_URL = process.env.JTS_SERVICE_URL ||
     (process.env.K8S_ENV === 'true' ? 'http://jts-service:3018' : 'http://localhost:3018');
 
@@ -1159,6 +1159,16 @@ const loadRoutes = () => {
   } catch (error) {
     routesFailed.push({ route: 'payroll.routes.js', error: error.message });
     logger.error('payroll.routes.js failed to load', { error: error.message, stack: error.stack });
+  }
+
+  try {
+    const payrollWorkflowProxyRoutes = require('./routes/payrollWorkflowProxy.routes.js');
+    app.use('/api/hr', apiRateLimit, payrollWorkflowProxyRoutes);
+    routesLoaded.push('payrollWorkflowProxy.routes.js');
+    logger.info('payrollWorkflowProxy.routes.js loaded (gates + payroll runs → payroll-service)');
+  } catch (error) {
+    routesFailed.push({ route: 'payrollWorkflowProxy.routes.js', error: error.message });
+    logger.error('payrollWorkflowProxy.routes.js failed to load', { error: error.message, stack: error.stack });
   }
   
   try {
@@ -1837,6 +1847,8 @@ const startServer = async () => {
       routesInfo.push('GET /api/hr/roster');
       routesInfo.push('POST /api/hr/roster');
       routesInfo.push('POST /api/hr/roster/bulk');
+      routesInfo.push('POST /api/hr/policies/leave/types');
+      routesInfo.push('POST /api/hr/leave-policy/types (alias)');
       
       res.status(404).json({
         success: false,

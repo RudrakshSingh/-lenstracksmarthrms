@@ -26,7 +26,9 @@ spec:
         - name: ecr-registry-secret
       containers:
       - name: jts-service
-        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-jts-service:jts-ext-delete-202604080554
+        # deploy-jts-aws.sh pushes :TAG (git SHA) and :latest — use :latest so apply+restart pulls new code.
+        # Or pin an immutable tag after each release: kubectl set image deployment/jts-service ...
+        image: 383234048604.dkr.ecr.ap-south-1.amazonaws.com/etelios-jts-service:jts-api-errors-20260418
         imagePullPolicy: Always
         ports:
         - containerPort: 3018

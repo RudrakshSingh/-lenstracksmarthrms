@@ -7,7 +7,7 @@ const roleSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     lowercase: true,
-    enum: ['superadmin', 'admin', 'hr', 'manager', 'employee', 'accountant', 'store_manager', 'sales', 'optometrist']
+    enum: ['superadmin', 'admin', 'hr', 'manager', 'employee', 'accountant', 'finance', 'store_manager', 'sales', 'optometrist']
   },
   display_name: {
     type: String,
@@ -132,6 +132,12 @@ roleSchema.statics.createDefaultRoles = async function() {
       display_name: 'Accountant',
       description: 'Accounts, payroll touchpoints, AP, and employee master alignment',
       permissions: this.getDefaultPermissions('accountant')
+    },
+    {
+      name: 'finance',
+      display_name: 'Finance',
+      description: 'Finance operations; same default bundle as accountant (books + payroll finance path)',
+      permissions: this.getDefaultPermissions('finance')
     }
   ];
 

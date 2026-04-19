@@ -20,6 +20,18 @@ function verifyWithKnownSecrets(token) {
   throw lastError || new Error('Invalid token');
 }
 
+async function enrichPermissionsIfAvailable(req, decoded) {
+  try {
+    const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
+    const { connectRedis } = require('../config/redis');
+    await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => connectRedis(), logger);
+  } catch (err) {
+    logger.warn('JWT permission enrichment skipped', {
+      reason: err.message
+    });
+  }
+}
+
 /**
  * Authentication middleware
  * Returns 401 (not 404) when authentication fails
@@ -112,9 +124,7 @@ const authenticate = async (req, res, next) => {
           employee_id: decoded.employee_id || decoded.employeeId,
           permissions: Array.isArray(decoded.permissions) ? decoded.permissions : []
         };
-        const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
-        const { connectRedis } = require('../config/redis');
-        await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => connectRedis(), logger);
+        await enrichPermissionsIfAvailable(req, decoded);
         return next();
       }
 
@@ -129,7 +139,7 @@ const authenticate = async (req, res, next) => {
       req.user = {
         id: user._id,
         userId: user._id,
-        employee_id: user.employee_id,
+        employee_id: user.employee_id || decoded.employee_id || decoded.employeeId,
         name: user.name,
         email: user.email,
         role: user.role || decoded.role,
@@ -147,9 +157,7 @@ const authenticate = async (req, res, next) => {
       };
     }
 
-    const { enrichReqUserPermissionsFromJwtRedis } = require('../../../shared/middleware/enrichReqUserPermissionsFromJwtRedis');
-    const { connectRedis } = require('../config/redis');
-    await enrichReqUserPermissionsFromJwtRedis(req, decoded, () => connectRedis(), logger);
+    await enrichPermissionsIfAvailable(req, decoded);
 
     next();
   } catch (error) {

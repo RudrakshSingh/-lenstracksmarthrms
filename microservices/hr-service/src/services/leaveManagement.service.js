@@ -2,11 +2,13 @@ const LeavePolicy = require('../models/LeavePolicy.model');
 const LeaveLedger = require('../models/LeaveLedger.model');
 const LeaveRequest = require('../models/LeaveRequest.model');
 const User = require('../models/User.model');
+const Holiday = require('../models/Holiday.model');
 const mongoose = require('mongoose');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const httpStatusPkg = require('http-status');
 const httpStatus = httpStatusPkg.default || httpStatusPkg;
+const { evaluateLeaveRequestForCreate } = require('../utils/leavePolicyEvaluator');
 
 class LeaveManagementService {
   
@@ -29,24 +31,53 @@ class LeaveManagementService {
       if (!employee) {
         throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
       }
-      
-      // Find applicable policy based on role and store
-      const policy = await LeavePolicy.findOne({
-        $or: [
-          { role_group: employee.roleFamily },
-          { role_group: 'ALL' }
-        ],
-        $or: [
-          { store_ids: { $in: [employee.workLocation?.storeId] } },
-          { store_ids: { $size: 0 } }
-        ],
-        is_active: true,
-        applicable_from: { $lte: new Date() },
-        $or: [
-          { applicable_to: null },
-          { applicable_to: { $gte: new Date() } }
-        ]
-      }).sort({ version: -1 });
+
+      const tenantId = String(employee.tenantId || '').toLowerCase().trim() || 'default';
+      const rawStoreId = employee.workLocation?.storeId || employee.storeId || null;
+      const dept = String(employee.department || '').toUpperCase().trim();
+      const city = String(employee.workLocation?.city || '').toUpperCase().trim();
+
+      // LeavePolicy.store_ids are ObjectIds. Virtual work locations (e.g. "office") must not be
+      // queried against that array — only match a store when the id is a real ObjectId string.
+      const storeOrClauses = [{ store_ids: { $size: 0 } }];
+      if (rawStoreId) {
+        const s = String(rawStoreId).trim();
+        if (mongoose.Types.ObjectId.isValid(s)) {
+          try {
+            const oid = new mongoose.Types.ObjectId(s);
+            if (oid.toString() === s) {
+              storeOrClauses.push({ store_ids: oid });
+            }
+          } catch {
+            // ignore invalid cast
+          }
+        }
+      }
+
+      const and = [
+        {
+          $or: [{ tenantId }, { tenantId: { $exists: false } }]
+        },
+        {
+          $or: [{ role_group: employee.roleFamily }, { role_group: 'ALL' }]
+        },
+        {
+          $or: storeOrClauses
+        },
+        {
+          $or: [{ department_codes: { $size: 0 } }, ...(dept ? [{ department_codes: dept }] : [])]
+        },
+        {
+          $or: [{ location_codes: { $size: 0 } }, ...(city ? [{ location_codes: city }] : [])]
+        },
+        { is_active: true },
+        { applicable_from: { $lte: new Date() } },
+        {
+          $or: [{ applicable_to: null }, { applicable_to: { $gte: new Date() } }]
+        }
+      ];
+
+      const policy = await LeavePolicy.findOne({ $and: and }).sort({ applicable_from: -1, updatedAt: -1 });
       
       return policy;
     } catch (error) {
@@ -129,7 +160,7 @@ class LeaveManagementService {
       // Get leave policy (make it optional - if not found, allow with default settings)
       let policy = null;
       try {
-        policy = await this.getLeavePolicyForEmployee(employee_id);
+        policy = await this.getLeavePolicyForEmployee(String(employeeIdObj));
       } catch (error) {
         logger.warn('Leave policy not found, using default settings', { employee_id, error: error.message });
       }
@@ -164,17 +195,8 @@ class LeaveManagementService {
       // Get leave type config
       let leaveTypeConfig = policy.leave_types.find(lt => lt.leave_type === leave_type);
       if (!leaveTypeConfig) {
-        // If leave type not in policy, still allow but log warning
-        logger.warn(`Leave type ${leave_type} not in policy, allowing with default settings`, { employee_id, leave_type });
-        // Use default config for this leave type
-        const defaultConfig = {
-          leave_type: leave_type,
-          medical_certificate_required: false,
-          medical_certificate_after_days: 0,
-          blackout_dates: []
-        };
-        policy.leave_types.push(defaultConfig);
-        leaveTypeConfig = defaultConfig;
+        const err = new ApiError(httpStatus.BAD_REQUEST, `Leave type ${leave_type} is not enabled for this tenant`);
+        throw err;
       }
       
       // Check blackout dates (if method exists)
@@ -201,22 +223,23 @@ class LeaveManagementService {
       
       const balanceAvailable = ledger ? ledger.closing : 0;
       
-      // Calculate days
+      // Tenant policy evaluation (half-day, notice, overlaps, holidays/weekoffs, medical proof)
       let days = 1;
+      let medicalCertificateRequired = false;
       try {
-        if (typeof this.calculateLeaveDays === 'function') {
-          days = this.calculateLeaveDays(from_date, to_date, half_day);
-        } else {
-          // Simple calculation
-          const start = new Date(from_date);
-          const end = new Date(to_date);
-          const diffTime = Math.abs(end - start);
-          days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-          if (half_day) days = 0.5;
-        }
-      } catch (error) {
-        logger.warn('Error calculating leave days, using default', { error: error.message });
-        days = 1;
+        const evaluated = await evaluateLeaveRequestForCreate({
+          employee,
+          request: { leave_type, from_date, to_date, half_day, half_day_type, attachments },
+          policy,
+          tenantId: tenant,
+          HolidayModel: Holiday,
+          LeaveRequestModel: LeaveRequest
+        });
+        days = evaluated.days;
+        medicalCertificateRequired = !!evaluated.medicalCertificateRequired;
+      } catch (e) {
+        const code = e && e.statusCode ? e.statusCode : 400;
+        throw new ApiError(code, e.message || 'Leave validation failed');
       }
       
       // Check balance (only if policy has accrual rules)
@@ -225,10 +248,6 @@ class LeaveManagementService {
           throw new ApiError(httpStatus.BAD_REQUEST, `Insufficient leave balance. Available: ${balanceAvailable}, Requested: ${days}`);
         }
       }
-      
-      // Check medical certificate requirement
-      const medicalCertificateRequired = leaveTypeConfig.medical_certificate_required && 
-                                        days > (leaveTypeConfig.medical_certificate_after_days || 0);
       
       // Build approval chain (handle case where buildApprovalChain might not exist)
       let approvers = [];

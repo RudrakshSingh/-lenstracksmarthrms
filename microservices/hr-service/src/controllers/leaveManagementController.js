@@ -167,6 +167,98 @@ const updateLeaveType = async (req, res, next) => {
 };
 
 /**
+ * @desc Get tenant leave policy criteria ("form") + active policy summary
+ * @route GET /api/hr/policies/leave/criteria
+ * @access Private (HR/Admin)
+ */
+const getTenantLeavePolicyCriteria = async (req, res, next) => {
+  try {
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || req.user?.tenantId || 'default';
+
+    const policy = await LeavePolicy.findOne({ tenantId, is_active: true }).sort({ applicable_from: -1, updatedAt: -1 });
+
+    if (!policy) {
+      return sendSuccess(res, { policy: null }, 'No active leave policy found');
+    }
+
+    return sendSuccess(res, {
+      policy_id: policy.policy_id,
+      tenantId: policy.tenantId || tenantId,
+      name: policy.name,
+      version: policy.version,
+      applicable_from: policy.applicable_from,
+      applicable_to: policy.applicable_to,
+      role_group: policy.role_group,
+      store_ids: policy.store_ids || [],
+      department_codes: policy.department_codes || [],
+      location_codes: policy.location_codes || [],
+      tenant_criteria: policy.tenant_criteria || {},
+      accrual_rules: policy.accrual_rules || {},
+      leave_types: policy.leave_types || []
+    });
+  } catch (error) {
+    logger.error('Error in getTenantLeavePolicyCriteria:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc Save tenant leave policy criteria ("form")
+ * @route PUT /api/hr/policies/leave/criteria
+ * @access Private (HR/Admin)
+ */
+const saveTenantLeavePolicyCriteria = async (req, res, next) => {
+  try {
+    const tenantId = req.tenantId || req.get('X-Tenant-Id') || req.get('x-tenant-id') || req.user?.tenantId || 'default';
+    const body = req.body || {};
+
+    let policy = await LeavePolicy.findOne({ tenantId, is_active: true }).sort({ applicable_from: -1, updatedAt: -1 });
+
+    if (!policy) {
+      policy = new LeavePolicy({
+        policy_id: `POL-${tenantId}-${Date.now()}`,
+        name: `${tenantId} Leave Policy`,
+        version: '1.0',
+        role_group: 'ALL',
+        applicable_from: new Date(),
+        tenantId,
+        is_active: true,
+        created_by: req.user._id || req.user.id,
+        leave_types: []
+      });
+    } else if (!policy.tenantId) {
+      policy.tenantId = tenantId;
+    }
+
+    if (body.tenant_criteria && typeof body.tenant_criteria === 'object') {
+      policy.tenant_criteria = { ...(policy.tenant_criteria || {}), ...body.tenant_criteria };
+    }
+    if (Array.isArray(body.department_codes)) {
+      policy.department_codes = body.department_codes.map((d) => String(d).toUpperCase().trim()).filter(Boolean);
+    }
+    if (Array.isArray(body.location_codes)) {
+      policy.location_codes = body.location_codes.map((d) => String(d).toUpperCase().trim()).filter(Boolean);
+    }
+    if (body.role_group) policy.role_group = String(body.role_group).toUpperCase();
+    if (body.name) policy.name = String(body.name);
+    if (body.version) policy.version = String(body.version);
+    if (body.applicable_from) policy.applicable_from = new Date(body.applicable_from);
+    if (body.applicable_to !== undefined) policy.applicable_to = body.applicable_to ? new Date(body.applicable_to) : null;
+
+    if (Array.isArray(body.leave_types)) {
+      // Replace leave types wholesale (HR form mode). Keeps tenant configuration explicit.
+      policy.leave_types = body.leave_types;
+    }
+
+    await policy.save();
+    return sendSuccess(res, { policy_id: policy.policy_id }, 'Tenant leave policy criteria saved');
+  } catch (error) {
+    logger.error('Error in saveTenantLeavePolicyCriteria:', error);
+    next(error);
+  }
+};
+
+/**
  * Holidays Management
  */
 
@@ -846,6 +938,8 @@ module.exports = {
   // Leave Type Management
   createLeaveType,
   updateLeaveType,
+  getTenantLeavePolicyCriteria,
+  saveTenantLeavePolicyCriteria,
   
   // Holidays Management
   getHolidays,

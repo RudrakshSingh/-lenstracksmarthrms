@@ -23,13 +23,17 @@
 
 ---
 
-## 2) Unsupported endpoints — final decision (v1)
+## 2) Previously “unsupported” — now implemented (April 2026)
 
-| Capability | v1 decision | Frontend / alternative |
-|------------|-------------|-------------------------|
-| **`POST .../tasks/:id/force-complete`** | **Not implemented** | Use **`POST .../tasks/:id/complete`** (same privilege rules as today). If product needs “force” semantics, specify as a **v2** backend story (e.g. role-gated bypass). |
-| **`POST .../tasks/:id/extension-requests`** | **Not implemented** | Use **`POST .../tasks/:taskId/approvals`** with **`approval_type: "EXTENSION_APPROVAL"`**, **`approver_employee_id`**, and **`payload`** (e.g. requested due date + reason). |
-| **`POST .../tasks/bulk`** | **Not implemented** | **Out of scope for v1** unless product prioritises it. Frontend: sequential calls or batch UI with partial failure handling. |
+**Authoritative status:** see **`docs/JTS_BACKEND_GAP_CLOSURE_STATUS_APRIL_2026.md`**.
+
+| Capability | Status | Notes |
+|------------|--------|--------|
+| **`POST .../tasks/:id/force-complete`** | **Implemented** | Manager+ roles; bypasses checklist/timer blocks where service allows. Standard error body (`code`, `message`). |
+| **`POST .../tasks/:id/extension-requests`** | **Implemented** | Route exists on task stack (`task.routes.js`). |
+| **`POST .../tasks/bulk`** | **Implemented** | Body: `{ action, taskIds[], payload? }` — max 50 ids; see `task.controller.bulkTasks`. |
+
+Older rows below kept only as **history**; prefer the closure doc + OpenAPI when added.
 
 ---
 

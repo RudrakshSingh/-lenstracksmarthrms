@@ -18,6 +18,16 @@ const expenseSchema = new mongoose.Schema({
   },
   
   // Expense Details
+  source_module: {
+    type: String,
+    enum: ['MANUAL', 'PAYROLL'],
+    default: 'MANUAL',
+    index: true
+  },
+  source_ref_id: {
+    type: String,
+    index: true
+  },
   category: {
     type: String,
     required: true,
@@ -135,6 +145,23 @@ const expenseSchema = new mongoose.Schema({
   budget_category: String,
   budget_amount: Number,
   budget_variance: Number,
+
+  // Basic event logs
+  logs: [{
+    event: {
+      type: String,
+      required: true
+    },
+    actor_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    details: mongoose.Schema.Types.Mixed,
+    at: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   
   // Timestamps
   created_at: {
@@ -173,6 +200,7 @@ expenseSchema.index({ category: 1, expense_date: 1 });
 expenseSchema.index({ status: 1, approval_level: 1 });
 expenseSchema.index({ requested_by: 1, expense_date: 1 });
 expenseSchema.index({ vendor_id: 1, expense_date: 1 });
+expenseSchema.index({ source_module: 1, source_ref_id: 1 }, { unique: true, sparse: true });
 
 const Expense = mongoose.model('Expense', expenseSchema);
 

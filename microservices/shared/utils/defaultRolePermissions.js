@@ -17,7 +17,22 @@ const NARROW_DEFAULTS = {
     'view_transfer_requests', 'view_document_status', 'view_store_performance',
     'view_attendance_chart', 'view_employee_chart', 'view_asset_chart',
     'view_transfer_chart', 'view_document_chart', 'view_store_chart',
-    'view_recent_activities', 'view_pending_approvals', 'view_attendance_trends', 'view_employee_trends'
+    'view_recent_activities', 'view_pending_approvals', 'view_attendance_trends', 'view_employee_trends',
+    // Payroll workflow (HR admin / payroll ops)
+    'payroll_gates_read',
+    'payroll_run_execute',
+    'payroll_cycle_manage',
+    'payroll_hr_submit',
+    'payroll_freeze',
+    'payroll_payslip_manage',
+    'payroll_reports_export',
+    'payroll_audit_read',
+    'read_employee_master',
+    'write_employee_master',
+    'read_payroll',
+    'write_payroll',
+    'read_payroll_summary',
+    'lock_payroll'
   ],
   manager: [
     'read_users', 'write_users', 'create_users', 'update_users',
@@ -36,7 +51,8 @@ const NARROW_DEFAULTS = {
     'read_reports', 'read_assets', 'read_documents', 'upload_documents', 'download_documents',
     'read_transfers', 'write_transfers', 'create_transfers', 'read_stores',
     'view_dashboard', 'view_attendance_summary', 'view_asset_summary', 'view_document_status',
-    'view_attendance_chart', 'view_asset_chart', 'view_document_chart'
+    'view_attendance_chart', 'view_asset_chart', 'view_document_chart',
+    'payroll_payslip_self'
   ],
   /**
    * Accounts / finance: books, payroll touchpoints, vendor/AP, plus employee master for salary alignment.
@@ -96,9 +112,20 @@ const NARROW_DEFAULTS = {
     'view_dashboard',
     'view_employee_count',
     'view_recent_activities',
-    'view_compliance_status'
+    'view_compliance_status',
+    // Payroll — finance path
+    'payroll_gates_read',
+    'payroll_finance_approve',
+    'payroll_post_finance',
+    'payroll_reconcile',
+    'payroll_reports_export',
+    'payroll_audit_read',
+    'payroll_payslip_manage'
   ]
 };
+
+/** Finance role (when distinct from accountant) — same payroll finance bundle */
+NARROW_DEFAULTS.finance = [...(NARROW_DEFAULTS.accountant || [])];
 
 function getDefaultRolePermissions(roleName) {
   const n = String(roleName || '').toLowerCase();

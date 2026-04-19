@@ -3,7 +3,9 @@
  * effective = role_permissions ∪ custom_permissions ∪ legacy user.permissions \ permission_denials
  */
 
-const PERMISSION_CATALOG_VERSION = 1;
+const PERMISSION_CATALOG_VERSION = 4;
+
+const { SHELL_ROUTE_CODES } = require('./shellRoutes.constants');
 
 const PERMISSION_GROUPS = [
   {
@@ -224,7 +226,20 @@ const PERMISSION_GROUPS = [
       { id: 'read_payroll', label: 'Read payroll' },
       { id: 'read_payroll_summary', label: 'Payroll summary' },
       { id: 'lock_payroll', label: 'Lock payroll' },
-      { id: 'read_analytics', label: 'Read analytics' }
+      { id: 'read_analytics', label: 'Read analytics' },
+      { id: 'payroll_gates_read', label: 'Payroll — view readiness gates' },
+      { id: 'payroll_run_execute', label: 'Payroll — run dry/final payroll' },
+      { id: 'payroll_cycle_manage', label: 'Payroll — initiate cycle' },
+      { id: 'payroll_hr_submit', label: 'Payroll — HR submit for approval' },
+      { id: 'payroll_finance_approve', label: 'Payroll — finance approve/reject' },
+      { id: 'payroll_freeze', label: 'Payroll — freeze (immutable)' },
+      { id: 'payroll_post_finance', label: 'Payroll — post to finance' },
+      { id: 'payroll_reconcile', label: 'Payroll — reconcile with finance' },
+      { id: 'payroll_cycle_unlock', label: 'Payroll — unlock frozen cycle (super admin)' },
+      { id: 'payroll_audit_read', label: 'Payroll — read audit trail' },
+      { id: 'payroll_reports_export', label: 'Payroll — statutory/report export' },
+      { id: 'payroll_payslip_manage', label: 'Payroll — generate/send payslips' },
+      { id: 'payroll_payslip_self', label: 'Payroll — download own payslip (self-service)' }
     ]
   },
   {
@@ -324,6 +339,14 @@ const PERMISSION_GROUPS = [
       { id: 'view_incentive_analytics', label: 'Incentive analytics' },
       { id: 'view_incentive_dashboard', label: 'Incentive dashboard' }
     ]
+  },
+  {
+    id: 'shell_routes',
+    label: 'Shell routes (navigation)',
+    items: SHELL_ROUTE_CODES.map((routeCode) => ({
+      id: routeCode,
+      label: `Route: ${routeCode.replace(/^route:/, '')}`
+    }))
   }
 ];
 
@@ -332,24 +355,53 @@ function buildAllCodes() {
   for (const g of PERMISSION_GROUPS) {
     for (const it of g.items) set.add(it.id);
   }
+  // Shell route tokens are first-class permission strings for host navigation gating.
+  for (const r of SHELL_ROUTE_CODES) set.add(r);
   return [...set].sort();
 }
 
 const ALL_PERMISSION_CODES = buildAllCodes();
 const PERMISSION_CODE_SET = new Set(ALL_PERMISSION_CODES);
 
+function isShellRoutePermissionToken(code) {
+  if (typeof code !== 'string') return false;
+  const c = code.trim();
+  if (!c.startsWith('route:/')) return false;
+  // conservative: lowercase path segments, no whitespace
+  if (c !== c.toLowerCase()) return false;
+  if (/\s/.test(c)) return false;
+  return true;
+}
+
+function isViewPermissionToken(code) {
+  if (typeof code !== 'string') return false;
+  const c = code.trim();
+  if (!c.startsWith('view:')) return false;
+  if (/\s/.test(c)) return false;
+  // view:<area>:<variant> (extra segments allowed but must be sane)
+  const parts = c.split(':').filter(Boolean);
+  return parts.length >= 3;
+}
+
 function isValidPermissionCode(code) {
-  return typeof code === 'string' && PERMISSION_CODE_SET.has(code.trim());
+  if (typeof code !== 'string') return false;
+  const c = code.trim();
+  if (!c) return false;
+  if (PERMISSION_CODE_SET.has(c)) return true;
+  if (isShellRoutePermissionToken(c)) return true;
+  if (isViewPermissionToken(c)) return true;
+  return false;
 }
 
 function filterValidCodes(arr) {
   if (!Array.isArray(arr)) return [];
-  return [...new Set(arr.map((c) => String(c).trim()).filter((c) => PERMISSION_CODE_SET.has(c)))];
+  return [...new Set(arr.map((c) => String(c).trim()).filter((c) => isValidPermissionCode(c)))];
 }
 
 module.exports = {
   PERMISSION_CATALOG_VERSION,
   PERMISSION_GROUPS,
+  SHELL_ROUTE_CODES,
   ALL_PERMISSION_CODES,
   PERMISSION_CODE_SET,
   isValidPermissionCode,

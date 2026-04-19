@@ -9,6 +9,21 @@ const { uploadToBlobStorage } = require('../middleware/blobUpload.middleware');
 const asyncHandler = require('../utils/asyncHandler');
 const Joi = require('joi');
 
+/** Multer / clients may send "" for optional GPS fields; Joi.number() would fail without this. */
+function stripEmptyClockCoords(req, res, next) {
+  if (req.body && typeof req.body === 'object') {
+    ['latitude', 'longitude'].forEach((key) => {
+      const v = req.body[key];
+      if (v === '' || v == null) {
+        delete req.body[key];
+      } else if (typeof v === 'string' && v.trim() === '') {
+        delete req.body[key];
+      }
+    });
+  }
+  next();
+}
+
 const {
   clockIn,
   clockOut,
@@ -87,6 +102,7 @@ router.post('/clock-in',
   // All active employees can clock-in (no special permission needed)
   upload.single('selfie'), // Selfie upload is optional
   uploadToBlobStorage, // Upload selfie to AWS S3
+  stripEmptyClockCoords,
   validateRequest(clockInSchema),
   clockIn
 );
@@ -98,6 +114,7 @@ router.post('/check-in',
   // All active employees can clock-in (no special permission needed)
   upload.single('selfie'), // Selfie upload is optional
   uploadToBlobStorage, // Upload selfie to AWS S3
+  stripEmptyClockCoords,
   validateRequest(clockInSchema),
   clockIn
 );
@@ -108,6 +125,7 @@ router.post('/clock-out',
   // All active employees can clock-out (no special permission needed)
   upload.single('selfie'), // Selfie upload is optional
   uploadToBlobStorage, // Upload selfie to AWS S3
+  stripEmptyClockCoords,
   validateRequest(clockOutSchema),
   clockOut
 );
@@ -119,6 +137,7 @@ router.post('/check-out',
   // All active employees can clock-out (no special permission needed)
   upload.single('selfie'), // Selfie upload is optional
   uploadToBlobStorage, // Upload selfie to AWS S3
+  stripEmptyClockCoords,
   validateRequest(clockOutSchema),
   clockOut
 );

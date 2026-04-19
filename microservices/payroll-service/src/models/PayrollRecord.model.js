@@ -184,8 +184,50 @@ const payrollRecordSchema = new mongoose.Schema({
   // Payroll Status
   status: {
     type: String,
-    enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'LOCKED', 'PAID'],
+    enum: [
+      'DRAFT',
+      'SUBMITTED',
+      'APPROVED',
+      'LOCKED',
+      'PAID',
+      'DRAFT_HR',
+      'HR_APPROVED',
+      'FINANCE_REVIEW',
+      'FINANCE_APPROVED',
+      'SLIP_FROZEN',
+      'POSTED_TO_FINANCE',
+      'COMPLETED',
+      'PROCESSING',
+      'FROZEN',
+      'POSTED',
+      'RECONCILED',
+      'SENT_BACK_TO_HR'
+    ],
     default: 'DRAFT'
+  },
+  external_ref_id: {
+    type: String,
+    index: true
+  },
+  finance_record_id: {
+    type: String,
+    index: true
+  },
+  company_id: {
+    type: String,
+    index: true
+  },
+  brand_id: {
+    type: String,
+    index: true
+  },
+  branch_id: {
+    type: String,
+    index: true
+  },
+  department_id: {
+    type: String,
+    index: true
   },
   
   // Approval Workflow

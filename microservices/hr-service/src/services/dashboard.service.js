@@ -1417,13 +1417,14 @@ const getUnifiedDashboard = async (userId, role, tenantId = null, req = null) =>
 
     // Leave balance widget (✅ LIVE - integrated with leave service)
     try {
-      const leaveBalance = await leaveService.getLeaveBalance(user.employeeId);
+      const leaveEmployeeKey = user.employeeId || user.employee_id;
+      const leaveBalance = await leaveService.getLeaveBalance(leaveEmployeeKey, scopedTenantId);
       
       // Get pending leave requests count
       const pendingLeavesCount = await LeaveRequest.countDocuments({
         tenantId: scopedTenantId,
         employee_id: user._id,
-        status: 'pending'
+        status: 'PENDING'
       });
       
       // Calculate totals for root level fields
@@ -2130,7 +2131,7 @@ const getStoreDashboard = async (storeId, managerId, tenantId) => {
 /**
  * Get HRMS Dashboard
  */
-const getHRMSDashboard = async (userId, role, tenantId) => {
+const getHRMSDashboard = async (userId, role, tenantId, req = null) => {
   try {
     logger.info('Fetching HRMS dashboard', { userId, role });
 
@@ -2179,15 +2180,52 @@ const getHRMSDashboard = async (userId, role, tenantId) => {
         upcomingEvents: []
       };
     } else {
-      // Employee Self-Service
-      const user = await User.findOne({ _id: userId, tenantId }).lean();
+      // Employee self-service — same live data as GET /api/hr/dashboard (leave balances, attendance summary, tasks, performance)
+      const unified = await getUnifiedDashboard(userId, role, tenantId, req);
+      const att = unified.widgets?.attendance || {};
+      const weekly = att.weekly || {};
+      const leaves = unified.widgets?.leaves || {};
+      const tasks = unified.widgets?.tasks || {};
+      const perf = unified.widgets?.performance || {};
 
       return {
         myInfo: {
-          attendance: { present: 22, absent: 0, leave: 0 },
-          leaves: { available: 15, pending: 0 },
-          tasks: { assigned: 0, completed: 0 },
-          performance: { score: 75, grade: 'B' }
+          attendance: {
+            present:
+              typeof att.presentDays === 'number'
+                ? att.presentDays
+                : Number(weekly.present) || 0,
+            absent:
+              typeof att.absentDays === 'number'
+                ? att.absentDays
+                : Number(weekly.absent) || 0,
+            leave:
+              typeof att.onLeaveDays === 'number'
+                ? att.onLeaveDays
+                : Number(weekly.onLeave) || 0
+          },
+          leaves: {
+            available: leaves.available ?? 0,
+            used: leaves.used ?? 0,
+            total: leaves.total ?? 0,
+            pending: leaves.pending ?? 0,
+            ...(leaves.breakdown ? { breakdown: leaves.breakdown } : {}),
+            ...(leaves.leaveYear != null ? { leaveYear: leaves.leaveYear } : {})
+          },
+          tasks: {
+            assigned:
+              typeof tasks.total === 'number'
+                ? tasks.total
+                : Number(tasks.pending || 0) + Number(tasks.completed || 0),
+            pending: tasks.pending ?? 0,
+            completed: tasks.completed ?? 0
+          },
+          performance: {
+            score: perf.score ?? 0,
+            grade: perf.grade ?? 'N/A',
+            xp: perf.xp ?? 0,
+            level: perf.level ?? 0
+          }
         },
         recentActivities: [],
         upcomingEvents: []

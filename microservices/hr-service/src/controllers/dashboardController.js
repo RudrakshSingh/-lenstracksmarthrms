@@ -470,7 +470,7 @@ const getHRMSDashboard = async (req, res, next) => {
     
     const userRole = role || req.user.role?.name || 'employee';
     
-    const dashboardData = await dashboardService.getHRMSDashboard(userId, userRole, tenantId);
+    const dashboardData = await dashboardService.getHRMSDashboard(userId, userRole, tenantId, req);
     
     return sendSuccess(res, dashboardData, 'HRMS dashboard data retrieved successfully', null, 200);
   } catch (error) {

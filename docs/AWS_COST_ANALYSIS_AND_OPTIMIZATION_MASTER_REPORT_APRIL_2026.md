@@ -298,7 +298,7 @@ Once enabled, this report will be upgraded with:
 
 ---
 
-## 13) Final Recommendation (What to do right now)
+## 13) Final Checks
 
 Start immediately with lowest-risk highest-impact trio:
 1. EKS desired nodes 8 -> 6 (monitored rollout)

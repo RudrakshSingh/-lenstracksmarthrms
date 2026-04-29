@@ -105,7 +105,7 @@ Response body mein `code` / `message` / `hint` aane par unhe user-friendly strin
 
 ---
 
-## 7. Checklist (ASAP — frontend)
+## 7. Checklist (ASAP — frontend) 
 
 1. Login ke baad **access token** + **tenant id** persist karo.  
 2. Har attendance (aur auth) call par **`Authorization: Bearer …`** + **`X-Tenant-Id`**.  

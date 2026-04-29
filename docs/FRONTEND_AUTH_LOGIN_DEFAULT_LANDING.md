@@ -3,6 +3,8 @@
 **Audience:** Shell / HRMS MFE / Next.js BFF developers  
 **Backend change:** `auth-service` — deploy this revision to production for the field to appear live.
 
+**Full walkthrough (every field, flows, troubleshooting):** [`FRONTEND_AUTH_AND_ROUTING_COMPLETE_GUIDE.md`](./FRONTEND_AUTH_AND_ROUTING_COMPLETE_GUIDE.md)
+
 ---
 
 ## What changed
@@ -70,10 +72,15 @@ Aligned with `microservices/hr-service` `getRedirectUrlForRole` **path segment**
 
 ---
 
-## Deploy / prod
+## Deploy / prod (AWS + Docker, no git required for rollout)
 
-- **Git:** Changes live in repo after merge/push to your default branch.
-- **Production API:** Redeploy **`auth-service`** with the build that includes `defaultLandingPath` in the login handler. Until then, the field will be missing — **optional-chain** in FE: `data.defaultLandingPath ?? fallbackFromRole(data.user.role)`.
+From repo root (Docker → ECR `ap-south-1` → `kubectl` rollout `etelios-prod/auth-service`):
+
+```bash
+IMAGE_TAG=auth-default-landing-$(date +%Y%m%d) bash scripts/deploy-auth-service-aws-prod.sh
+```
+
+Override if needed: `AWS_REGION`, `ECR_ACCOUNT`, `K8S_NAMESPACE`. **Production API** serves `defaultLandingPath` after this image is live. Until then, FE can use: `data.defaultLandingPath ?? fallbackFromRole(data.user.role)`.
 
 ---
 

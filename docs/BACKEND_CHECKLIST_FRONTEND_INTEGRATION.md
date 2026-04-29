@@ -13,6 +13,8 @@
 | Production backend | `https://api.etelios.com` | Auth, HR, Attendance, etc. |
 | App (Shell) | `https://app.etelios.com` | Frontend – proxy to backend |
 
+**503 only on `app.etelios.com/api/...` but `api.etelios.com` OK:** Not an auth-handler bug — Next BFF / app host. Optional cluster-side fix: same ALB + ingress host for `app.etelios.com` → see `docs/K8S_APP_ETELIOS_SAME_ALB_OPTION.md`.
+
 ---
 
 ## 2. Auth – Working

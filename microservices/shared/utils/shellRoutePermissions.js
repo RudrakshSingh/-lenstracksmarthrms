@@ -173,10 +173,11 @@ function deriveViewPermissionsFromEffective(effectivePermissions = [], roleName 
   return [...views].sort();
 }
 
-function compileShellRouteAndViewPermissions(effectivePermissions = [], roleName = '') {
+function compileShellRouteAndViewPermissions(effectivePermissions = [], roleName = '', deniedPermissions = []) {
   const rn = String(roleName || '').toLowerCase().trim();
   const baseEffective = [...new Set((effectivePermissions || []).map((p) => String(p).trim()).filter(Boolean))];
   const effectiveSet = new Set(baseEffective);
+  const deniedSet = new Set((deniedPermissions || []).map((p) => String(p).trim()).filter(Boolean));
 
   let routes = [];
   if (rn === 'admin' || rn === 'superadmin' || hasWildcardAll(effectiveSet)) {
@@ -223,7 +224,8 @@ function compileShellRouteAndViewPermissions(effectivePermissions = [], roleName
   const views = deriveViewPermissionsFromEffective(baseEffective, rn);
 
   const merged = new Set([...baseEffective, ...routes, ...views]);
-  return [...merged].sort();
+  if (deniedSet.size === 0) return [...merged].sort();
+  return [...merged].filter((p) => !deniedSet.has(p)).sort();
 }
 
 module.exports = {

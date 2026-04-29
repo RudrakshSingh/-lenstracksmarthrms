@@ -3,6 +3,8 @@
 **Audience:** Frontend developers (shell / HRMS MFE).  
 **Last verified:** Auth login response shape from `auth-service`; live check for `admin@lenstrack.com` @ `lenstrack` tenant.
 
+**Comprehensive guide:** [`FRONTEND_AUTH_AND_ROUTING_COMPLETE_GUIDE.md`](./FRONTEND_AUTH_AND_ROUTING_COMPLETE_GUIDE.md)
+
 ---
 
 ## 1. What the backend actually returns (canonical login)

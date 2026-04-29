@@ -69,7 +69,7 @@ async function resolveEffectivePermissionsForUser(userDoc) {
     legacyUserPermissions
   });
 
-  const compiledEffective = compileShellRouteAndViewPermissions(effective, roleName);
+  const compiledEffective = compileShellRouteAndViewPermissions(effective, roleName, permission_denials);
 
   const result = {
     roleName,

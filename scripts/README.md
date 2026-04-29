@@ -16,3 +16,17 @@ This folder is organized for readability.
 Notes:
 - No script was deleted in this cleanup.
 - Use `rg --files scripts` to locate scripts quickly.
+
+## API load / stress (Etelios)
+
+- **`scripts/etelios-load-test.sh`** — [autocannon](https://github.com/mcollina/autocannon) against auth health, HR leave reads, attendance `today`/`current`/`check-status`, JTS task list + summary. Requires **`ETELIOS_TOKEN`** and **`ETELIOS_TENANT`**; optional **`LOAD_TEST_ALLOW_POST=1`** enables **POST clock-in** (mutates real data — avoid on prod).
+- Details: **`scripts/LOAD_TEST_ETELIOS.md`**.
+
+Run from repo root on a machine that resolves `api.etelios.com`:
+
+```bash
+chmod +x scripts/etelios-load-test.sh
+export ETELIOS_TOKEN='…'   # from POST /api/auth/login
+export ETELIOS_TENANT=lenstrack
+./scripts/etelios-load-test.sh
+```

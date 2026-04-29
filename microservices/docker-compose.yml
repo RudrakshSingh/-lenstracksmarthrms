@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
-  # API Gateway
+  # API Gateway (Docker Hub library/kong tags often missing; use official kong/kong)
   api-gateway:
-    image: kong:3.4-alpine
+    image: kong/kong:3.6
     ports:
       - "8000:8000"
       - "8001:8001"
@@ -22,7 +20,9 @@ services:
 
   # Authentication & User Management
   auth-service:
-    build: ./auth-service
+    build:
+      context: ..
+      dockerfile: microservices/auth-service/Dockerfile
     ports:
       - "3001:3001"
     environment:
@@ -42,7 +42,9 @@ services:
       - etelios-network
   # HR Management & Employee Data
   hr-service:
-    build: ./hr-service
+    build:
+      context: ..
+      dockerfile: microservices/hr-service/Dockerfile
     ports:
       - "3002:3002"
     environment:
@@ -62,7 +64,9 @@ services:
       - etelios-network
   # Attendance & Geofencing
   attendance-service:
-    build: ./attendance-service
+    build:
+      context: ..
+      dockerfile: microservices/attendance-service/Dockerfile
     ports:
       - "3003:3003"
     environment:
@@ -82,7 +86,9 @@ services:
       - etelios-network
   # Payroll & Salary Management
   payroll-service:
-    build: ./payroll-service
+    build:
+      context: ..
+      dockerfile: microservices/payroll-service/Dockerfile
     ports:
       - "3004:3004"
     environment:
@@ -102,7 +108,9 @@ services:
       - etelios-network
   # Customer Management & Engagement
   crm-service:
-    build: ./crm-service
+    build:
+      context: ..
+      dockerfile: microservices/crm-service/Dockerfile
     ports:
       - "3005:3005"
     environment:
@@ -122,7 +130,9 @@ services:
       - etelios-network
   # ERP & Inventory Management
   inventory-service:
-    build: ./inventory-service
+    build:
+      context: ..
+      dockerfile: microservices/inventory-service/Dockerfile
     ports:
       - "3006:3006"
     environment:
@@ -142,7 +152,9 @@ services:
       - etelios-network
   # Sales & Order Management
   sales-service:
-    build: ./sales-service
+    build:
+      context: ..
+      dockerfile: microservices/sales-service/Dockerfile
     ports:
       - "3007:3007"
     environment:
@@ -162,7 +174,9 @@ services:
       - etelios-network
   # Purchase & Vendor Management
   purchase-service:
-    build: ./purchase-service
+    build:
+      context: ..
+      dockerfile: microservices/purchase-service/Dockerfile
     ports:
       - "3008:3008"
     environment:
@@ -182,7 +196,9 @@ services:
       - etelios-network
   # Financial Management & Accounting
   financial-service:
-    build: ./financial-service
+    build:
+      context: ..
+      dockerfile: microservices/financial-service/Dockerfile
     ports:
       - "3009:3009"
     environment:
@@ -202,7 +218,9 @@ services:
       - etelios-network
   # Document & E-signature Management
   document-service:
-    build: ./document-service
+    build:
+      context: ..
+      dockerfile: microservices/document-service/Dockerfile
     ports:
       - "3010:3010"
     environment:
@@ -222,7 +240,9 @@ services:
       - etelios-network
   # Service & SLA Management
   service-management:
-    build: ./service-management
+    build:
+      context: ..
+      dockerfile: microservices/service-management/Dockerfile
     ports:
       - "3011:3011"
     environment:
@@ -242,7 +262,9 @@ services:
       - etelios-network
   # Customer Protection Plan
   cpp-service:
-    build: ./cpp-service
+    build:
+      context: ..
+      dockerfile: microservices/cpp-service/Dockerfile
     ports:
       - "3012:3012"
     environment:
@@ -262,7 +284,9 @@ services:
       - etelios-network
   # Prescription Management
   prescription-service:
-    build: ./prescription-service
+    build:
+      context: ..
+      dockerfile: microservices/prescription-service/Dockerfile
     ports:
       - "3013:3013"
     environment:
@@ -282,7 +306,9 @@ services:
       - etelios-network
   # Analytics & Reporting
   analytics-service:
-    build: ./analytics-service
+    build:
+      context: ..
+      dockerfile: microservices/analytics-service/Dockerfile
     ports:
       - "3014:3014"
     environment:
@@ -302,7 +328,9 @@ services:
       - etelios-network
   # Notifications & Communications
   notification-service:
-    build: ./notification-service
+    build:
+      context: ..
+      dockerfile: microservices/notification-service/Dockerfile
     ports:
       - "3015:3015"
     environment:
@@ -322,7 +350,9 @@ services:
       - etelios-network
   # Monitoring & Health Checks
   monitoring-service:
-    build: ./monitoring-service
+    build:
+      context: ..
+      dockerfile: microservices/monitoring-service/Dockerfile
     ports:
       - "3016:3016"
     environment:
@@ -441,9 +471,9 @@ services:
     networks:
       - etelios-network
 
-  # Service Discovery
+  # Service Discovery (official image is hashicorp/consul; library/consul tags are removed)
   consul:
-    image: consul:1.16
+    image: hashicorp/consul:1.19
     ports:
       - "8500:8500"
     command: agent -server -ui -node=server-1 -bootstrap-expect=1 -client=0.0.0.0

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UPI QR (upi://pay)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-top: 0.75rem; font-size: 0.85rem; color: #333; }
+    input { width: 100%; box-sizing: border-box; padding: 0.5rem; margin-top: 0.25rem; }
+    button { margin-top: 1rem; padding: 0.6rem 1rem; cursor: pointer; }
+    #qr { margin-top: 1.5rem; display: flex; justify-content: center; }
+    pre { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; font-size: 0.75rem; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>UPI QR generator</h1>
+  <p>Builds <code>upi://pay?pa=…&pn=…&am=…&cu=INR&tn=…</code> and encodes it in a QR code.</p>
+
+  <label for="pa">pa — Payee VPA (UPI ID)</label>
+  <input id="pa" type="text" placeholder="yourname@okaxis" value="YOUR_UPI_ID" />
+
+  <label for="pn">pn — Payee name</label>
+  <input id="pn" type="text" placeholder="Your Store" value="YOUR_NAME" />
+
+  <label for="am">am — Amount (INR, optional)</label>
+  <input id="am" type="text" placeholder="500" value="500" />
+
+  <label for="tn">tn — Transaction note (optional)</label>
+  <input id="tn" type="text" placeholder="Invoice 123" value="" />
+
+  <button type="button" id="make">Generate QR</button>
+
+  <p><strong>Payload:</strong></p>
+  <pre id="payload"></pre>
+  <div id="qr"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    function buildUpiUri() {
+      const pa = document.getElementById('pa').value.trim();
+      const pn = document.getElementById('pn').value.trim();
+      const am = document.getElementById('am').value.trim();
+      const tn = document.getElementById('tn').value.trim();
+
+      const params = new URLSearchParams();
+      params.set('pa', pa);
+      params.set('pn', pn);
+      if (am) params.set('am', am);
+      params.set('cu', 'INR');
+      if (tn) params.set('tn', tn);
+
+      return 'upi://pay?' + params.toString();
+    }
+
+    document.getElementById('make').addEventListener('click', function () {
+      const uri = buildUpiUri();
+      document.getElementById('payload').textContent = uri;
+
+      const el = document.getElementById('qr');
+      el.innerHTML = '';
+      new QRCode(el, {
+        text: uri,
+        width: 256,
+        height: 256,
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    });
+  </script>
+</body>
+</html>

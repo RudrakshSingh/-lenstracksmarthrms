@@ -220,8 +220,20 @@ class LeaveManagementService {
         'period.year': currentYear,
         leave_type
       });
-      
-      const balanceAvailable = ledger ? ledger.closing : 0;
+
+      // Many tenants (e.g. Lenstrack) have LeavePolicy but never seeded LeaveLedger rows.
+      // Without a ledger, closing was treated as 0 → every request failed "Insufficient balance".
+      let balanceAvailable = ledger ? ledger.closing : 0;
+      if (!ledger && leaveTypeConfig) {
+        const full = Number(leaveTypeConfig.days_per_year) || 0;
+        if (leaveTypeConfig.monthly_accrual) {
+          const rate = Number(leaveTypeConfig.accrual_rate) || full / 12;
+          const monthsElapsed = new Date().getMonth() + 1;
+          balanceAvailable = Math.min(full, Math.round(rate * monthsElapsed * 100) / 100);
+        } else {
+          balanceAvailable = full;
+        }
+      }
       
       // Tenant policy evaluation (half-day, notice, overlaps, holidays/weekoffs, medical proof)
       let days = 1;

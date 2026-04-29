@@ -7,6 +7,16 @@ const mongoose = require('mongoose');
 const { sendSuccess, sendError } = require('../../shared/utils/response.util.js');
 const logger = require('../config/logger');
 
+/** User.reportingManager is a String — may be manager Mongo id or employee id */
+function isActingManagerForEmployee(targetEmployee, actingUserId, actingEmployeeId) {
+  const rm = targetEmployee.reportingManager;
+  if (rm == null || String(rm).trim() === '') return false;
+  const rmStr = String(rm).trim();
+  if (rmStr === String(actingUserId)) return true;
+  const emp = actingEmployeeId ? String(actingEmployeeId).trim().toUpperCase() : '';
+  return Boolean(emp && rmStr.toUpperCase() === emp);
+}
+
 /**
  * @desc Get leave policy for employee
  * @route GET /api/hr/policies/leave
@@ -192,6 +202,7 @@ const createLeaveRequest = async (req, res, next) => {
         // No employee_id provided - use logged-in user's employee ID
         requestData.employee_id = userEmployee._id.toString();
       }
+      requestData.tenantId = String(userEmployee.tenantId || tenantId).toLowerCase();
     } else if (isManager) {
       // Manager - can create for themselves or team members
       if (!requestData.employee_id) {
@@ -208,13 +219,14 @@ const createLeaveRequest = async (req, res, next) => {
         if (!userEmployee) {
           return sendError(res, 'Employee record not found for logged-in user', 'NOT_FOUND', 404);
         }
-        
+
         requestData.employee_id = userEmployee._id.toString();
+        requestData.tenantId = String(userEmployee.tenantId || tenantId).toLowerCase();
       } else {
         // Validate that employee_id belongs to manager's team
         let targetEmployee;
         if (mongoose.Types.ObjectId.isValid(requestData.employee_id)) {
-          targetEmployee = await User.findOne({ _id: requestData.employee_id, tenantId }).lean();
+          targetEmployee = await User.findById(requestData.employee_id).lean();
         } else {
           targetEmployee = await User.findOne({
             tenantId,
@@ -224,17 +236,31 @@ const createLeaveRequest = async (req, res, next) => {
             ]
           }).lean();
         }
-        
+
         if (!targetEmployee) {
           return sendError(res, 'Employee not found', 'NOT_FOUND', 404);
         }
-        
-        // Check if employee reports to this manager
-        if (targetEmployee.reportingManager?.toString() !== createdBy.toString()) {
-          return sendError(res, 'You can only create leave requests for your team members', 'FORBIDDEN', 403);
+
+        const actingEmp = (req.user.employee_id || req.user.employeeId || '').trim();
+        if (!targetEmployee.reportingManager || String(targetEmployee.reportingManager).trim() === '') {
+          return sendError(
+            res,
+            'This employee has no reporting manager on file. Submit leave using an HR/Admin account, or assign a reporting manager first.',
+            'REPORTING_MANAGER_REQUIRED',
+            400
+          );
         }
-        
+        if (!isActingManagerForEmployee(targetEmployee, createdBy, actingEmp)) {
+          return sendError(
+            res,
+            'You can only create leave requests for your direct reports (reporting manager must match your account).',
+            'FORBIDDEN',
+            403
+          );
+        }
+
         requestData.employee_id = targetEmployee._id.toString();
+        requestData.tenantId = String(targetEmployee.tenantId || tenantId).toLowerCase();
       }
     } else {
       // HR/Admin - can create for any employee
@@ -271,10 +297,11 @@ const createLeaveRequest = async (req, res, next) => {
         if (userEmployee) {
           // Use logged-in user's employee ID
           requestData.employee_id = userEmployee._id.toString();
+          requestData.tenantId = String(userEmployee.tenantId || tenantId).toLowerCase();
           logger.info('HR/Admin creating leave for themselves', {
             userId: createdBy,
             employeeId: requestData.employee_id,
-            tenantId
+            tenantId: requestData.tenantId
           });
         } else {
           // For HR/Admin, employee_id is required if logged-in user doesn't have employee record
@@ -293,7 +320,17 @@ const createLeaveRequest = async (req, res, next) => {
         // Validate provided employee_id
         let targetEmployee;
         if (mongoose.Types.ObjectId.isValid(requestData.employee_id)) {
-          targetEmployee = await User.findOne({ _id: requestData.employee_id, tenantId }).lean();
+          targetEmployee = await User.findById(requestData.employee_id).lean();
+          if (
+            targetEmployee &&
+            String(targetEmployee.tenantId || '').toLowerCase() !== String(tenantId).toLowerCase()
+          ) {
+            logger.warn('Leave create: X-Tenant-Id does not match subject employee tenant; using employee tenant', {
+              headerTenant: tenantId,
+              employeeTenant: targetEmployee.tenantId,
+              subjectUserId: String(targetEmployee._id)
+            });
+          }
         } else {
           targetEmployee = await User.findOne({
             tenantId,
@@ -303,17 +340,21 @@ const createLeaveRequest = async (req, res, next) => {
             ]
           }).lean();
         }
-        
+
         if (!targetEmployee) {
           return sendError(res, 'Employee not found', 'NOT_FOUND', 404);
         }
-        
+
         requestData.employee_id = targetEmployee._id.toString();
+        // Use the subject employee's tenant for policy / holidays (fixes wrong X-Tenant-Id on HR apply-for-other)
+        requestData.tenantId = String(targetEmployee.tenantId || tenantId).toLowerCase();
       }
     }
-    
-    // Add tenantId to requestData for service layer
-    requestData.tenantId = tenantId;
+
+    // Add tenantId to requestData for service layer (self-serve paths may still use header tenant)
+    if (!requestData.tenantId) {
+      requestData.tenantId = tenantId;
+    }
     
     const request = await leaveManagementService.createLeaveRequest(requestData, createdBy);
     

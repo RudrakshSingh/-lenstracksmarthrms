@@ -26,6 +26,17 @@ spec:
         - containerPort: 3014
           name: http
         env:
+        # JWT signing secret — must match auth-service (etelios-jwt-sync K8s secret)
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_SECRET
+        - name: JWT_REFRESH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: etelios-jwt-sync
+              key: JWT_REFRESH_SECRET
         - name: NODE_ENV
           value: "production"
         - name: PORT

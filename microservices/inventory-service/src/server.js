@@ -158,6 +158,7 @@ app.get('/health', (req, res) => {
     models: 14,
     services: 5
   });
+});
 
 // Business API Routes
 app.get('/api/inventory/status', (req, res) => {
@@ -243,7 +244,7 @@ app.get('/api/inventory/assets', (req, res) => {
     message: 'Get asset register',
     timestamp: new Date().toISOString()
   });
-});});
+});
 
 
 // Enhanced 404 handler with route information

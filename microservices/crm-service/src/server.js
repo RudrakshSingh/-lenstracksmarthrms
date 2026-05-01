@@ -114,6 +114,15 @@ const loadRoutes = () => {
     if (error.stack) console.error('Stack:', error.stack);
   }
 
+  try {
+    const complaintRoutes = require('./routes/complaint.routes.js');
+    app.use('/api/crm/complaints', apiRateLimit, complaintRoutes);
+    if (!isProduction) logger.info('complaint.routes.js loaded');
+  } catch (error) {
+    logger.error('complaint.routes.js failed:', { error: error.message, stack: error.stack });
+    console.error('❌ complaint.routes.js failed:', error.message);
+  }
+
   };
 
 // Health check

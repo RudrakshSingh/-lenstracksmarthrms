@@ -11,11 +11,18 @@ const {
 router.use(authenticate);
 
 /**
- * @route GET /api/payroll/salary/deductions
+ * @route GET /api/payroll/salary/deductions  (canonical)
+ * @route GET /api/payroll/deductions          (alias)
  * @desc Get salary deductions for an employee
  * @access Private
  */
 router.get('/salary/deductions',
+  requireRole(['admin', 'hr', 'manager', 'employee', 'accountant']),
+  requirePermission('read_payroll'),
+  getSalaryDeductions
+);
+
+router.get('/deductions',
   requireRole(['admin', 'hr', 'manager', 'employee', 'accountant']),
   requirePermission('read_payroll'),
   getSalaryDeductions

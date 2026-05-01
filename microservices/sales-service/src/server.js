@@ -120,6 +120,15 @@ const loadRoutes = () => {
     if (error.stack) console.error('Stack:', error.stack);
   }
 
+  try {
+    const opticalOrderRoutes = require('./routes/opticalOrder.routes.js');
+    app.use('/api/sales/optical-orders', apiRateLimit, opticalOrderRoutes);
+    if (!isProduction) logger.info('opticalOrder.routes.js loaded');
+  } catch (error) {
+    logger.error('opticalOrder.routes.js failed:', { error: error.message, stack: error.stack });
+    console.error('❌ opticalOrder.routes.js failed:', error.message);
+  }
+
   };
 
 // Health check

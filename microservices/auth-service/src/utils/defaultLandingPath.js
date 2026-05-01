@@ -12,7 +12,7 @@ function getDefaultLandingPathForRole(roleName) {
     hr: '/dashboard/hr-head',
     'hr-head': '/dashboard/hr-head',
     manager: '/dashboard',
-    employee: '/employee-dashboard',
+    employee: '/dashboard',
     accountant: '/dashboard',
     finance: '/dashboard',
     store_manager: '/dashboard',

@@ -97,7 +97,7 @@ try {
 } catch (error) {
   logger.warn('Failed to load azure.config, using defaults', { error: error.message });
   azureConfig = {
-    cors: { origin: '*', credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] },
+    cors: { origin: false, credentials: false, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] },
     ipWhitelist: { allowedIPs: [] }
   };
 }
@@ -137,7 +137,8 @@ const corsOptions = {
     // AWS - Allow all origins if CORS_ORIGIN is '*'
     const corsOrigin = process.env.CORS_ORIGIN || '*';
     if (corsOrigin === '*') {
-      return callback(null, true);
+      if (!origin) return callback(null, false);
+      return callback(null, origin);
     }
     
     // Explicitly allow localhost origins for frontend development
@@ -1033,8 +1034,28 @@ const loadRoutes = () => {
       const headers = {
         'Content-Type': req.headers['content-type'] || 'application/json'
       };
-      if (req.headers.authorization) {
-        headers.Authorization = req.headers.authorization;
+      // Forward bearer auth from header, or fall back to common auth cookies used by web app.
+      let authz = req.headers.authorization;
+      if (!authz && req.cookies) {
+        const tokenFromCookie =
+          req.cookies.accessToken ||
+          req.cookies.access_token ||
+          req.cookies.token ||
+          req.cookies.jwt ||
+          req.cookies.authToken;
+        if (tokenFromCookie) authz = `Bearer ${tokenFromCookie}`;
+      }
+      if (!authz && req.headers.cookie) {
+        const m = String(req.headers.cookie).match(
+          /(?:^|;\s*)(?:accessToken|access_token|token|jwt|authToken)=([^;]+)/i
+        );
+        if (m && m[1]) authz = `Bearer ${decodeURIComponent(m[1])}`;
+      }
+      if (authz) {
+        headers.Authorization = authz;
+      }
+      if (req.headers.cookie) {
+        headers.Cookie = req.headers.cookie;
       }
       if (req.headers['x-tenant-id']) {
         headers['X-Tenant-Id'] = req.headers['x-tenant-id'];
@@ -1120,7 +1141,12 @@ const loadRoutes = () => {
   };
 
   app.use('/api/jts', async (req, res) => proxyJtsToService(req, res, req.originalUrl));
+  app.use('/api/v1/jts', async (req, res) => proxyJtsToService(req, res, req.originalUrl));
   app.use('/hrms/api/jts', async (req, res) => {
+    const upstreamPath = req.originalUrl.replace(/^\/hrms/, '') || '/';
+    return proxyJtsToService(req, res, upstreamPath);
+  });
+  app.use('/hrms/api/v1/jts', async (req, res) => {
     const upstreamPath = req.originalUrl.replace(/^\/hrms/, '') || '/';
     return proxyJtsToService(req, res, upstreamPath);
   });

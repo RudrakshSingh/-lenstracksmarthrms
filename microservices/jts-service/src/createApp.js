@@ -21,8 +21,19 @@ function createApp() {
     })
   );
 
+  // Never combine credentials: true with Access-Control-Allow-Origin: * (invalid per CORS spec).
   const corsOptions = {
-    origin: process.env.CORS_ORIGIN || '*',
+    origin(origin, callback) {
+      const configured = (process.env.CORS_ORIGIN || '').trim();
+      if (!configured || configured === '*') {
+        if (!origin) return callback(null, false);
+        return callback(null, origin);
+      }
+      const list = configured.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!origin) return callback(null, list[0] || false);
+      if (list.includes(origin)) return callback(null, origin);
+      return callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Tenant-Id']

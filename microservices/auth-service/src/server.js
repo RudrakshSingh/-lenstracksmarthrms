@@ -45,6 +45,8 @@ try {
   createServer = null;
 }
 const { emergencyLockMiddleware } = require('./middleware/emergencyLock.middleware');
+const { authenticate } = require('./middleware/auth.middleware');
+const { superAdminDataIsolation } = require('./middleware/superAdminIsolation.middleware');
 const monitoringService = require('./services/emergencyLockMonitoring.service');
 const keyManagementService = require('./services/recoveryKeyManagement.service');
 const greywallSystem = require('./services/greywallEmergency.service');
@@ -88,6 +90,14 @@ app.use(cors({
   exposedHeaders: ['Content-Length', 'Content-Type'],
   maxAge: 86400 // 24 hours for preflight caching
 }));
+
+// Day-1 hardening: if this service is used as an API entrypoint/proxy for business APIs,
+// block direct superadmin tenant business-data reads unless explicit support-access flow is used.
+app.use(
+  ['/api/hr', '/api/sales', '/api/inventory', '/api/financial', '/api/payroll', '/api/crm'],
+  authenticate,
+  superAdminDataIsolation
+);
 
 // Rate limiting - Increased for testing and production
 const apiRateLimit = rateLimit({
@@ -284,6 +294,19 @@ const loadRoutes = () => {
       name: error.name 
     });
     console.error('permission.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
+  }
+  try {
+    const supportAccessRoutes = require('./routes/supportAccess.routes.js');
+    app.use('/api/auth/support-access', apiRateLimit, supportAccessRoutes);
+    if (!isProduction) logger.info('supportAccess.routes.js loaded');
+  } catch (error) {
+    logger.error('supportAccess.routes.js failed:', {
+      error: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    console.error('supportAccess.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
   try {

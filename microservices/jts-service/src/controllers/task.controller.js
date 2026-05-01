@@ -10,11 +10,13 @@ const { buildErrorBody, actorUnresolvedBody } = require('../utils/apiError.util'
 const {
   normalizeListQuery,
   normalizeManagerTaskBody,
+  normalizeSelfTaskBody,
   normalizeUpdateTaskBody,
   normalizeTaskStatus
 } = require('../utils/taskRequest.normalize');
 const { serializeTask, slaStatusFromTaskDoc } = require('../utils/taskFrontend.mapper');
 const taskCollaborationService = require('../services/taskCollaboration.service');
+const selfTaskService = require('../services/selfTask.service');
 const attachmentPresign = require('../services/attachmentPresign.service');
 const {
   resolveEmployeeIdToObjectId,
@@ -33,6 +35,16 @@ const SLA_ALERTS_TENANT_WIDE_ROLES = new Set([
 
 /** Roles that can open the SLA executive / ops summary (heatmap + audit timeline). */
 const SLA_EXECUTIVE_ROLES = new Set([
+  'MANAGER',
+  'STORE_MANAGER',
+  'CLUSTER_MANAGER',
+  'COUNTRY_OPS',
+  'TENANT_ADMIN',
+  'HOD',
+  'SUPERADMIN',
+  'ADMIN'
+]);
+const MANAGER_TEAM_SCOPE_ROLES = new Set([
   'MANAGER',
   'STORE_MANAGER',
   'CLUSTER_MANAGER',
@@ -97,6 +109,43 @@ class TaskController {
         return res.status(403).json(actorUnresolvedBody());
       }
 
+      const role = String(req.user?.role || '').toUpperCase();
+      if (role === 'EMPLOYEE') {
+        const body = normalizeManagerTaskBody(req.body);
+        let resolvedAssignee = null;
+        if (body.assigned_to_employee_id) {
+          resolvedAssignee = await resolveEmployeeIdToObjectId(tenant_id, body.assigned_to_employee_id, {
+            actorId
+          });
+        }
+        const isSelfAssignee =
+          resolvedAssignee && String(resolvedAssignee) === String(actorId);
+        if (
+          (body.assigned_to_employee_id && !isSelfAssignee) ||
+          body.reviewer_employee_id ||
+          body.approver_employee_id ||
+          body.requires_approval === true
+        ) {
+          return res.status(403).json(
+            buildErrorBody({
+              code: 'TASK_EMPLOYEE_SELF_ONLY',
+              message: 'Employees can only create self tasks for themselves'
+            })
+          );
+        }
+
+        const selfBody = normalizeSelfTaskBody(req.body);
+        const task = await selfTaskService.createSelfTask(tenant_id, actorId, selfBody);
+        const full = await taskService.getTaskById(tenant_id, task._id);
+        return res.status(201).json({
+          success: true,
+          data: serializeTask(full),
+          message: full?.requires_approval
+            ? 'Self task created successfully, pending approval'
+            : 'Self task created successfully'
+        });
+      }
+
       let body = normalizeManagerTaskBody(req.body);
       body = await catalogDefaults.applyTaskDefaults(tenant_id, body);
       // Admin/self flow: allow explicit self-assignment without exposing employee _id.
@@ -150,6 +199,25 @@ class TaskController {
       const listRef = await applyListFiltersEmployeeRefs(tenant_id, filters);
       if (listRef.empty) {
         return res.json(emptyTasksListPayload(filters));
+      }
+
+      // Employees should only see their own task universe.
+      const role = String(req.user?.role || '').toUpperCase();
+      if (role === 'EMPLOYEE') {
+        const me = await resolveEmployeeId(tenant_id, req.user);
+        if (!me) {
+          return res.status(403).json(actorUnresolvedBody());
+        }
+        filters.my_employee_id = me;
+      } else if (MANAGER_TEAM_SCOPE_ROLES.has(role)) {
+        const me = await resolveEmployeeId(tenant_id, req.user);
+        if (!me) {
+          return res.status(403).json(actorUnresolvedBody());
+        }
+        const hasExplicitPersonFilter = !!(raw.assigned_to_employee_id || raw.created_by_employee_id);
+        if (!hasExplicitPersonFilter) {
+          filters.manager_scope_employee_id = me;
+        }
       }
 
       const result = await taskService.getTasks(tenant_id, filters);

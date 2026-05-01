@@ -257,7 +257,7 @@ router.post(
 // Create task - requires manager role
 router.post(
   '/',
-  requireRole(['MANAGER', 'STORE_MANAGER', 'CLUSTER_MANAGER', 'COUNTRY_OPS', 'TENANT_ADMIN', 'HOD']),
+  requireRole(['MANAGER', 'STORE_MANAGER', 'CLUSTER_MANAGER', 'COUNTRY_OPS', 'TENANT_ADMIN', 'HOD', 'EMPLOYEE']),
   validate({ body: createTaskSchema }),
   (req, res) => taskController.createTask(req, res)
 );

@@ -130,6 +130,19 @@ const loadRoutes = () => {
     console.error('❌ stock.routes.js failed:', error.message);
     if (error.stack) console.error('Stack:', error.stack);
   }
+  try {
+    const lensMasterRoutes = require('./routes/lensMaster.routes.js');
+    app.use('/api/inventory', apiRateLimit, lensMasterRoutes);
+    if (!isProduction) logger.info('lensMaster.routes.js loaded');
+  } catch (error) {
+    logger.error('lensMaster.routes.js failed:', {
+      error: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    console.error('❌ lensMaster.routes.js failed:', error.message);
+    if (error.stack) console.error('Stack:', error.stack);
+  }
 };
 
 // Health check

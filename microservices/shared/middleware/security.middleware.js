@@ -369,21 +369,20 @@ const advancedCORS = (req, res, next) => {
     ? '*' 
     : (corsOriginEnv ? corsOriginEnv.split(',').map(o => o.trim()) : '*');
   
-  // Allow all origins if wildcard or not set
+  let allowOrigin = null;
   if (allowedOrigins === '*' || !corsOriginEnv) {
-    if (origin) {
-      res.header('Access-Control-Allow-Origin', origin);
-    } else {
-      res.header('Access-Control-Allow-Origin', '*');
-    }
+    if (origin) allowOrigin = origin;
   } else if (origin && allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+    allowOrigin = origin;
   } else if (origin) {
-    // Allow for now to prevent blocking frontend
-    res.header('Access-Control-Allow-Origin', origin);
+    allowOrigin = origin;
   }
-  
-  res.header('Access-Control-Allow-Credentials', 'true');
+
+  if (allowOrigin) {
+    res.header('Access-Control-Allow-Origin', allowOrigin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-CSRF-Token, X-Request-ID');
   res.header('Access-Control-Max-Age', '86400');

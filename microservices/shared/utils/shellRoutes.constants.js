@@ -36,6 +36,36 @@ const SHELL_ROUTE_CODES = [
   // Inventory / ERP (host route)
   'route:/inventory',
 
+  // Optical Supply — Lens & CL Masters (CORE+)
+  'route:/inventory/lens-master',
+  'route:/inventory/cl-master',
+
+  // Optical Supply — Vendor & Inward (GROWTH+)
+  'route:/inventory/rx-orders',
+  'route:/inventory/inward',
+  'route:/inventory/vendor-returns',
+  'route:/inventory/vendor-scorecard',
+
+  // Optical Supply — Barcode / QR (GROWTH+)
+  'route:/inventory/barcode',
+  'route:/inventory/barcode/generate',
+  'route:/inventory/barcode/scan',
+
+  // Control & Loss — Damage, Audit, Dead Stock (GROWTH+ / ENTERPRISE)
+  'route:/inventory/damage',
+  'route:/inventory/breakage',
+  'route:/inventory/audits',
+  'route:/inventory/dead-stock',
+  'route:/inventory/stock-transfer',
+
+  // Customer & Sale — Optical Orders and Lab (CORE+)
+  'route:/orders/optical',
+  'route:/lab',
+  'route:/lab/kanban',
+
+  // After-Sales — Complaints (GROWTH+)
+  'route:/complaints',
+
   // Financial module (host route)
   'route:/financial',
 
@@ -66,7 +96,20 @@ const SHELL_ROUTE_CODES = [
   'route:/analytics/insights',
   'route:/monitoring/dashboard',
   'route:/monitoring/alerts',
-  'route:/monitoring/logs'
+  'route:/monitoring/logs',
+
+  // Finance Optical — Deposits, Dues, GST (ENTERPRISE)
+  'route:/financial/deposits',
+  'route:/financial/dues',
+  'route:/financial/gst',
+  'route:/financial/gst/gstin',
+  'route:/financial/gst/categories',
+  'route:/financial/reports',
+  'route:/financial/reports/pl',
+
+  // Admin — JTS triggers checklist + Support Access (ENTERPRISE)
+  'route:/admin/jts-triggers',
+  'route:/admin/support-access'
 ];
 
 module.exports = { SHELL_ROUTE_CODES };

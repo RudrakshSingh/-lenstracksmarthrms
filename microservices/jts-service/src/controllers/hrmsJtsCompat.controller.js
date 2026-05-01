@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const taskCollaborationService = require('../services/taskCollaboration.service');
 const Task = require('../models/Task.model');
 const Employee = require('../models/Employee.model');
+const ReportingRelationship = require('../models/ReportingRelationship.model');
 const OrgNode = require('../models/OrgNode.model');
 const Tenant = require('../models/Tenant.model');
 const ReviewGoal = require('../models/ReviewGoal.model');
@@ -80,9 +81,36 @@ class HrmsJtsCompatController {
 
       const page = Math.max(1, Number(req.query.page) || 1);
       const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 20));
+      const role = String(req.user?.role || '').toUpperCase();
+      const managerScopedRoles = new Set([
+        'MANAGER',
+        'STORE_MANAGER',
+        'CLUSTER_MANAGER',
+        'COUNTRY_OPS',
+        'TENANT_ADMIN',
+        'HOD',
+        'SUPERADMIN',
+        'ADMIN'
+      ]);
+
+      let scopeIds = [employeeId];
+      if (managerScopedRoles.has(role)) {
+        const links = await ReportingRelationship.find({
+          tenant_id,
+          manager_id: employeeId
+        })
+          .select('reportee_id')
+          .lean();
+        const reporteeIds = links.map((l) => l.reportee_id).filter(Boolean);
+        scopeIds = [employeeId, ...reporteeIds];
+      }
+
       const filter = {
         tenant_id,
-        assigned_to_employee_id: employeeId
+        $or: [
+          { assigned_to_employee_id: { $in: scopeIds } },
+          { created_by_employee_id: { $in: scopeIds } }
+        ]
       };
       if (req.query.status) filter.status = req.query.status;
 

@@ -4,6 +4,7 @@ const TaskCodeCounter = require('../models/TaskCodeCounter.model');
 const TaskType = require('../models/TaskType.model');
 const OrgNode = require('../models/OrgNode.model');
 const Employee = require('../models/Employee.model');
+const ReportingRelationship = require('../models/ReportingRelationship.model');
 const TaskStatusHistory = require('../models/TaskStatusHistory.model');
 const TaskAttachment = require('../models/TaskAttachment.model');
 const TaskActivity = require('../models/TaskActivity.model');
@@ -323,6 +324,34 @@ class TaskService {
 
     if (filters.created_by_employee_id) {
       query.created_by_employee_id = filters.created_by_employee_id;
+    }
+
+    // Employee "my tasks" scope:
+    // include tasks assigned to me OR tasks created by me (e.g. self-tasks pending approval).
+    if (filters.my_employee_id) {
+      query.$or = [
+        { assigned_to_employee_id: filters.my_employee_id },
+        { created_by_employee_id: filters.my_employee_id }
+      ];
+      delete query.assigned_to_employee_id;
+      delete query.created_by_employee_id;
+    }
+
+    if (filters.manager_scope_employee_id) {
+      const links = await ReportingRelationship.find({
+        tenant_id: tenantId,
+        manager_id: filters.manager_scope_employee_id
+      })
+        .select('reportee_id')
+        .lean();
+      const reporteeIds = links.map((l) => l.reportee_id).filter(Boolean);
+      const scopeIds = [filters.manager_scope_employee_id, ...reporteeIds];
+      query.$or = [
+        { assigned_to_employee_id: { $in: scopeIds } },
+        { created_by_employee_id: { $in: scopeIds } }
+      ];
+      delete query.assigned_to_employee_id;
+      delete query.created_by_employee_id;
     }
 
     if (filters.scope_org_node_id) {

@@ -13,22 +13,25 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // Security middleware
 app.use(helmet());
-// CORS configuration - allows frontend and all origins if CORS_ORIGIN is '*'
-const corsOrigin = process.env.CORS_ORIGIN || '*';
-app.use(cors({
-  origin: corsOrigin === '*' ? '*' : (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const allowed = corsOrigin.split(',').map(o => o.trim());
-    if (allowed.includes(origin) || corsOrigin === '*') {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow for now to prevent blocking
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With']
-}));
+// CORS: never use origin '*' with credentials: true (browser-invalid).
+const corsOrigin = (process.env.CORS_ORIGIN || '').trim();
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!corsOrigin || corsOrigin === '*') {
+        if (!origin) return callback(null, false);
+        return callback(null, origin);
+      }
+      const allowed = corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+      if (!origin) return callback(null, allowed[0] || false);
+      if (allowed.includes(origin)) return callback(null, origin);
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Requested-With', 'X-Tenant-Id']
+  })
+);
 
 // Rate limiting
 const apiRateLimit = rateLimit({

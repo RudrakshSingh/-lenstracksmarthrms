@@ -5,6 +5,13 @@ const logger = require('../config/logger');
 const { buildErrorBody } = require('../utils/apiError.util');
 const Tenant = require('../models/Tenant.model');
 
+function tokenFromCookieHeader(cookieHeader) {
+  const raw = String(cookieHeader || '');
+  if (!raw) return null;
+  const m = raw.match(/(?:^|;\s*)(?:accessToken|access_token|token|jwt|authToken)=([^;]+)/i);
+  return m && m[1] ? decodeURIComponent(m[1]) : null;
+}
+
 function toTenantSlug(value) {
   const raw = String(value || '').trim().toLowerCase();
   const slug = raw.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -133,12 +140,26 @@ const authenticate = async (req, res, next) => {
     }
 
     const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json(buildErrorBody({ code: 'AUTH_REQUIRED' }));
+    let token = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+    if (!token && req.cookies) {
+      token =
+        req.cookies.accessToken ||
+        req.cookies.access_token ||
+        req.cookies.token ||
+        req.cookies.jwt ||
+        req.cookies.authToken ||
+        null;
+    }
+    if (!token && req.headers.cookie) {
+      token = tokenFromCookieHeader(req.headers.cookie);
     }
 
-    const token = authHeader.substring(7);
+    if (!token) {
+      return res.status(401).json(buildErrorBody({ code: 'AUTH_REQUIRED' }));
+    }
 
     if (!token || token.trim() === '') {
       return res.status(401).json(buildErrorBody({ code: 'INVALID_TOKEN', message: 'Invalid token format' }));
